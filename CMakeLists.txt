@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.22)
+project(IDWVoiceMIDIStudio VERSION 0.8.0)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_subdirectory(ThirdParty/JUCE)
+juce_add_plugin(IDWVoiceMIDIStudio
+ COMPANY_NAME "In Da Wind Entertainment" BUNDLE_ID "com.idwent.idwvoicemidistudio"
+ PLUGIN_MANUFACTURER_CODE IDWE PLUGIN_CODE IDV8
+ FORMATS Standalone VST3
+ PRODUCT_NAME "IDW Voice MIDI Studio" IS_SYNTH FALSE NEEDS_MIDI_INPUT TRUE NEEDS_MIDI_OUTPUT TRUE
+ IS_MIDI_EFFECT FALSE COPY_PLUGIN_AFTER_BUILD TRUE MICROPHONE_PERMISSION_ENABLED TRUE
+ MICROPHONE_PERMISSION_TEXT "IDW Voice MIDI Studio needs microphone access for voice-to-MIDI.")
+target_sources(IDWVoiceMIDIStudio PRIVATE
+ Source/PluginProcessor.cpp Source/PluginProcessor.h Source/PluginEditor.cpp Source/PluginEditor.h
+ Source/YinPitchDetector.cpp Source/YinPitchDetector.h Source/BeatboxClassifier.cpp Source/BeatboxClassifier.h
+ Source/MidiLearnManager.cpp Source/MidiLearnManager.h Source/ScaleManager.cpp Source/ScaleManager.h
+ Source/PresetManager.cpp Source/PresetManager.h Source/MPEAllocator.cpp Source/MPEAllocator.h)
+target_compile_definitions(IDWVoiceMIDIStudio PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+target_link_libraries(IDWVoiceMIDIStudio PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_dsp
+ juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+# Audio Unit is an Apple-only format. Add it as a separate target format on macOS.
+if(APPLE)
+    set_target_properties(IDWVoiceMIDIStudio PROPERTIES XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+endif()
