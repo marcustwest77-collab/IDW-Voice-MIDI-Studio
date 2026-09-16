@@ -40,6 +40,10 @@ juce_add_plugin(IDWVoiceMIDIStudio
     MICROPHONE_PERMISSION_TEXT "IDW Voice MIDI Studio needs microphone access for voice-to-MIDI."
 )
 
+# The current source files include <JuceHeader.h>. JUCE's CMake API only
+# creates that compatibility header when explicitly requested for the target.
+juce_generate_juce_header(IDWVoiceMIDIStudio)
+
 target_sources(IDWVoiceMIDIStudio PRIVATE
     Source/PluginProcessor.cpp Source/PluginProcessor.h
     Source/PluginEditor.cpp Source/PluginEditor.h
