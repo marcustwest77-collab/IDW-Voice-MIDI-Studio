@@ -1,16 +1,38 @@
-name: Build
-on: [push, pull_request]
+name: Build IDW Voice MIDI Studio
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v4
-        with: { submodules: recursive }
-      - uses: lukka/get-cmake@latest
+      - name: Checkout IDW Voice MIDI Studio
+        uses: actions/checkout@v4
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --parallel 2
+
+      - name: Upload build products
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: IDW-Voice-MIDI-Studio-${{ matrix.os }}
+          path: |
+            build/IDWVoiceMIDIStudio_artefacts/Release/**
+          if-no-files-found: warn
