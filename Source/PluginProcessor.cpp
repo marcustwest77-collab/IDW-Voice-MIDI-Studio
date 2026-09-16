@@ -18,6 +18,7 @@ o.addEvent(juce::MidiMessage::pitchWheel(c,juce::MidiMessage::pitchbendToPitchwh
 else if(++silent>5&&active>=0){int c=mpeOn?mpe.channelFor(active):1;o.addEvent(juce::MidiMessage::noteOff(c,active),0);mpe.release(active);active=-1;midi=-1;}
 auto k=apvts.getRawParameterValue("beatbox")->load()>.5f?beats.process(x,N,apvts.getRawParameterValue("beatThreshold")->load()):BeatboxClassifier::None;if(k){const char*id=k==BeatboxClassifier::Kick?"kick":k==BeatboxClassifier::Snare?"snare":"hat";int n=(int)apvts.getRawParameterValue(id)->load();o.addEvent(juce::MidiMessage::noteOn(10,n,(juce::uint8)115),0);o.addEvent(juce::MidiMessage::noteOff(10,n),juce::jmin(N-1,10));}
 for(int c=1;c<b.getNumChannels();c++)b.copyFrom(c,0,b,0,0,N);}
+juce::AudioProcessorEditor* IDWVoiceMIDIStudioAudioProcessor::createEditor(){return new IDWVoiceMIDIStudioAudioProcessorEditor(*this);}
 void IDWVoiceMIDIStudioAudioProcessor::getStateInformation(juce::MemoryBlock&d){auto s=apvts.copyState();std::unique_ptr<juce::XmlElement>x(s.createXml());copyXmlToBinary(*x,d);}
 void IDWVoiceMIDIStudioAudioProcessor::setStateInformation(const void*d,int n){std::unique_ptr<juce::XmlElement>x(getXmlFromBinary(d,n));if(x&&x->hasTagName(apvts.state.getType()))apvts.replaceState(juce::ValueTree::fromXml(*x));}
 juce::AudioProcessor*JUCE_CALLTYPE createPluginFilter(){return new IDWVoiceMIDIStudioAudioProcessor();}
