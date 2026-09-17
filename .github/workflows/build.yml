@@ -1,4 +1,4 @@
-name: Build and Validate IDW Voice MIDI Studio
+name: Build, Validate and Package IDW Voice MIDI Studio
 
 on:
   push:
@@ -82,6 +82,19 @@ jobs:
           Copy-Item -Recurse "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" "release/Windows/VST3/"
           Copy-Item "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.exe" "release/Windows/Standalone/"
 
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          New-Item -ItemType Directory -Force -Path release/Installer | Out-Null
+          $buildRoot = (Resolve-Path "build/IDWVoiceMIDIStudio_artefacts/Release").Path
+          $outputDir = (Resolve-Path "release/Installer").Path
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup compiler not found" }
+          & $iscc "/DBuildRoot=$buildRoot" "/DOutputDir=$outputDir" "installer/windows/IDWVoiceMIDIStudio.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Stage macOS release package
         if: runner.os == 'macOS'
         run: |
@@ -89,6 +102,12 @@ jobs:
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" release/macOS/VST3/
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/AU/IDW Voice MIDI Studio.component" release/macOS/AU/
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.app" release/macOS/Standalone/
+
+      - name: Build macOS installer package and DMG
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x installer/macos/package.sh
+          ./installer/macos/package.sh "build/IDWVoiceMIDIStudio_artefacts/Release" "release/Installer"
 
       - name: Upload install-ready release package
         uses: actions/upload-artifact@v4
