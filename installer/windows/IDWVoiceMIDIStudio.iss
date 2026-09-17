@@ -6,7 +6,7 @@
 #endif
 
 #define AppName "IDW Voice MIDI Studio"
-#define AppVersion "0.8.1"
+#define AppVersion "0.9.1"
 #define Publisher "In Da Wind Entertainment"
 #define AppExeName "IDW Voice MIDI Studio.exe"
 
@@ -31,9 +31,11 @@ UninstallDisplayName={#AppName}
 [Files]
 Source: "{#BuildRoot}\Standalone\IDW Voice MIDI Studio.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildRoot}\VST3\IDW Voice MIDI Studio.vst3\*"; DestDir: "{commoncf64}\VST3\IDW Voice MIDI Studio.vst3"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\docs\USER_MANUAL.md"; DestDir: "{app}\Documentation"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\IDW Voice MIDI Studio"; Filename: "{app}\{#AppExeName}"
+Name: "{group}\IDW Voice MIDI Studio Manual"; Filename: "{app}\Documentation\USER_MANUAL.md"
 Name: "{autodesktop}\IDW Voice MIDI Studio"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Tasks]
