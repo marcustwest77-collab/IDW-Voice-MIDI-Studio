@@ -79,8 +79,10 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path release/Windows/VST3 | Out-Null
           New-Item -ItemType Directory -Force -Path release/Windows/Standalone | Out-Null
+          New-Item -ItemType Directory -Force -Path release/Documentation | Out-Null
           Copy-Item -Recurse "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" "release/Windows/VST3/"
           Copy-Item "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.exe" "release/Windows/Standalone/"
+          Copy-Item "docs/USER_MANUAL.md" "release/Documentation/USER_MANUAL.md"
 
       - name: Build Windows installer
         if: runner.os == 'Windows'
@@ -98,10 +100,11 @@ jobs:
       - name: Stage macOS release package
         if: runner.os == 'macOS'
         run: |
-          mkdir -p release/macOS/VST3 release/macOS/AU release/macOS/Standalone
+          mkdir -p release/macOS/VST3 release/macOS/AU release/macOS/Standalone release/Documentation
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" release/macOS/VST3/
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/AU/IDW Voice MIDI Studio.component" release/macOS/AU/
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.app" release/macOS/Standalone/
+          cp docs/USER_MANUAL.md release/Documentation/USER_MANUAL.md
 
       - name: Build macOS installer package and DMG
         if: runner.os == 'macOS'
