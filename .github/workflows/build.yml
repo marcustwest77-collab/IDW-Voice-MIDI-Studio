@@ -1,4 +1,4 @@
-name: Build IDW Voice MIDI Studio
+name: Build and Validate IDW Voice MIDI Studio
 
 on:
   push:
@@ -28,11 +28,65 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel 2
 
-      - name: Upload build products
-        if: always()
+      - name: Download pluginval on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip" -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval
+
+      - name: Validate VST3 on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $validator = Get-ChildItem -Path pluginval -Recurse -Filter pluginval.exe | Select-Object -First 1
+          if (-not $validator) { throw "pluginval.exe not found" }
+          $plugin = Resolve-Path "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3"
+          & $validator.FullName --strictness-level 5 $plugin
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Download pluginval on macOS
+        if: runner.os == 'macOS'
+        run: |
+          curl -L "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip" -o pluginval.zip
+          unzip -q pluginval.zip -d pluginval
+          chmod +x "pluginval/pluginval.app/Contents/MacOS/pluginval" || true
+
+      - name: Validate VST3 on macOS
+        if: runner.os == 'macOS'
+        run: |
+          VALIDATOR=$(find pluginval -type f -path "*/Contents/MacOS/pluginval" | head -n 1)
+          if [ -z "$VALIDATOR" ]; then echo "pluginval executable not found"; exit 1; fi
+          "$VALIDATOR" --strictness-level 5 "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3"
+
+      - name: Validate Audio Unit on macOS
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/AU/IDW Voice MIDI Studio.component" "$HOME/Library/Audio/Plug-Ins/Components/"
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -v aufx IDV8 IDWE
+
+      - name: Stage Windows release package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release/Windows/VST3 | Out-Null
+          New-Item -ItemType Directory -Force -Path release/Windows/Standalone | Out-Null
+          Copy-Item -Recurse "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" "release/Windows/VST3/"
+          Copy-Item "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.exe" "release/Windows/Standalone/"
+
+      - name: Stage macOS release package
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p release/macOS/VST3 release/macOS/AU release/macOS/Standalone
+          cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" release/macOS/VST3/
+          cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/AU/IDW Voice MIDI Studio.component" release/macOS/AU/
+          cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.app" release/macOS/Standalone/
+
+      - name: Upload install-ready release package
         uses: actions/upload-artifact@v4
         with:
-          name: IDW-Voice-MIDI-Studio-${{ matrix.os }}
-          path: |
-            build/IDWVoiceMIDIStudio_artefacts/Release/**
-          if-no-files-found: warn
+          name: IDW-Voice-MIDI-Studio-Install-${{ matrix.os }}
+          path: release/**
+          if-no-files-found: error
