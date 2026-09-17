@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(IDWVoiceMIDIStudio VERSION 0.8.1)
+project(IDWVoiceMIDIStudio VERSION 0.8.2)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,8 +40,6 @@ juce_add_plugin(IDWVoiceMIDIStudio
     MICROPHONE_PERMISSION_TEXT "IDW Voice MIDI Studio needs microphone access for voice-to-MIDI."
 )
 
-# The current source files include <JuceHeader.h>. JUCE's CMake API only
-# creates that compatibility header when explicitly requested for the target.
 juce_generate_juce_header(IDWVoiceMIDIStudio)
 
 target_sources(IDWVoiceMIDIStudio PRIVATE

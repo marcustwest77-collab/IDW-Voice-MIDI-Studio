@@ -6,7 +6,7 @@
 #endif
 
 #define AppName "IDW Voice MIDI Studio"
-#define AppVersion "0.8.1"
+#define AppVersion "0.8.2"
 #define Publisher "In Da Wind Entertainment"
 #define AppExeName "IDW Voice MIDI Studio.exe"
 
@@ -15,18 +15,24 @@ AppId={{A16EAC95-6B53-4C36-B8B2-0F4F3DCFD8A1}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#Publisher}
+VersionInfoCompany={#Publisher}
+VersionInfoDescription=IDW Voice MIDI Studio real-time voice-to-MIDI performance engine
+VersionInfoProductName={#AppName}
+VersionInfoProductVersion={#AppVersion}
 DefaultDirName={autopf}\IDW Voice MIDI Studio
 DefaultGroupName=IDW Voice MIDI Studio
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=IDW-Voice-MIDI-Studio-Setup-Windows-x64
+OutputBaseFilename=IDW-Voice-MIDI-Studio-Setup-0.8.2-Windows-x64
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 WizardStyle=modern
+SetupLogging=yes
 UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\{#AppExeName}
 
 [Files]
 Source: "{#BuildRoot}\Standalone\IDW Voice MIDI Studio.exe"; DestDir: "{app}"; Flags: ignoreversion

@@ -1,35 +1,56 @@
-# IDW Voice MIDI Studio V8 — Release Preparation Build
+# IDW Voice MIDI Studio
 
-This package moves V7 toward actual platform builds.
+**Current release candidate: 0.8.2**
 
-## What V8 adds
-- Windows, macOS and Linux build scripts.
-- GitHub Actions build workflow.
-- Release/build/host validation checklist.
-- CMake metadata updated to V8.
-- Release-preparation structure for VST3 and Standalone.
-- Existing V7 YIN pitch engine, MIDI Learn, custom scales, MPE, presets and beatbox MIDI remain.
+IDW Voice MIDI Studio is a clean-room real-time voice-to-MIDI performance engine for Windows and macOS. It builds as Standalone and VST3 on both platforms and as Audio Unit on macOS.
 
-## Dependency
-JUCE is intentionally not redistributed in this ZIP. Put a compatible JUCE checkout in:
+## Core performance features
+- Real-time monophonic voice-to-MIDI pitch tracking using a YIN-based detector.
+- Voice level mapped to MIDI velocity.
+- Pitch bend referenced to the final generated note, including scale-locked notes.
+- 12-note custom scale mask and root selection.
+- Gesture-driven MIDI CC.
+- MPE-style channel allocation with MIDI channel 10 reserved for beatbox drums.
+- Kick, snare and hi-hat beatbox classification using onset, zero-crossing, brightness and crest features.
+- MIDI Learn foundation.
+- Preset save/load and DAW state restoration.
+- Black/gold IDW performance UI with live mic level meter and mic calibration control.
 
-    ThirdParty/JUCE
+## Calibration
+For a quick noise-floor setup, remain silent and press **CALIBRATE MIC**. The current room/microphone level is used to set a practical gate value. Fine-tune **MIC GATE** and **PITCH CONFIDENCE** afterward if needed.
 
-JUCE's current official release is 9.0.2 as of September 2026. JUCE's official CMake plugin example requires CMake 3.22+ and demonstrates VST3/AU/Standalone targets.
+## Build and validation
+JUCE is fetched automatically with CMake when `ThirdParty/JUCE` is not present locally.
 
-## Build
+Requirements:
+- CMake 3.22+
+- JUCE 9.0.2
+- Windows: current Visual Studio C++ toolchain
+- macOS: current Xcode command-line toolchain
+
+GitHub Actions builds and packages Windows and macOS, validates VST3 with pluginval, validates the Audio Unit with `auval`, and creates install-ready artifacts.
+
+## Installer outputs
 Windows:
-    powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1
+- Standalone application
+- VST3
+- Versioned Inno Setup installer
 
 macOS:
-    chmod +x scripts/build-macos.sh
-    ./scripts/build-macos.sh
+- Standalone application
+- VST3
+- Audio Unit
+- Versioned PKG installer
+- Versioned DMG
 
-Linux:
-    chmod +x scripts/build-linux.sh
-    ./scripts/build-linux.sh
+## Versioned releases
+Pushing a tag such as `v0.8.2` runs the full Windows/macOS validation pipeline. If both platforms pass, GitHub Actions publishes the installer files to a GitHub Release automatically.
 
-## Status
-This package is release-prep source. It is NOT claimed as a compiled, signed, DAW-validated commercial binary. Final Windows/macOS binaries require the corresponding native toolchain, JUCE dependency, host testing, signing and (for macOS distribution) notarization.
+## Signing status
+CI-generated packages are currently unsigned. Public commercial distribution should add:
+- Windows Authenticode/code-signing certificate.
+- Apple Developer ID Application and Installer certificates.
+- Apple notarization credentials and notarization/stapling steps.
 
-Clean-room implementation: no Vochlea Dubler proprietary source, models, UI, or assets.
+## Clean-room note
+No Vochlea Dubler proprietary source code, models, UI assets, or private implementation details are used.

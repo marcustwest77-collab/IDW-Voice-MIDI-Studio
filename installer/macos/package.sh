@@ -3,9 +3,9 @@ set -euo pipefail
 
 BUILD_ROOT="${1:-build/IDWVoiceMIDIStudio_artefacts/Release}"
 OUT_DIR="${2:-release/Installer}"
-VERSION="0.8.1"
-PKG_NAME="IDW-Voice-MIDI-Studio-Setup-macOS-arm64.pkg"
-DMG_NAME="IDW-Voice-MIDI-Studio-macOS-arm64.dmg"
+VERSION="0.8.2"
+PKG_NAME="IDW-Voice-MIDI-Studio-Setup-${VERSION}-macOS-arm64.pkg"
+DMG_NAME="IDW-Voice-MIDI-Studio-${VERSION}-macOS-arm64.dmg"
 
 rm -rf release/pkgroot release/dmgroot
 mkdir -p \
@@ -27,8 +27,11 @@ pkgbuild \
   "$OUT_DIR/$PKG_NAME"
 
 cp "$OUT_DIR/$PKG_NAME" release/dmgroot/
-cat > release/dmgroot/README.txt <<'EOF'
-IDW Voice MIDI Studio
+cat > release/dmgroot/README.txt <<EOF
+IDW Voice MIDI Studio ${VERSION}
+In Da Wind Entertainment
+
+Real-time voice-to-MIDI performance engine.
 
 This installer places:
 - Standalone app in /Applications
@@ -39,7 +42,7 @@ This CI-generated package is unsigned until Developer ID certificates and notari
 EOF
 
 hdiutil create \
-  -volname "IDW Voice MIDI Studio" \
+  -volname "IDW Voice MIDI Studio ${VERSION}" \
   -srcfolder release/dmgroot \
   -ov \
   -format UDZO \
