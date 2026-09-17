@@ -62,10 +62,16 @@ jobs:
       - name: Validate Audio Unit on macOS
         if: runner.os == 'macOS'
         run: |
+          COMPONENT="build/IDWVoiceMIDIStudio_artefacts/Release/AU/IDW Voice MIDI Studio.component"
+          PLIST="$COMPONENT/Contents/Info.plist"
           mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
-          cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/AU/IDW Voice MIDI Studio.component" "$HOME/Library/Audio/Plug-Ins/Components/"
+          cp -R "$COMPONENT" "$HOME/Library/Audio/Plug-Ins/Components/"
           killall -9 AudioComponentRegistrar 2>/dev/null || true
-          auval -v aufx IDV8 IDWE
+          AU_TYPE=$(/usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:type' "$PLIST")
+          AU_SUBTYPE=$(/usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:subtype' "$PLIST")
+          AU_MFR=$(/usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:manufacturer' "$PLIST")
+          echo "Validating AU $AU_TYPE / $AU_SUBTYPE / $AU_MFR"
+          auval -v "$AU_TYPE" "$AU_SUBTYPE" "$AU_MFR"
 
       - name: Stage Windows release package
         if: runner.os == 'Windows'
