@@ -6,6 +6,7 @@ IDWVoiceMIDIStudioAudioProcessor::IDWVoiceMIDIStudioAudioProcessor()
     : AudioProcessor(BusesProperties()
                          .withInput("Input", juce::AudioChannelSet::mono(), true)
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+      // Keep the V9 state tree identifier so existing sessions and presets load in V3.
       apvts(*this, nullptr, "IDW_V9", layout()),
       presets(apvts)
 {
@@ -48,8 +49,12 @@ void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sampleRate, int bloc
     beats.prepare(sampleRate);
     mpe.reset();
     active = -1;
-    silent = 0;
+    candidate = -1;
+    candidateFrames = 0;
+    silentSamples = 0;
+    ccFrameCounter = 0;
     lastHz = 0.0f;
+    smoothedRawNote = -1.0f;
 }
 
 void IDWVoiceMIDIStudioAudioProcessor::releaseResources()
@@ -95,7 +100,17 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
     if (detectedHz > 0.0f && rms >= gate && quality >= minConfidence)
     {
         const float calibrationCents = apvts.getRawParameterValue("tuneCents")->load();
-        float rawNote = 69.0f + 12.0f * std::log2(detectedHz / 440.0f) + calibrationCents / 100.0f;
+        const float measuredNote = 69.0f + 12.0f * std::log2(detectedHz / 440.0f)
+                                   + calibrationCents / 100.0f;
+
+        // Smooth in musical (semitone) space. This is intentionally light so
+        // vibrato and slides remain expressive while octave glitches are tamed.
+        if (smoothedRawNote < 0.0f || std::abs(measuredNote - smoothedRawNote) > 7.0f)
+            smoothedRawNote = measuredNote;
+        else
+            smoothedRawNote += 0.35f * (measuredNote - smoothedRawNote);
+
+        const float rawNote = smoothedRawNote;
         int noteNumber = (int) std::lround(rawNote);
 
         if (apvts.getRawParameterValue("scaleLock")->load() > .5f)
@@ -103,25 +118,46 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
 
         noteNumber = juce::jlimit(0, 127, noteNumber);
 
+        // Require a new note to win two consecutive analysis frames. The first
+        // note still starts immediately, keeping live response fast.
         if (noteNumber != active)
         {
             if (active >= 0)
             {
-                const int oldChannel = mpeOn ? mpe.channelFor(active) : 1;
-                midiOut.addEvent(juce::MidiMessage::pitchWheel(oldChannel, 8192), 0);
-                midiOut.addEvent(juce::MidiMessage::noteOff(oldChannel, active), 0);
-                mpe.release(active);
+                if (candidate != noteNumber)
+                {
+                    candidate = noteNumber;
+                    candidateFrames = 1;
+                }
+                else
+                    ++candidateFrames;
+
+                if (candidateFrames < 2)
+                    noteNumber = active;
             }
 
-            const int newChannel = mpeOn ? mpe.allocate(noteNumber) : 1;
-            const float velocityNorm = juce::jlimit(0.0f, 1.0f, (rms - gate) / juce::jmax(0.001f, 0.2f - gate));
-            const int velocity = juce::jlimit(1, 127, (int) std::lround(35.0f + velocityNorm * 92.0f));
-            midiOut.addEvent(juce::MidiMessage::noteOn(newChannel, noteNumber, (juce::uint8) velocity), 0);
-            active = noteNumber;
+            if (noteNumber != active)
+            {
+                if (active >= 0)
+                {
+                    const int oldChannel = mpeOn ? mpe.channelFor(active) : 1;
+                    midiOut.addEvent(juce::MidiMessage::pitchWheel(oldChannel, 8192), 0);
+                    midiOut.addEvent(juce::MidiMessage::noteOff(oldChannel, active), 0);
+                    mpe.release(active);
+                }
+
+                const int newChannel = mpeOn ? mpe.allocate(noteNumber) : 1;
+                const float velocityNorm = juce::jlimit(0.0f, 1.0f, (rms - gate) / juce::jmax(0.001f, 0.2f - gate));
+                const int velocity = juce::jlimit(1, 127, (int) std::lround(35.0f + velocityNorm * 92.0f));
+                midiOut.addEvent(juce::MidiMessage::noteOn(newChannel, noteNumber, (juce::uint8) velocity), 0);
+                active = noteNumber;
+                candidate = -1;
+                candidateFrames = 0;
+            }
         }
 
         midi = noteNumber;
-        silent = 0;
+        silentSamples = 0;
 
         const int channel = mpeOn ? mpe.channelFor(noteNumber) : 1;
         const int bendRange = juce::jmax(1, (int) apvts.getRawParameterValue("bend")->load());
@@ -130,7 +166,9 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
                                       (int) std::lround(8192.0 + (semitoneOffset / (float) bendRange) * 8192.0));
         midiOut.addEvent(juce::MidiMessage::pitchWheel(channel, wheel), 0);
 
-        if (apvts.getRawParameterValue("gestureCC")->load() > .5f && lastHz > 0.0f)
+        // Limit gesture CC to roughly every other frame to reduce MIDI traffic.
+        if (apvts.getRawParameterValue("gestureCC")->load() > .5f && lastHz > 0.0f
+            && (++ccFrameCounter % 2) == 0)
         {
             const float movement = std::abs(12.0f * std::log2(detectedHz / lastHz));
             const int ccValue = juce::jlimit(0, 127,
@@ -144,15 +182,23 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
 
         lastHz = detectedHz;
     }
-    else if (++silent > 5 && active >= 0)
+    else
     {
-        const int channel = mpeOn ? mpe.channelFor(active) : 1;
-        midiOut.addEvent(juce::MidiMessage::pitchWheel(channel, 8192), 0);
-        midiOut.addEvent(juce::MidiMessage::noteOff(channel, active), 0);
-        mpe.release(active);
-        active = -1;
-        midi = -1;
-        lastHz = 0.0f;
+        silentSamples += numSamples;
+        const int releaseSamples = juce::jmax(1, (int) std::lround(getSampleRate() * 0.075));
+        if (silentSamples >= releaseSamples && active >= 0)
+        {
+            const int channel = mpeOn ? mpe.channelFor(active) : 1;
+            midiOut.addEvent(juce::MidiMessage::pitchWheel(channel, 8192), 0);
+            midiOut.addEvent(juce::MidiMessage::noteOff(channel, active), 0);
+            mpe.release(active);
+            active = -1;
+            midi = -1;
+            lastHz = 0.0f;
+            smoothedRawNote = -1.0f;
+            candidate = -1;
+            candidateFrames = 0;
+        }
     }
 
     const auto beat = apvts.getRawParameterValue("beatbox")->load() > .5f

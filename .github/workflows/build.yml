@@ -2,7 +2,7 @@ name: Build, Validate and Package IDW Voice MIDI Studio
 
 on:
   push:
-    branches: [main]
+    branches: [main, version-3-build]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -83,6 +83,9 @@ jobs:
           Copy-Item -Recurse "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" "release/Windows/VST3/"
           Copy-Item "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.exe" "release/Windows/Standalone/"
           Copy-Item "docs/USER_MANUAL.md" "release/Documentation/USER_MANUAL.md"
+          Copy-Item "docs/FL_STUDIO_SETUP.md" "release/Documentation/FL_STUDIO_SETUP.md"
+          Copy-Item "docs/VERSION_3.md" "release/Documentation/VERSION_3.md"
+          Copy-Item "Resources/FL_STUDIO_ROUTING.svg" "release/Documentation/FL_STUDIO_ROUTING.svg"
 
       - name: Build Windows installer
         if: runner.os == 'Windows'
@@ -105,6 +108,9 @@ jobs:
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/AU/IDW Voice MIDI Studio.component" release/macOS/AU/
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.app" release/macOS/Standalone/
           cp docs/USER_MANUAL.md release/Documentation/USER_MANUAL.md
+          cp docs/FL_STUDIO_SETUP.md release/Documentation/FL_STUDIO_SETUP.md
+          cp docs/VERSION_3.md release/Documentation/VERSION_3.md
+          cp Resources/FL_STUDIO_ROUTING.svg release/Documentation/FL_STUDIO_ROUTING.svg
 
       - name: Build macOS installer package and DMG
         if: runner.os == 'macOS'

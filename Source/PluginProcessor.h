@@ -56,8 +56,12 @@ private:
     std::atomic<int> midi { -1 };
 
     int active = -1;
-    int silent = 0;
+    int candidate = -1;
+    int candidateFrames = 0;
+    int silentSamples = 0;
+    int ccFrameCounter = 0;
     float lastHz = 0.0f;
+    float smoothedRawNote = -1.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IDWVoiceMIDIStudioAudioProcessor)
 };

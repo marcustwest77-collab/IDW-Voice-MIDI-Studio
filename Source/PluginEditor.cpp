@@ -5,7 +5,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
 {
     setSize(1080, 760);
 
-    title.setText("IDW VOICE MIDI STUDIO • V9.1", juce::dontSendNotification);
+    title.setText("IDW VOICE MIDI STUDIO • VERSION 3", juce::dontSendNotification);
     title.setFont(juce::Font(32.0f, juce::Font::bold));
     title.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(title);
@@ -111,7 +111,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     learn.onClick = [this] { p.learn.arm(learnTarget.getText()); };
     save.onClick = [this]
     {
-        const auto name = "IDW V9.1 " + juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S");
+        const auto name = "IDW V3 " + juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S");
         if (p.presets.save(name))
         {
             refreshPresets();
@@ -147,8 +147,18 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::configureSlider(juce::Slider& slide
 
 void IDWVoiceMIDIStudioAudioProcessorEditor::calibrateNoiseGate()
 {
-    const float ambient = p.level();
-    const float threshold = juce::jlimit(.001f, .2f, juce::jmax(.002f, ambient * 2.5f));
+    calibratingNoise = true;
+    calibrationTicks = 0;
+    calibrationPeak = 0.0f;
+    calibrate.setEnabled(false);
+    status.setText("Measuring room noise for 1 second — stay quiet...", juce::dontSendNotification);
+}
+
+void IDWVoiceMIDIStudioAudioProcessorEditor::finishNoiseCalibration()
+{
+    calibratingNoise = false;
+    calibrate.setEnabled(true);
+    const float threshold = juce::jlimit(.001f, .2f, juce::jmax(.002f, calibrationPeak * 2.5f));
 
     if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p.apvts.getParameter("gate")))
     {
@@ -291,6 +301,13 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::resized()
 
 void IDWVoiceMIDIStudioAudioProcessorEditor::timerCallback()
 {
+    if (calibratingNoise)
+    {
+        calibrationPeak = juce::jmax(calibrationPeak, p.level());
+        if (++calibrationTicks >= 30)
+            finishNoiseCalibration();
+    }
+
     const float h = p.hz();
     readout.setText(h > 0.0f
                         ? juce::String(h, 1) + " Hz   •   MIDI " + juce::String(p.note())

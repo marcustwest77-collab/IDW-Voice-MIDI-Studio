@@ -1,4 +1,4 @@
-# IDW Voice MIDI Studio V9.1
+# IDW Voice MIDI Studio — Version 3
 
 IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and standalone application from In Da Wind Entertainment.
 
@@ -18,6 +18,9 @@ IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and stand
 - MIDI Learn
 - User preset save/load
 - Noise-floor calibration
+- One-second peak-aware noise calibration (more reliable than a single snapshot)
+- Smoothed pitch tracking and two-frame note-change confirmation
+- Time-based note release that behaves consistently at different buffer sizes
 - Pitch calibration
 
 ## V9.1 User Experience
@@ -45,7 +48,7 @@ IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and stand
 5. Load **Clean Vocal**.
 6. Sing and confirm the destination instrument follows the voice.
 
-See `docs/USER_MANUAL.md` or press **HELP / QUICK START** inside the plugin for the full guide.
+See `docs/USER_MANUAL.md` or press **HELP / QUICK START** inside the plugin for the full guide. For exact FL Studio setup and troubleshooting, see `docs/FL_STUDIO_SETUP.md`.
 
 ## Build
 The CMake project is pinned to JUCE `9.0.2` and supports an optional local checkout at `ThirdParty/JUCE`; otherwise CMake fetches JUCE automatically.

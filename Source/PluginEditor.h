@@ -18,6 +18,7 @@ private:
     void timerCallback() override;
     void syncScale();
     void calibrateNoiseGate();
+    void finishNoiseCalibration();
     void configureSlider(juce::Slider&, juce::Label&, const juce::String&, const juce::String& tooltip);
     void refreshPresets();
     void loadSelectedPreset();
@@ -43,6 +44,9 @@ private:
     juce::TextEditor helpText;
     juce::StringArray userPresetNames;
     int factoryPresetCount = 0;
+    bool calibratingNoise = false;
+    int calibrationTicks = 0;
+    float calibrationPeak = 0.0f;
 
     juce::TooltipWindow tooltipWindow { this, 650 };
 
