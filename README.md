@@ -1,67 +1,52 @@
-# IDW Voice MIDI Studio V9.1
+# IDW Voice MIDI Studio 4.1 — source upgrade
 
-IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and standalone application from In Da Wind Entertainment.
+Open **START-HERE.html** for build, installation, routing, troubleshooting and test instructions.
 
-## Formats
-- Windows: Standalone + VST3
-- macOS: Standalone + VST3 + Audio Unit
+**No new EXE or VST3 is included in this source package.** Run BUILD-WINDOWS.cmd on a configured Windows development computer to build and test them. Read docs/VALIDATION-4.1.md for current verification limits and docs/CHANGES-4.1.md for changes.
 
-## Core Features
-- Real-time YIN pitch detection
-- Voice-to-MIDI note generation
-- Vocal-level MIDI velocity
-- Scale-aware pitch bend
-- Custom scale lock and root selection
-- Beatbox-to-drum MIDI triggering
-- Gesture-to-MIDI CC
-- MPE support
-- MIDI Learn
-- User preset save/load
-- Noise-floor calibration
-- Pitch calibration
+## Original V4 documentation (historical)
 
-## V9.1 User Experience
-- Built-in **HELP / QUICK START** manual
-- Hover tooltips for the main performance controls
-- Factory preset browser
-- Saved user presets appear in the same browser
-- Full written manual in `docs/USER_MANUAL.md` and release packages
+# IDW Voice MIDI Studio 4.0
 
-### Factory Presets
-- Clean Vocal
-- Tight Tracking
-- Smooth Lead
-- Scale Locked Lead
-- Wide Bend Performance
-- Beatbox Drums
-- Expressive MPE
-- Live Responsive
+Windows standalone and VST3 voice-to-MIDI, built with JUCE 9.0.2. This upgrade retains the original plugin identifier and IDW_V9 session tree for compatibility.
 
-## Quick Start in FL Studio
-1. Put IDW Voice MIDI Studio on the mixer insert receiving your microphone.
-2. Set the IDW wrapper MIDI Output Port to a value such as `10`.
-3. Set the destination synth wrapper MIDI Input Port to the same value.
-4. Press **CALIBRATE NOISE** while the room is quiet.
-5. Load **Clean Vocal**.
-6. Sing and confirm the destination instrument follows the voice.
+## What changed
 
-See `docs/USER_MANUAL.md` or press **HELP / QUICK START** inside the plugin for the full guide.
+- Fixed 5 ms analysis hops independent of the host audio buffer; bounded YIN analysis and time-based smoothing, note confirmation and release.
+- Strict scale mode keeps pitch bends centered; Natural vibrato retains up to 45 cents of local expression.
+- Mono/stereo input support, selectable analysis channel, independent microphone monitoring and a simple sine preview instrument.
+- Test Note, Panic, live pitch history, MIDI event counts and callback load display.
+- MPE note-offs use the channel that originally started the note. Channel 10 is reserved for drums. Pitch-bend range is sent using RPN.
+- Channel-aware MIDI Learn handles all CC events in a block. Mappings persist with sessions and user presets.
+- Eight trainable drum pads using five local spectral examples per pad; velocity-sensitive hits and 40 ms MIDI drum durations.
+- MIDI recording up to ten minutes with export of tempo, notes, bends and CCs. Export explicitly closes held notes.
+- Standalone input is enabled for analysis while direct microphone monitoring defaults off at startup.
+- UI-to-audio communication uses atomic commands / a bounded single-producer queue; no disk writes or training allocations in the audio callback.
+
+See [the manual](docs/USER_MANUAL.md), [FL Studio setup](docs/FL_STUDIO_SETUP.md), and [the validation report](docs/VALIDATION.md).
 
 ## Build
-The CMake project is pinned to JUCE `9.0.2` and supports an optional local checkout at `ThirdParty/JUCE`; otherwise CMake fetches JUCE automatically.
 
-Windows:
+Requirements: CMake 3.22+, a C++17 compiler, and JUCE 9.0.2. On Windows use Visual Studio 2022 Build Tools with the Desktop C++ workload and Windows SDK.
 
-    powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1
+```powershell
+./scripts/build-windows.ps1 -JucePath 'C:/path/to/JUCE'
+```
 
-macOS:
+Alternatively:
 
-    chmod +x scripts/build-macos.sh
-    ./scripts/build-macos.sh
+```text
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DIDW_JUCE_PATH=/path/to/JUCE
+cmake --build build --config Release --parallel 3
+ctest --test-dir build -C Release --output-on-failure
+```
 
-GitHub Actions builds, validates and packages Windows/macOS artifacts. VST3 validation uses pluginval and macOS Audio Unit validation uses `auval`.
+If no local JUCE path is supplied, CMake fetches the pinned 9.0.2 tag. Windows uses a static MSVC runtime so the portable app does not require installing a new Visual C++ runtime. macOS source/build recipes are included but this delivery was built on Windows only.
 
-## Distribution Status
-CI produces Windows and macOS installer packages. These builds are suitable for development and testing. Public/commercial distribution should add platform code signing; macOS distribution should also add Apple notarization.
+## Compatibility and scope
 
-Clean-room implementation: no Vochlea Dubler proprietary source, models, UI, or assets are used.
+The VST3 identity is unchanged: install one version at a time and back up important DAW sessions before upgrading. Existing settings load; old presets without drum profiles or MIDI mappings get empty maps. Version 3 exposed a latencyMs parameter that did not implement delay; its ID is retained for session compatibility, but it is not presented as a working latency control.
+
+This is monophonic voice tracking, not polyphonic transcription. Drum recognition uses local spectral templates rather than a neural model. The MIDI take is editor-local: export before closing the editor. Tempo is fixed per take. No cloud service or API key is needed.
+
+JUCE and its bundled components retain their upstream licenses. This source package does not change the project's existing licensing terms. Build tools are not included.

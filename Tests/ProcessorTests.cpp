@@ -1,0 +1,119 @@
+#include "PluginProcessor.h"
+#include "MidiExport.h"
+#include <iostream>
+#include <random>
+#include <chrono>
+#include <stdexcept>
+namespace {
+void check(bool condition,const char* message){if(!condition)throw std::runtime_error(message);}
+void parameter(IDWVoiceMIDIStudioAudioProcessor& p,const char* id,float value){auto* q=p.apvts.getParameter(id);check(q!=nullptr,"Missing parameter");q->setValueNotifyingHost(q->convertTo0to1(value));}
+struct Event{int sample;juce::MidiMessage message;};
+std::vector<Event> run(IDWVoiceMIDIStudioAudioProcessor& p,double sr,int block,double seconds,float hz,float amplitude=0.1f,int base=0){
+    std::vector<Event> events;int total=(int)std::lround(seconds*sr);
+    for(int offset=0;offset<total;offset+=block){const int n=juce::jmin(block,total-offset);juce::AudioBuffer<float> buffer(2,n);buffer.clear();juce::MidiBuffer midi;
+        for(int i=0;i<n;++i)buffer.setSample(0,i,amplitude*(float)std::sin(juce::MathConstants<double>::twoPi*hz*(base+offset+i)/sr));
+        p.processBlock(buffer,midi);for(const auto e:midi)events.push_back({base+offset+e.samplePosition,e.getMessage()});
+        for(int ch=0;ch<2;++ch)for(int i=0;i<n;++i)check(std::isfinite(buffer.getSample(ch,i)),"Nonfinite audio output");
+    }return events;
+}
+auto processor(double sr,int block){auto p=std::make_unique<IDWVoiceMIDIStudioAudioProcessor>();p->setRateAndBufferSizeDetails(sr,block);p->prepareToPlay(sr,block);return p;}
+void testPitchAndBuffers(){
+    for(double sr:{44100.0,48000.0,96000.0}){
+        int referenceOn=-1,referenceOff=-1;
+        for(int block:{64,128,256,512}){
+            auto p=processor(sr,block);const auto events=run(*p,sr,block,0.3,220);
+            int first=-1,notes=0;for(const auto& e:events)if(e.message.isNoteOn()){check(e.message.getNoteNumber()==57,"A3 detected as wrong MIDI note");if(first<0)first=e.sample;++notes;}
+            check(notes==1,"Steady pitch retriggered");check(std::abs(p->hz()-220)<0.8,"Pitch estimate error");
+            const auto silence=run(*p,sr,block,0.15,0,0,(int)(0.3*sr));int off=-1;
+            for(const auto& e:silence)if(e.message.isNoteOff()&&e.message.getNoteNumber()==57)off=e.sample;
+            check(off>=0,"Missing note off after silence");
+            if(referenceOn<0){referenceOn=first;referenceOff=off;}else{check(first==referenceOn,"Onset depends on host buffer size");check(off==referenceOff,"Release depends on host buffer size");}
+        }
+        std::cout<<"PASS fixed-hop pitch/onset/release at "<<sr<<" Hz across 64/128/256/512 samples\n";
+    }
+    for(float hz:{70.0f,110.0f,440.0f,880.0f,990.0f}){auto p=processor(48000,128);run(*p,48000,128,0.15,hz);check(std::abs(1200*std::log2(p->hz()/hz))<15,"Pitch range accuracy outside 15 cents");}
+    std::cout<<"PASS pitch range and tuning\n";
+}
+void testScale(){
+    auto p=processor(48000,128);parameter(*p,"scaleLock",1);parameter(*p,"scaleMask",1);parameter(*p,"root",0);
+    auto events=run(*p,48000,128,0.2,277.1826f);bool note=false;
+    for(const auto& e:events){if(e.message.isNoteOn()){check(e.message.getNoteNumber()==60,"Strict scale note not C4");note=true;}if(e.message.isPitchWheel())check(e.message.getPitchWheelValue()==8192,"Strict scale bends off scale");}
+    check(note,"Strict scale produced no note");
+    parameter(*p,"scaleExpression",1);events=run(*p,48000,128,0.1,280.0f,0.1f,9600);bool bend=false;
+    for(const auto& e:events)if(e.message.isPitchWheel()&&e.message.getPitchWheelValue()!=8192){bend=true;check(std::abs(e.message.getPitchWheelValue()-8192)<=1844,"Natural vibrato exceeds 45 cents");}
+    check(bend,"Natural mode lost expression");
+    ScaleManager scale;scale.setMask(1);check(scale.quantize(127,7)==127,"Scale quantization edge regression");
+    std::cout<<"PASS strict scale / natural expression\n";
+}
+void testMpePanic(){
+    auto p=processor(48000,128);parameter(*p,"mpe",1);auto start=run(*p,48000,128,0.15,220);int ch=0;
+    for(const auto& e:start)if(e.message.isNoteOn())ch=e.message.getChannel();check(ch>=2&&ch!=10,"MPE channel invalid");
+    parameter(*p,"mpe",0);auto next=run(*p,48000,128,0.02,220,0.1f,7200);bool oldOff=false,newOn=false;
+    for(const auto& e:next){if(e.message.isNoteOff()&&e.message.getChannel()==ch)oldOff=true;if(e.message.isNoteOn()&&e.message.getChannel()==1)newOn=true;}
+    check(oldOff&&newOn,"MPE mode switch leaves old note active");p->requestPanic();auto stop=run(*p,48000,128,0.005,220);bool off=false;
+    for(const auto& e:stop)if(e.message.isNoteOff()&&e.message.getChannel()==1)off=true;check(off,"Panic missing explicit note off");
+    p->requestTestNote();auto test=run(*p,48000,128,0.5,0,0);int on=-1,end=-1;
+    for(const auto& e:test){if(e.message.isNoteOn()&&e.message.getNoteNumber()==60)on=e.sample;if(e.message.isNoteOff()&&e.message.getNoteNumber()==60)end=e.sample;}
+    check(on==0 && end>=16799&&end<=16800,"Test note duration incorrect");
+    std::cout<<"PASS MPE channel changes / Panic / test-note pairing\n";
+}
+void testMidiLearnState(){
+    auto p=processor(48000,128);p->learn.arm("gate");juce::MidiBuffer m;m.addEvent(juce::MidiMessage::controllerEvent(1,20,0),0);p->learn.process(m,p->apvts);
+    p->learn.arm("confidence");m.clear();m.addEvent(juce::MidiMessage::controllerEvent(1,21,0),0);p->learn.process(m,p->apvts);
+    m.clear();m.addEvent(juce::MidiMessage::controllerEvent(1,20,127),0);m.addEvent(juce::MidiMessage::controllerEvent(1,21,127),1);p->learn.process(m,p->apvts);
+    check(p->apvts.getRawParameterValue("gate")->load()>0.199f,"First CC not handled");check(p->apvts.getRawParameterValue("confidence")->load()>0.999f,"Second CC not handled");
+    juce::MemoryBlock data;p->getStateInformation(data);auto restored=processor(48000,128);restored->setStateInformation(data.getData(),(int)data.getSize());
+    m.clear();m.addEvent(juce::MidiMessage::controllerEvent(1,20,0),0);m.addEvent(juce::MidiMessage::controllerEvent(1,21,0),1);restored->learn.process(m,restored->apvts);
+    check(restored->apvts.getRawParameterValue("gate")->load()<0.002f,"CC mapping not restored");check(restored->apvts.getRawParameterValue("confidence")->load()<0.501f,"Second mapping not restored");
+    m.clear();m.addEvent(juce::MidiMessage::controllerEvent(2,20,127),0);restored->learn.process(m,restored->apvts);check(restored->apvts.getRawParameterValue("gate")->load()<0.002f,"CC mapping ignores MIDI channel");
+    std::cout<<"PASS multiple CC messages / channel isolation / session persistence\n";
+}
+void testCapture(){
+    auto p=processor(48000,128);p->capture.start();run(*p,48000,128,0.1,220);p->capture.stop();run(*p,48000,128,0.01,220,0.1f,4800);
+    check(!p->capture.isRecording(),"Capture failed to stop");PerformanceCapture::Event e;int ons=0,closure=0;double previous=-1;
+    while(p->capture.pop(e)){check(e.seconds>=previous,"Capture timestamp order invalid");previous=e.seconds;juce::MidiMessage m(e.data,e.size);if(m.isNoteOn())++ons;if(m.isAllNotesOff())++closure;}
+    check(ons==1&&closure==16,"Capture missing note or closing events");check(p->note()==57,"Stopping capture interrupts live voice");
+    std::cout<<"PASS capture timestamps / closing events / live continuation\n";
+}
+void testMidiExport(){
+    const auto file=juce::File::getCurrentWorkingDirectory().getChildFile("Regression-Take.mid");
+    std::vector<PerformanceCapture::Event> take;
+    auto event=[&](const juce::MidiMessage& m,double seconds){PerformanceCapture::Event e;e.seconds=seconds;e.size=m.getRawDataSize();std::copy_n(m.getRawData(),e.size,e.data);take.push_back(e);};
+    event(juce::MidiMessage::noteOn(1,60,(juce::uint8)100),0);event(juce::MidiMessage::pitchWheel(1,9000),0.2);event(juce::MidiMessage::allNotesOff(1),0.5);
+    check(writePerformanceMidi(file,take,120),"MIDI export failed");juce::FileInputStream stream(file);juce::MidiFile midi;check(midi.readFrom(stream),"Exported MIDI cannot be read");
+    check(midi.getTimeFormat()==960&&midi.getNumTracks()==1,"MIDI header incorrect");const auto* track=midi.getTrack(0);bool off=false,bend=false,tempo=false;
+    for(int i=0;i<track->getNumEvents();++i){const auto& m=track->getEventPointer(i)->message;if(m.isNoteOff()&&m.getNoteNumber()==60){off=true;check(std::abs(m.getTimeStamp()-960)<1,"MIDI duration/tempo incorrect");}if(m.isPitchWheel())bend=true;if(m.isTempoMetaEvent())tempo=true;}
+    check(off&&bend&&tempo,"MIDI export dropped notes, expression or tempo");std::cout<<"PASS readable MIDI file / tempo / explicit held-note closure\n";
+}
+void testDrums(){
+    BeatboxClassifier beats;beats.prepare(48000);beats.train(0);std::array<float,240> frame{};
+    for(int hit=0;hit<5;++hit){for(int hop=0;hop<50;++hop){for(int i=0;i<240;++i){const int t=hop*240+i;frame[(size_t)i]=hop<8?0.6f*std::exp(-t/1200.0f)*(float)std::sin(juce::MathConstants<double>::twoPi*110*t/48000):0;}beats.process(frame.data(),240,0.02f);}}
+    check(beats.examples(0)==5&&beats.trainingPad()<0,"Drum training did not complete");
+    BeatboxClassifier restored;restored.prepare(48000);restored.restore(beats.save());check(restored.examples(0)==5,"Drum profile not restored");
+    bool detected=false;int velocity=0;
+    for(int hop=0;hop<50;++hop){for(int i=0;i<240;++i){const int t=hop*240+i;frame[(size_t)i]=hop<8?0.6f*std::exp(-t/1200.0f)*(float)std::sin(juce::MathConstants<double>::twoPi*110*t/48000):0;}const auto hit=restored.process(frame.data(),240,0.02f);if(hit.pad==0){detected=true;velocity=hit.velocity;}}
+    check(detected&&velocity>1&&velocity<=127,"Trained drum not recognized");
+    std::cout<<"PASS five-hit training / persistence / trained hit classification\n";
+}
+void testPreviewAndStereo(){
+    auto p=processor(48000,128);parameter(*p,"previewAudio",1);p->requestTestNote();juce::AudioBuffer<float> buffer(2,512);buffer.clear();juce::MidiBuffer midi;p->processBlock(buffer,midi);
+    check(buffer.getRMSLevel(0,0,512)>0.025f,"Preview instrument is silent");
+    p=processor(48000,128);auto layout=p->getBusesLayout();layout.inputBuses.set(0,juce::AudioChannelSet::stereo());layout.outputBuses.set(0,juce::AudioChannelSet::stereo());check(p->setBusesLayout(layout),"Stereo input not supported");p->prepareToPlay(48000,128);parameter(*p,"inputMode",1);
+    bool played=false;
+    for(int base=0;base<9600;base+=128){juce::AudioBuffer<float> audio(2,128);audio.clear();juce::MidiBuffer events;for(int i=0;i<128;++i)audio.setSample(1,i,0.1f*(float)std::sin(juce::MathConstants<double>::twoPi*220*(base+i)/48000));p->processBlock(audio,events);check(audio.getRMSLevel(0,0,128)==0&&audio.getRMSLevel(1,0,128)==0,"Microphone monitoring not muted by default");for(auto e:events)if(e.getMessage().isNoteOn())played=true;}
+    check(played,"Right-channel microphone not tracked");std::cout<<"PASS audible preview / right-channel input / default monitor mute\n";
+}
+void renderEditor(){
+    auto p=processor(48000,128);std::vector<float> before;for(auto* parameter:p->getParameters())before.push_back(parameter->getValue());std::unique_ptr<juce::AudioProcessorEditor> editor(p->createEditor());for(int i=0;i<p->getParameters().size();++i)check(std::abs(before[(size_t)i]-p->getParameters()[i]->getValue())<1.0e-6f,"Opening editor modifies processor parameters");editor->setVisible(true);
+    for(auto size:{std::pair<int,int>{1120,900},{1040,890}}){
+        editor->setSize(size.first,size.second);editor->resized();
+        for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Visible control outside editor bounds");
+        juce::Image image(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(image);editor->paintEntireComponent(graphics,true);}
+        check(image.getPixelAt(1,1).getAlpha()>0,"Editor render is empty");juce::MemoryOutputStream output;juce::PNGImageFormat png;check(png.writeImageToStream(image,output),"Cannot render UI preview");
+        const auto file=juce::File::getCurrentWorkingDirectory().getChildFile(size.first==1120?"IDW-V4-Preview.png":"IDW-V4-Minimum.png");check(file.replaceWithData(output.getData(),output.getDataSize()),"Cannot save UI preview");
+    }
+    std::cout<<"PASS editor rendering / default and minimum-size control bounds\n";
+}
+}
+int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
+

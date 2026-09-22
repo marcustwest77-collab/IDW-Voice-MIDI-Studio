@@ -1,395 +1,244 @@
 #include "PluginEditor.h"
-
+#include "MidiExport.h"
+#include "SetupDiagnostics.h"
+#include <cmath>
+namespace {
+const juce::Colour background{0xff0b0e14},card{0xff141a24},gold{0xffeac36c},muted{0xff9aabc2},mint{0xff68dfbd};
+const char* names[]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+const char* drumIDs[]={"kick","snare","hat","pad4","pad5","pad6","pad7","pad8"};
+}
 IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(IDWVoiceMIDIStudioAudioProcessor& processor)
-    : AudioProcessorEditor(&processor), p(processor)
-{
-    setSize(1080, 760);
-
-    title.setText("IDW VOICE MIDI STUDIO • V9.1", juce::dontSendNotification);
-    title.setFont(juce::Font(32.0f, juce::Font::bold));
-    title.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(title);
-
-    readout.setFont(juce::Font(36.0f, juce::Font::bold));
-    readout.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(readout);
-
-    status.setJustificationType(juce::Justification::centred);
-    status.setText("Choose a preset, calibrate while quiet, then sing", juce::dontSendNotification);
-    addAndMakeVisible(status);
-
-    levelReadout.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(levelReadout);
-
-    configureSlider(gateSlider, gateLabel, "NOISE GATE",
-                    "Minimum vocal input level. Raise it in a noisy room; lower it for quiet or soft vocals.");
-    configureSlider(confidenceSlider, confidenceLabel, "CONFIDENCE",
-                    "How certain pitch detection must be before a MIDI note is accepted. Higher is stricter.");
-    configureSlider(bendSlider, bendLabel, "BEND RANGE",
-                    "Pitch-bend range in semitones. Set the receiving synth to the same bend range.");
-    configureSlider(tuneSlider, tuneLabel, "PITCH CAL ±CENTS",
-                    "Fine tuning offset in cents. Leave at 0 unless pitch needs calibration.");
-
-    gateSlider.setRange(.001, .2, .001);
-    gateSlider.setNumDecimalPlacesToDisplay(3);
-    confidenceSlider.setRange(.5, 1.0, .01);
-    confidenceSlider.setNumDecimalPlacesToDisplay(2);
-    bendSlider.setRange(1, 24, 1);
-    tuneSlider.setRange(-100, 100, 1);
-
-    gateAttachment = std::make_unique<SliderAttachment>(p.apvts, "gate", gateSlider);
-    confidenceAttachment = std::make_unique<SliderAttachment>(p.apvts, "confidence", confidenceSlider);
-    bendAttachment = std::make_unique<SliderAttachment>(p.apvts, "bend", bendSlider);
-    tuneAttachment = std::make_unique<SliderAttachment>(p.apvts, "tuneCents", tuneSlider);
-
-    scaleLock.setTooltip("Quantize outgoing MIDI notes to the selected custom scale.");
-    addAndMakeVisible(scaleLock);
-    scaleLockAttachment = std::make_unique<ButtonAttachment>(p.apvts, "scaleLock", scaleLock);
-
-    const char* roots[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-    for (int i = 0; i < 12; ++i)
-        rootSelector.addItem(roots[i], i + 1);
-    rootSelector.setSelectedId((int) p.apvts.getRawParameterValue("root")->load() + 1, juce::dontSendNotification);
-    rootSelector.setTooltip("Root note used when Scale Lock is enabled.");
-    addAndMakeVisible(rootSelector);
-    rootLabel.setText("ROOT", juce::dontSendNotification);
-    rootLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(rootLabel);
-    rootAttachment = std::make_unique<ComboAttachment>(p.apvts, "root", rootSelector);
-
-    for (int i = 0; i < 12; ++i)
-    {
-        scaleButtons[i].setButtonText(roots[i]);
-        scaleButtons[i].setTooltip("Toggle this pitch class in the custom scale mask.");
-        addAndMakeVisible(scaleButtons[i]);
-        scaleButtons[i].onClick = [this, i]
-        {
-            p.scale.toggle(i);
-            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p.apvts.getParameter("scaleMask")))
-                ranged->setValueNotifyingHost(ranged->convertTo0to1((float) p.scale.getMask()));
-            syncScale();
-        };
-    }
-
-    auto destinations = p.learn.destinations();
-    for (int i = 0; i < destinations.size(); ++i)
-        learnTarget.addItem(destinations[i], i + 1);
-    learnTarget.setSelectedId(1);
-    learnTarget.setTooltip("Choose the IDW control you want to map before pressing MIDI Learn.");
-    addAndMakeVisible(learnTarget);
-
-    calibrate.setTooltip("Stay quiet, then press this to set the noise gate just above the room noise floor.");
-    learn.setTooltip("Arm MIDI Learn, then move a hardware MIDI control to create the mapping.");
-    save.setTooltip("Save the current settings as a user preset.");
-    addAndMakeVisible(learn);
-    addAndMakeVisible(save);
-    addAndMakeVisible(calibrate);
-
-    presetLabel.setText("PRESETS", juce::dontSendNotification);
-    presetLabel.setJustificationType(juce::Justification::centredLeft);
-    addAndMakeVisible(presetLabel);
-    presetSelector.setTooltip("Choose a built-in factory preset or one of your saved user presets.");
-    loadPreset.setTooltip("Load the selected preset.");
-    addAndMakeVisible(presetSelector);
-    addAndMakeVisible(loadPreset);
-
-    help.setTooltip("Open the built-in Quick Start, control guide, FL Studio routing and troubleshooting manual.");
-    addAndMakeVisible(help);
-
-    helpText.setMultiLine(true);
-    helpText.setReadOnly(true);
-    helpText.setScrollbarsShown(true);
-    helpText.setCaretVisible(false);
-    helpText.setColour(juce::TextEditor::backgroundColourId, juce::Colour::fromRGB(12, 12, 16));
-    helpText.setColour(juce::TextEditor::textColourId, juce::Colours::white);
-    helpText.setColour(juce::TextEditor::outlineColourId, juce::Colours::gold);
-    helpText.setFont(juce::Font(16.0f));
-    helpText.setText(manualText(), false);
-    addAndMakeVisible(helpText);
-    addAndMakeVisible(closeHelp);
-
-    learn.onClick = [this] { p.learn.arm(learnTarget.getText()); };
-    save.onClick = [this]
-    {
-        const auto name = "IDW V9.1 " + juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S");
-        if (p.presets.save(name))
-        {
-            refreshPresets();
-            status.setText("Saved user preset: " + name, juce::dontSendNotification);
-        }
-    };
-    calibrate.onClick = [this] { calibrateNoiseGate(); };
-    loadPreset.onClick = [this] { loadSelectedPreset(); };
-    presetSelector.onChange = [this] { loadSelectedPreset(); };
-    help.onClick = [this] { showHelp(true); };
-    closeHelp.onClick = [this] { showHelp(false); };
-
-    refreshPresets();
-    syncScale();
-    showHelp(false);
-    startTimerHz(30);
+ : AudioProcessorEditor(&processor),p(processor){
+    theme.setColour(juce::ResizableWindow::backgroundColourId,background);
+    theme.setColour(juce::Slider::rotarySliderFillColourId,gold);
+    theme.setColour(juce::Slider::thumbColourId,gold);
+    theme.setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
+    theme.setColour(juce::TextButton::buttonColourId,juce::Colour(0xff263144));
+    theme.setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff76602d));
+    theme.setColour(juce::ComboBox::backgroundColourId,card);
+    theme.setColour(juce::ToggleButton::tickColourId,mint);
+    setLookAndFeel(&theme);setResizable(true,true);setResizeLimits(1040,890,1600,1200);setSize(1120,900);
+    title.setText("IDW / VOICE MIDI STUDIO",juce::dontSendNotification);title.setFont(juce::FontOptions(25.0f,juce::Font::bold));
+    readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));readout.setColour(juce::Label::textColourId,mint);
+    traceLabel.setText("LIVE PITCH  /  7 SECONDS",juce::dontSendNotification);traceLabel.setColour(juce::Label::textColourId,muted);
+    status.setText("Start with Preview sound, then sing or press Test note.",juce::dontSendNotification);
+    diagnostics.setColour(juce::Label::textColourId,muted);
+    drumLabel.setText("DRUM LAB  /  Train each pad with five distinct hits",juce::dontSendNotification);drumLabel.setColour(juce::Label::textColourId,gold);
+    for(auto* c:std::initializer_list<juce::Component*>{&setupStatus,&copyDiagnostics,&title,&readout,&status,&diagnostics,&traceLabel,&drumLabel,&captureLabel,&rootSelector,&expressionSelector,&inputSelector,&presetSelector,&learnTarget,&trainTarget,&scaleLock,&beatbox,&melody,&preview,&monitor,&mpeToggle,&calibrate,&panic,&test,&help,&save,&learn,&clearLearn,&record,&exportMidi,&train,&cancelTrain,&clearTrain})addAndMakeVisible(c);
+    configureSlider(gateSlider,gateLabel,"NOISE GATE","Minimum input level. Calibrate while quiet.");
+    configureSlider(confidenceSlider,confidenceLabel,"CONFIDENCE","Pitch certainty required to play a note.");
+    configureSlider(bendSlider,bendLabel,"BEND RANGE","Match this semitone range in your synth if it ignores MIDI RPN.");
+    configureSlider(tuneSlider,tuneLabel,"TUNING / CENTS","Fine tuning offset; normally leave at zero.");
+    auto attachSlider=[this](const char* id,juce::Slider& s){sliders.push_back(std::make_unique<SliderAttachment>(p.apvts,id,s));};
+    attachSlider("gate",gateSlider);attachSlider("confidence",confidenceSlider);attachSlider("bend",bendSlider);attachSlider("tuneCents",tuneSlider);
+    gateSlider.textFromValueFunction=[](double v){return juce::String(v,3);};
+    tuneSlider.textFromValueFunction=[](double v){return juce::String(v,0);};
+    gateSlider.setNumDecimalPlacesToDisplay(3);confidenceSlider.setNumDecimalPlacesToDisplay(2);bendSlider.setNumDecimalPlacesToDisplay(0);tuneSlider.setNumDecimalPlacesToDisplay(0);
+    for(int i=0;i<12;++i)rootSelector.addItem(names[i],i+1);
+    expressionSelector.addItem("Strict scale",1);expressionSelector.addItem("Natural vibrato",2);
+    expressionSelector.setTooltip("Scale lock off: free pitch. Strict: centered pitch. Natural: retains up to 45 cents of deviation around the selected scale note.");
+    inputSelector.addItem("Input: Left / mono",1);inputSelector.addItem("Input: Right",2);inputSelector.addItem("Input: L + R",3);
+    for(auto pair:{std::pair<const char*,juce::ComboBox*>{"root",&rootSelector},{"scaleExpression",&expressionSelector},{"inputMode",&inputSelector}})
+        combos.push_back(std::make_unique<ComboAttachment>(p.apvts,pair.first,*pair.second));
+    for(auto pair:{std::pair<const char*,juce::ToggleButton*>{"scaleLock",&scaleLock},{"beatbox",&beatbox},{"melody",&melody},{"previewAudio",&preview},{"monitorMic",&monitor},{"mpe",&mpeToggle}})
+        buttons.push_back(std::make_unique<ButtonAttachment>(p.apvts,pair.first,*pair.second));
+    for(int i=0;i<12;++i){addAndMakeVisible(scaleButtons[i]);scaleButtons[i].onClick=[this,i]{
+        const int mask=(int)p.apvts.getRawParameterValue("scaleMask")->load(),next=mask^(1<<i);
+        if(next==0){status.setText("Keep at least one scale note enabled.",juce::dontSendNotification);return;}
+        auto* param=p.apvts.getParameter("scaleMask");param->beginChangeGesture();param->setValueNotifyingHost(param->convertTo0to1((float)next));param->endChangeGesture();syncScale();};}
+    const juce::StringArray learnLabels{"Noise gate","Confidence","Bend range","Hit threshold","Gesture sensitivity","Scale expression"};for(int i=0;i<learnLabels.size();++i)learnTarget.addItem(learnLabels[i],i+1);learnTarget.setSelectedId(1);
+    learn.onClick=[this]{p.learn.arm(p.learn.destinations()[learnTarget.getSelectedId()-1]);status.setText("Move a hardware MIDI controller to map it.",juce::dontSendNotification);};
+    clearLearn.onClick=[this]{p.learn.clear();status.setText("MIDI controller mappings cleared.",juce::dontSendNotification);};
+    presetSelector.onChange=[this]{loadPreset();};
+    save.onClick=[this]{p.saveExtraState();const auto name="IDW V4 "+juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S");
+        if(p.presets.save(name)){refreshPresets();status.setText("Saved settings, controller mappings and drum profiles.",juce::dontSendNotification);}else status.setText("Could not save preset.",juce::dontSendNotification);};
+    copyDiagnostics.onClick=[this]{juce::SystemClipboard::copyTextToClipboard(diagnosticReport());status.setText("Diagnostics copied. Paste them into your support chat.",juce::dontSendNotification);};
+    setupStatus.setColour(juce::Label::textColourId,gold);
+    setupStatus.setFont(juce::FontOptions(14.0f));
+    calibrate.onClick=[this]{if(!audioRunning()){status.setText("Start audio processing before calibrating.",juce::dontSendNotification);return;}calibrationPeak=0;noisePeak=0;calibrating=true;calibrationStarted=juce::Time::getMillisecondCounterHiRes();calibrate.setEnabled(false);status.setText("Stay quiet: measuring room noise for one second...",juce::dontSendNotification);};
+    panic.setColour(juce::TextButton::buttonColourId,juce::Colour(0xff863f45));panic.onClick=[this]{p.requestPanic();status.setText("All notes stopped.",juce::dontSendNotification);};
+    test.onClick=[this]{p.requestTestNote();status.setText("Sending C4 / MIDI 60 on channel 1 for 350 ms.",juce::dontSendNotification);};
+    test.setTooltip("Tests MIDI routing independently of your microphone. Turn on Preview sound for a local test tone.");
+    monitor.setTooltip("Pass microphone audio to the output. Use headphones to prevent feedback.");
+    preview.setTooltip("Simple local sine instrument for setup. Turn off when using your DAW synth.");
+    helpText.setMultiLine(true);helpText.setReadOnly(true);helpText.setScrollbarsShown(true);helpText.setCaretVisible(false);
+    helpText.setColour(juce::TextEditor::backgroundColourId,background);helpText.setColour(juce::TextEditor::outlineColourId,gold);helpText.setFont(juce::FontOptions(16));helpText.setText(manualText());
+    addAndMakeVisible(helpText);addAndMakeVisible(closeHelp);help.onClick=[this]{showHelp(true);};closeHelp.onClick=[this]{showHelp(false);};
+    record.onClick=[this]{if(p.capture.isRecording()){p.capture.stop();record.setButtonText("Stopping...");}else beginCapture();};
+    exportMidi.onClick=[this]{exportCapture();};exportMidi.setEnabled(false);
+    bpmSlider.setSliderStyle(juce::Slider::LinearHorizontal);bpmSlider.setTextBoxStyle(juce::Slider::TextBoxRight,false,55,24);bpmSlider.setNumDecimalPlacesToDisplay(0);addAndMakeVisible(bpmSlider);attachSlider("captureBpm",bpmSlider);bpmSlider.textFromValueFunction=[](double v){return juce::String(v,0);};bpmSlider.updateText();
+    bpmLabel.setText("BPM",juce::dontSendNotification);addAndMakeVisible(bpmLabel);
+    for(int i=0;i<8;++i){trainTarget.addItem("Pad "+juce::String(i+1),i+1);addAndMakeVisible(drumPads[i]);addAndMakeVisible(drumNotes[i]);
+        drumPads[i].onClick=[this,i]{trainTarget.setSelectedId(i+1);status.setText("Pad "+juce::String(i+1)+" selected. Press Train 5 hits.",juce::dontSendNotification);};
+        drumNotes[i].setSliderStyle(juce::Slider::IncDecButtons);drumNotes[i].setTextBoxStyle(juce::Slider::TextBoxLeft,false,45,22);drumNotes[i].setNumDecimalPlacesToDisplay(0);drumNotes[i].setTooltip("MIDI drum note number, output on channel 10.");attachSlider(drumIDs[i],drumNotes[i]);}
+    trainTarget.setSelectedId(1);train.onClick=[this]{p.beats.train(trainTarget.getSelectedId()-1);p.requestPanic();};cancelTrain.onClick=[this]{p.beats.cancel();};clearTrain.onClick=[this]{p.beats.clearModels();status.setText("Drum profiles reset; basic kick/snare/hat detection restored.",juce::dontSendNotification);};
+    beatSlider.setSliderStyle(juce::Slider::LinearHorizontal);beatSlider.setTextBoxStyle(juce::Slider::TextBoxRight,false,60,22);beatSlider.setNumDecimalPlacesToDisplay(3);addAndMakeVisible(beatSlider);attachSlider("beatThreshold",beatSlider);beatSlider.textFromValueFunction=[](double v){return juce::String(v,3);};beatSlider.updateText();
+    beatLabel.setText("Hit threshold",juce::dontSendNotification);addAndMakeVisible(beatLabel);
+    history.fill(-1);refreshPresets();syncScale();showHelp(false);timerCallback();startTimerHz(30);
 }
-
-void IDWVoiceMIDIStudioAudioProcessorEditor::configureSlider(juce::Slider& slider,
-                                                              juce::Label& label,
-                                                              const juce::String& text,
-                                                              const juce::String& tooltip)
-{
-    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
-    slider.setTooltip(tooltip);
-    addAndMakeVisible(slider);
-
-    label.setText(text, juce::dontSendNotification);
-    label.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(label);
+IDWVoiceMIDIStudioAudioProcessorEditor::~IDWVoiceMIDIStudioAudioProcessorEditor(){stopTimer();if(captureOwned)p.capture.stop();setLookAndFeel(nullptr);}
+void IDWVoiceMIDIStudioAudioProcessorEditor::configureSlider(juce::Slider& s,juce::Label& l,const juce::String& text,const juce::String& tip){s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);s.setTextBoxStyle(juce::Slider::TextBoxBelow,false,85,22);s.setTooltip(tip);l.setText(text,juce::dontSendNotification);l.setJustificationType(juce::Justification::centred);l.setColour(juce::Label::textColourId,muted);addAndMakeVisible(s);addAndMakeVisible(l);}
+void IDWVoiceMIDIStudioAudioProcessorEditor::refreshPresets(){
+    presetSelector.clear(juce::dontSendNotification);const auto factories=p.presets.factoryPresetNames();factoryCount=factories.size();
+    for(int i=0;i<factoryCount;++i)presetSelector.addItem(factories[i],i+1);
+    userNames=p.presets.list();if(!userNames.isEmpty())presetSelector.addSeparator();for(int i=0;i<userNames.size();++i)presetSelector.addItem(userNames[i],1000+i);
+    presetSelector.setTextWhenNothingSelected("Choose a preset");
 }
-
-void IDWVoiceMIDIStudioAudioProcessorEditor::calibrateNoiseGate()
-{
-    const float ambient = p.level();
-    const float threshold = juce::jlimit(.001f, .2f, juce::jmax(.002f, ambient * 2.5f));
-
-    if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p.apvts.getParameter("gate")))
-    {
-        ranged->beginChangeGesture();
-        ranged->setValueNotifyingHost(ranged->convertTo0to1(threshold));
-        ranged->endChangeGesture();
-        status.setText("Noise gate calibrated to " + juce::String(threshold, 3), juce::dontSendNotification);
-    }
+void IDWVoiceMIDIStudioAudioProcessorEditor::loadPreset(){
+    const int id=presetSelector.getSelectedId();bool ok=false;
+    if(id>0&&id<=factoryCount){ok=p.presets.applyFactoryPreset(p.presets.factoryPresetNames()[id-1]);p.requestPanic();}
+    else if(juce::isPositiveAndBelow(id-1000,userNames.size())){ok=p.presets.load(userNames[id-1000]);if(ok)p.restoreExtraState();}
+    if(ok){syncScale();status.setText("Preset loaded. Calibrate again if your room or microphone changed.",juce::dontSendNotification);}
 }
-
-void IDWVoiceMIDIStudioAudioProcessorEditor::refreshPresets()
-{
-    const int previousId = presetSelector.getSelectedId();
-    presetSelector.clear(juce::dontSendNotification);
-
-    const auto factory = p.presets.factoryPresetNames();
-    factoryPresetCount = factory.size();
-    for (int i = 0; i < factory.size(); ++i)
-        presetSelector.addItem("FACTORY • " + factory[i], i + 1);
-
-    userPresetNames = p.presets.list();
-    if (! userPresetNames.isEmpty())
-    {
-        presetSelector.addSeparator();
-        for (int i = 0; i < userPresetNames.size(); ++i)
-            presetSelector.addItem("USER • " + userPresetNames[i], 1000 + i);
-    }
-
-    if (previousId > 0 && presetSelector.indexOfItemId(previousId) >= 0)
-        presetSelector.setSelectedId(previousId, juce::dontSendNotification);
-    else
-        presetSelector.setSelectedId(1, juce::dontSendNotification);
+void IDWVoiceMIDIStudioAudioProcessorEditor::syncScale(){const int mask=(int)p.apvts.getRawParameterValue("scaleMask")->load(),root=(int)p.apvts.getRawParameterValue("root")->load();for(int i=0;i<12;++i){scaleButtons[i].setButtonText(names[(i+root)%12]);scaleButtons[i].setToggleState((mask&(1<<i))!=0,juce::dontSendNotification);}}
+void IDWVoiceMIDIStudioAudioProcessorEditor::showHelp(bool visible){helpText.setVisible(visible);closeHelp.setVisible(visible);if(visible){helpText.toFront(false);closeHelp.toFront(false);}}
+void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
+    g.fillAll(background);const float w=(float)getWidth();
+    g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,242,w-48,170},{24,592,w-48,198}})g.fillRoundedRectangle(r,12);
+    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("VERSION 4.1  /  LOCAL VOICE ENGINE",getWidth()-335,22,310,30,juce::Justification::centredRight);
+    const juce::Rectangle<float> plot(365,110,w-420,93);
+    g.setColour(juce::Colour(0xff263144));for(int j=0;j<=4;++j){const float y=plot.getY()+j*plot.getHeight()/4;g.drawHorizontalLine((int)y,plot.getX(),plot.getRight());}
+    float centre=60;const float current=history[(size_t)((historyPos+219)%220)];if(current>=0)centre=std::round(current/12)*12;
+    juce::Path path;bool pen=false;
+    for(int i=0;i<220;++i){const float v=history[(size_t)((historyPos+i)%220)];if(v<0){pen=false;continue;}const float x=plot.getX()+i*plot.getWidth()/219;const float y=juce::jlimit(plot.getY(),plot.getBottom(),plot.getCentreY()-(v-centre)*plot.getHeight()/24);
+        if(!pen){path.startNewSubPath(x,y);pen=true;}else path.lineTo(x,y);}
+    g.setColour(mint);g.strokePath(path,juce::PathStrokeType(2));
+    g.setColour(muted);g.setFont(juce::FontOptions(12));g.drawText("VOICE -> MIDI -> YOUR INSTRUMENT",26,getHeight()-24,420,22,juce::Justification::centredLeft);
+    g.drawText("65-1000 Hz  |  5 ms analysis steps",getWidth()-400,getHeight()-24,370,22,juce::Justification::centredRight);
 }
-
-void IDWVoiceMIDIStudioAudioProcessorEditor::loadSelectedPreset()
-{
-    const int id = presetSelector.getSelectedId();
-    bool loaded = false;
-    juce::String displayName;
-
-    if (id >= 1 && id <= factoryPresetCount)
-    {
-        const auto factory = p.presets.factoryPresetNames();
-        displayName = factory[id - 1];
-        loaded = p.presets.applyFactoryPreset(displayName);
-    }
-    else if (id >= 1000)
-    {
-        const int index = id - 1000;
-        if (juce::isPositiveAndBelow(index, userPresetNames.size()))
-        {
-            displayName = userPresetNames[index];
-            loaded = p.presets.load(displayName);
-        }
-    }
-
-    if (loaded)
-    {
-        p.scale.setMask((uint16_t) p.apvts.getRawParameterValue("scaleMask")->load());
-        syncScale();
-        status.setText("Loaded preset: " + displayName, juce::dontSendNotification);
-    }
+void IDWVoiceMIDIStudioAudioProcessorEditor::resized(){
+    const int w=getWidth(),inner=w-64;
+    title.setBounds(25,18,650,40);readout.setBounds(42,98,305,48);traceLabel.setBounds(367,84,360,22);status.setBounds(42,157,310,53);
+    const int knobW=(inner-300)/4;
+    juce::Slider* ss[]={&gateSlider,&confidenceSlider,&bendSlider,&tuneSlider};juce::Label* ls[]={&gateLabel,&confidenceLabel,&bendLabel,&tuneLabel};
+    for(int i=0;i<4;++i){ls[i]->setBounds(35+i*knobW,252,knobW,23);ss[i]->setBounds(35+i*knobW,277,knobW,121);}
+    const int right=w-310;calibrate.setBounds(right,261,270,32);inputSelector.setBounds(right,303,270,30);melody.setBounds(right,346,110,26);mpeToggle.setBounds(right+150,346,100,26);
+    scaleLock.setBounds(29,426,112,28);rootSelector.setBounds(149,426,75,28);expressionSelector.setBounds(236,426,165,28);
+    const int keyW=(w-440)/12;for(int i=0;i<12;++i)scaleButtons[i].setBounds(420+i*keyW,426,keyW-5,29);
+    presetSelector.setBounds(32,472,265,30);save.setBounds(307,472,123,30);learnTarget.setBounds(447,472,145,30);learn.setBounds(601,472,98,30);clearLearn.setBounds(708,472,92,30);help.setBounds(w-182,472,150,30);
+    record.setBounds(32,527,135,34);exportMidi.setBounds(178,527,135,34);bpmLabel.setBounds(326,531,40,25);bpmSlider.setBounds(367,527,180,34);captureLabel.setBounds(565,527,w-597,38);
+    drumLabel.setBounds(40,601,570,28);beatbox.setBounds(w-155,601,115,28);
+    const int padW=inner/8;for(int i=0;i<8;++i){drumPads[i].setBounds(32+i*padW,644,padW-10,43);drumNotes[i].setBounds(38+i*padW,695,padW-22,25);}
+    trainTarget.setBounds(40,745,110,28);train.setBounds(160,745,125,28);cancelTrain.setBounds(295,745,80,28);clearTrain.setBounds(385,745,105,28);beatLabel.setBounds(510,745,112,28);beatSlider.setBounds(624,745,w-670,28);
+    preview.setBounds(30,804,145,28);monitor.setBounds(185,804,165,28);test.setBounds(369,802,116,32);panic.setBounds(496,802,105,32);diagnostics.setBounds(617,796,w-642,50);
+    setupStatus.setBounds(30,836,w-235,25);copyDiagnostics.setBounds(w-195,836,163,25);
+    helpText.setBounds(25,76,w-50,getHeight()-128);closeHelp.setBounds(w-152,86,108,30);
 }
-
-void IDWVoiceMIDIStudioAudioProcessorEditor::showHelp(bool shouldShow)
-{
-    helpText.setVisible(shouldShow);
-    closeHelp.setVisible(shouldShow);
-    if (shouldShow)
-    {
-        helpText.toFront(false);
-        closeHelp.toFront(false);
-    }
+void IDWVoiceMIDIStudioAudioProcessorEditor::beginCapture(){
+    PerformanceCapture::Event discard;while(p.capture.pop(discard)){}
+    take.clear();takeTruncated=false;takeBpm=p.apvts.getRawParameterValue("captureBpm")->load();captureOwned=true;p.capture.start();record.setButtonText("Stop recording");exportMidi.setEnabled(false);
 }
-
-void IDWVoiceMIDIStudioAudioProcessorEditor::syncScale()
-{
-    for (int i = 0; i < 12; ++i)
-        scaleButtons[i].setToggleState(p.scale.enabled(i), juce::dontSendNotification);
+void IDWVoiceMIDIStudioAudioProcessorEditor::drainCapture(){
+    PerformanceCapture::Event event;
+    while(p.capture.pop(event)){if(captureOwned && take.size()<250000)take.push_back(event);else if(captureOwned){takeTruncated=true;p.capture.stop();}}
+    if(captureOwned&&!p.capture.isRecording()){record.setButtonText("Record MIDI");exportMidi.setEnabled(!take.empty());}
+    bpmSlider.setEnabled(!p.capture.isRecording());
+    const double duration=take.empty()?0:take.back().seconds;
+    captureLabel.setText((p.capture.isRecording()?"RECORDING  ":"TAKE  ")+juce::String(duration,1)+" s  /  "+juce::String((int)take.size())+" MIDI events"+((takeTruncated||p.capture.wasTruncated())?"  [capacity reached]":""),juce::dontSendNotification);
 }
-
-void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g)
-{
-    g.fillAll(juce::Colour::fromRGB(5, 5, 8));
-    g.setColour(juce::Colours::gold);
-    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(9), 20.0f, 2.0f);
-
-    g.setColour(juce::Colours::gold.withAlpha(.18f));
-    g.fillRoundedRectangle(45.0f, 230.0f, (float) getWidth() - 90.0f, 180.0f, 16.0f);
-
-    g.setColour(juce::Colours::white.withAlpha(.55f));
-    g.setFont(14.0f);
-    g.drawFittedText("VOICE → MIDI • PRESETS • QUICK START • SCALE LOCK • MPE • BEATBOX • MIDI LEARN",
-                     30, 714, getWidth() - 60, 24, juce::Justification::centred, 1);
+bool IDWVoiceMIDIStudioAudioProcessorEditor::writeMidi(const juce::File& file){return writePerformanceMidi(file,take,takeBpm);}
+void IDWVoiceMIDIStudioAudioProcessorEditor::exportCapture(){
+    if(take.empty()||p.capture.isRecording())return;
+    chooser=std::make_unique<juce::FileChooser>("Export your MIDI take",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW-Take.mid"),"*.mid");
+    const juce::Component::SafePointer<IDWVoiceMIDIStudioAudioProcessorEditor> safe(this);
+    chooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles|juce::FileBrowserComponent::warnAboutOverwriting,[safe](const juce::FileChooser& c){if(!safe)return;const auto file=c.getResult();if(file==juce::File{})return;const bool ok=safe->writeMidi(file.withFileExtension("mid"));safe->status.setText(ok?"MIDI exported. Drag it into your DAW.":"Could not write MIDI file.",juce::dontSendNotification);});
 }
-
-void IDWVoiceMIDIStudioAudioProcessorEditor::resized()
-{
-    title.setBounds(20, 20, getWidth() - 40, 48);
-    readout.setBounds(20, 78, getWidth() - 40, 60);
-    status.setBounds(20, 142, getWidth() - 40, 28);
-    levelReadout.setBounds(20, 172, getWidth() - 40, 24);
-
-    const int knobY = 245;
-    const int knobW = 150;
-    const int knobH = 145;
-    const int gap = 20;
-    const int startX = 150;
-
-    gateLabel.setBounds(startX, 220, knobW, 24);
-    gateSlider.setBounds(startX, knobY, knobW, knobH);
-    confidenceLabel.setBounds(startX + (knobW + gap), 220, knobW, 24);
-    confidenceSlider.setBounds(startX + (knobW + gap), knobY, knobW, knobH);
-    bendLabel.setBounds(startX + 2 * (knobW + gap), 220, knobW, 24);
-    bendSlider.setBounds(startX + 2 * (knobW + gap), knobY, knobW, knobH);
-    tuneLabel.setBounds(startX + 3 * (knobW + gap), 220, knobW, 24);
-    tuneSlider.setBounds(startX + 3 * (knobW + gap), knobY, knobW, knobH);
-
-    calibrate.setBounds(50, 425, 150, 34);
-    scaleLock.setBounds(220, 425, 125, 34);
-    rootLabel.setBounds(355, 402, 80, 20);
-    rootSelector.setBounds(355, 425, 80, 34);
-
-    int x = 120;
-    for (int i = 0; i < 12; ++i)
-        scaleButtons[i].setBounds(x + i * 70, 480, 62, 36);
-
-    presetLabel.setBounds(110, 532, 90, 20);
-    presetSelector.setBounds(200, 526, 300, 34);
-    loadPreset.setBounds(515, 526, 125, 34);
-    save.setBounds(655, 526, 130, 34);
-    help.setBounds(800, 526, 170, 34);
-
-    learnTarget.setBounds(330, 590, 175, 34);
-    learn.setBounds(520, 590, 130, 34);
-
-    helpText.setBounds(35, 75, getWidth() - 70, getHeight() - 125);
-    closeHelp.setBounds(getWidth() - 175, 88, 120, 32);
+void IDWVoiceMIDIStudioAudioProcessorEditor::timerCallback(){
+    const auto now=juce::Time::getMillisecondCounterHiRes();
+    const auto callbacks=p.audioCallbacks();if(callbacks!=lastCallbacks){lastCallbacks=callbacks;lastAudioChange=now;}
+    const auto param=[this](const char* id){return p.apvts.getRawParameterValue(id)->load();};
+    setupStatus.setText(idw::guidance(idw::diagnose(audioRunning(),p.peak(),p.level(),param("gate"),p.beats.trainingPad()>=0,param("melody")>0.5f,param("beatbox")>0.5f,p.conf(),param("confidence"),p.note()>=0)),juce::dontSendNotification);
+    if(calibrating){calibrationPeak=juce::jmax(calibrationPeak,p.peak());noisePeak=juce::jmax(noisePeak,p.level());if(juce::Time::getMillisecondCounterHiRes()-calibrationStarted>=1000){calibrating=false;calibrate.setEnabled(true);if(!audioRunning()||calibrationPeak<0.00001f||calibrationPeak>=0.98f){status.setText("Calibration skipped: input is silent, stopped or clipping. Check mic settings.",juce::dontSendNotification);}else{auto* param=p.apvts.getParameter("gate");param->beginChangeGesture();param->setValueNotifyingHost(param->convertTo0to1(juce::jlimit(0.001f,0.2f,juce::jmax(0.002f,noisePeak*2.5f))));param->endChangeGesture();status.setText("Noise gate calibrated. Sing a steady note.",juce::dontSendNotification);}}}
+    const float hz=p.hz();const int n=p.note();history[(size_t)historyPos]=hz>0?69+12*std::log2(hz/440):-1;historyPos=(historyPos+1)%220;
+    readout.setText(n>=0?juce::MidiMessage::getMidiNoteName(n,true,true,4)+"  /  "+juce::String(hz,1)+" Hz":"Ready for your voice",juce::dontSendNotification);
+    const auto db=juce::Decibels::gainToDecibels(p.level(),-100.0f);
+    diagnostics.setText("IN "+juce::String(db,1)+" dB  |  CONF "+juce::String(p.conf(),2)+"  |  LOAD "+juce::String(p.callbackLoad()*100,1)+"%\nMIDI: "+juce::String(p.noteCount())+" notes / "+juce::String(p.eventCount())+" events",juce::dontSendNotification);
+    const int training=p.beats.trainingPad();
+    if(training>=0)drumLabel.setText("TRAIN PAD "+juce::String(training+1)+"  /  "+juce::String(p.beats.examplesRemaining())+" hits remaining - leave a gap between hits",juce::dontSendNotification);
+    else drumLabel.setText("DRUM LAB  /  Train each pad with five distinct hits",juce::dontSendNotification);
+    if(previousDrumEvents!=p.drumEventCount()){previousDrumEvents=p.drumEventCount();flashPad=p.lastDrum();flashTicks=6;}
+    if(flashTicks>0)--flashTicks;
+    for(int i=0;i<8;++i){drumPads[i].setButtonText(juce::String(i+1)+(p.beats.examples(i)>=3?" / trained":i==0?" / kick":i==1?" / snare":i==2?" / hat":" / empty"));drumPads[i].setToggleState(training==i||(flashTicks>0&&flashPad==i),juce::dontSendNotification);}
+    train.setEnabled(training<0);cancelTrain.setEnabled(training>=0);syncScale();drainCapture();repaint(24,78,getWidth()-48,150);
 }
-
-void IDWVoiceMIDIStudioAudioProcessorEditor::timerCallback()
-{
-    const float h = p.hz();
-    readout.setText(h > 0.0f
-                        ? juce::String(h, 1) + " Hz   •   MIDI " + juce::String(p.note())
-                              + "   •   CONF " + juce::String(p.conf(), 2)
-                        : "Waiting for vocal input...",
-                    juce::dontSendNotification);
-
-    const float level = p.level();
-    const float db = level > 0.0f ? juce::Decibels::gainToDecibels(level, -100.0f) : -100.0f;
-    levelReadout.setText("INPUT " + juce::String(db, 1) + " dBFS   •   CALIBRATE WHILE QUIET",
-                         juce::dontSendNotification);
-
-    const auto mapping = p.learn.mappingText();
-    if (mapping.isNotEmpty())
-        status.setText(mapping, juce::dontSendNotification);
+bool IDWVoiceMIDIStudioAudioProcessorEditor::audioRunning() const {
+    return lastAudioChange>0 && juce::Time::getMillisecondCounterHiRes()-lastAudioChange<1000;
 }
-
-juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText()
-{
-    return R"MANUAL(IDW VOICE MIDI STUDIO — QUICK START & USER GUIDE
-
-QUICK START
-1. Put IDW Voice MIDI Studio on the FL Studio mixer insert receiving your microphone.
-2. In the IDW plugin wrapper, set a MIDI Output Port such as 10.
-3. On your destination synth wrapper, set MIDI Input Port to the same number.
-4. Stay quiet and press CALIBRATE NOISE.
-5. Choose CLEAN VOCAL or another preset.
-6. Sing. Your destination instrument should follow your voice.
-
-PRESETS
-Clean Vocal — balanced everyday vocal tracking.
-Tight Tracking — stricter pitch acceptance and less MIDI chatter.
-Smooth Lead — easier tracking, wider bends and smoother expressive control.
-Scale Locked Lead — turns on scale lock using a major-scale starting mask.
-Wide Bend Performance — 12-semitone bend range for larger vocal slides.
-Beatbox Drums — suppresses most pitched notes and emphasizes kick/snare/hat triggering.
-Expressive MPE — 24-semitone bend, gesture CC and MPE enabled.
-Live Responsive — responsive starting settings for live performance.
-
-NOISE GATE
-Minimum input level required before pitched notes are generated. Raise it in a noisy room; lower it for soft singing. CALIBRATE NOISE automatically sets this from the current quiet-room level.
-
-CONFIDENCE
-How certain the pitch detector must be before accepting a note. Higher values are cleaner but stricter. Lower values respond more easily.
-
-BEND RANGE
-Sets pitch-bend range in semitones. IMPORTANT: the receiving synth should use the same bend range or slides will sound wrong.
-
-PITCH CAL ±CENTS
-Fine-tuning offset. Leave at 0 unless your source needs tuning compensation.
-
-SCALE LOCK / ROOT / NOTE BUTTONS
-Enable SCALE LOCK to quantize outgoing MIDI. ROOT sets the key center. The 12 note buttons define which pitch classes are allowed, letting you build custom scales.
-
-MIDI LEARN
-Choose a destination in the MIDI Learn menu, press MIDI LEARN, then move a hardware MIDI control.
-
-SAVE PRESET
-Stores the current settings as a user preset. Saved presets appear in the PRESETS menu under USER.
-
-FL STUDIO ROUTING
-• Microphone → FL Studio Mixer Insert → IDW Voice MIDI Studio.
-• IDW wrapper MIDI Output Port = example 10.
-• Destination synth wrapper MIDI Input Port = the same number.
-• Sing and confirm the synth plays.
-
-BEATBOX
-Beatbox detection outputs on MIDI channel 10. Defaults: Kick 36, Snare 38, Hi-hat 42. Start with the Beatbox Drums preset.
-
-MPE
-Use Expressive MPE only with an MPE-capable destination instrument. IDW allocates note channels and sends per-note expression across the configured MPE zone.
-
-LATENCY
-On Windows use an ASIO driver. Start at a 128-sample buffer. Try 64 for lower latency if stable, or 256 if you hear clicks/dropouts.
-
-TROUBLESHOOTING
-No vocal response:
-• Make sure the mic is arriving on the mixer insert.
-• Press CALIBRATE NOISE while quiet.
-• Lower Noise Gate for soft input.
-• Lower Confidence slightly if pitches are rejected.
-
-Pitch moves but synth is silent:
-• Check that IDW MIDI Output Port and synth MIDI Input Port match.
-
-Wrong notes:
-• Recalibrate noise.
-• Raise Confidence.
-• Turn on Scale Lock and choose the desired notes.
-
-Slides sound wrong:
-• Match the synth pitch-bend range to IDW Bend Range.
-
-Too much delay:
-• Lower the audio buffer.
-• Use ASIO on Windows.
-• Bypass high-latency effects while performing.
-
-RECOMMENDED FIRST SESSION
-Load Clean Vocal → Calibrate Noise → Route MIDI → Sing sustained notes → Test slides → Try Scale Lock → Save your own preset.
-)MANUAL";
+juce::String IDWVoiceMIDIStudioAudioProcessorEditor::diagnosticReport() const {
+    juce::String text="IDW Voice MIDI Studio 4.1.0 setup report\n";
+    text += "Audio callbacks active: "+juce::String(audioRunning()?"yes":"no")+"\n";
+    text += "Sample rate: "+juce::String(p.deviceRate(),0)+" Hz; block: "+juce::String(p.deviceBlock())+" samples\n";
+    text += "Input RMS: "+juce::String(juce::Decibels::gainToDecibels(p.level(),-100.0f),1)+" dBFS; peak: "+juce::String(p.peak(),4)+"\n";
+    for(const char* id:{"inputMode","gate","confidence","melody","beatbox","previewAudio","monitorMic","mpe","bend"})
+        text += juce::String(id)+": "+juce::String(p.apvts.getRawParameterValue(id)->load(),3)+"\n";
+    text += "Pitch: "+juce::String(p.hz(),1)+" Hz; confidence: "+juce::String(p.conf(),2)+"\n";
+    text += "Generated MIDI: "+juce::String(p.noteCount())+" notes, "+juce::String(p.eventCount())+" events\n";
+    text += "Status: "+setupStatus.getText()+"\nDAW receipt, instrument selection and audio output audibility are not detectable by this plugin.\n";
+    return text;
 }
+juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText(){return R"HELP(IDW VOICE MIDI STUDIO / VERSION 4.1
+
+LIVE SETUP CHECK
+The bottom status line checks audio activity, input level, gate and pitch confidence.
+Copy diagnostics copies settings and signal readings for support; it contains no recording.
+If calibration sees silence, clipping or stopped audio, it keeps your previous gate.
+MIDI counts mean generated events, not confirmed delivery to a DAW instrument.
+
+FIRST SOUND
+1. In the standalone Audio/MIDI settings, choose your microphone and speakers/headphones.
+2. Enable Preview sound. Test note plays a short C4 tone and also sends MIDI.
+3. Stay quiet and Calibrate noise. Sing a steady note. The green readout shows accepted MIDI notes.
+4. Preview sound is a simple setup instrument. Turn it off when listening through a DAW synth.
+
+FL STUDIO / VST3
+1. Load IDW as an effect on the Mixer insert receiving your microphone.
+2. Open IDW's wrapper Settings and set MIDI Output port to 10 (or another unused port).
+3. Load your destination instrument and set its wrapper MIDI Input port to the same number.
+4. Press Test note. It sends MIDI 60 on channel 1, independently of vocal detection.
+5. If the MIDI counter increases but your synth is silent, check routing and the synth's channel.
+6. Match Bend Range in your synth. IDW sends RPN pitch-bend sensitivity; some instruments ignore it.
+7. Start with Clean Vocal. Calibrate after loading a preset, since presets change the noise gate.
+
+STANDALONE MIDI
+Select a MIDI output in the standalone Audio/MIDI settings. For FL Studio on the same computer,
+use an existing virtual MIDI port (such as loopMIDI), enable that port as an input in FL Studio,
+and select a receiving instrument. The standalone app does not install a virtual MIDI driver.
+
+SCALE MODES
+Scale lock OFF: free pitch, with MIDI note changes plus pitch bends.
+Strict scale: both note selection and sounding pitch stay on the selected scale.
+Natural vibrato: scale note plus up to 45 cents of within-note vocal expression.
+The twelve buttons are relative to the selected root and display the resulting note names.
+At least one scale note must remain enabled.
+
+DRUM LAB
+Enable Beatbox for drum output on MIDI channel 10. Change each pad's MIDI note below its button.
+With no trained pads, the engine uses basic kick/snare/hat spectral rules.
+Select a pad, press Train 5 hits, and make five distinct examples with pauses between them.
+Training suppresses melody and drum output while it learns. Repeat for additional pads.
+Once profiles exist, only trained pads are classified. Ambiguous/unfamiliar hits are rejected.
+These are local spectral templates, not a neural model. Accuracy depends on microphone,
+background noise and distinct sounds. Save a preset to retain your profiles.
+Reset pads removes all learned profiles and restores basic three-sound detection.
+
+CAPTURE / EXPORT
+Set BPM to your DAW tempo before recording. Record MIDI, perform, then Stop recording.
+Export MIDI saves notes, drums, bends and controller expression. Drag the .mid file into your DAW.
+A take is limited to ten minutes / 250,000 displayed events. An overflow is visibly marked.
+The current take lives in the editor: export it before closing the plugin window.
+Capture starts from new MIDI events; begin before singing. Notes held when stopping are closed
+in the exported file, without stopping your live instrument. Tempo is fixed for each take.
+
+SAFETY / TROUBLESHOOTING
+PANIC stops sounding MIDI notes. Notes resume after a short suppression interval.
+Hear microphone passes raw microphone audio to the output; use headphones to prevent feedback.
+MPE reserves channel 10 for drums. Choose an MPE synth and match its bend range.
+MIDI Learn is channel-aware. Mappings and drum profiles save in user presets and DAW sessions.
+Changing input devices stops an active capture. Export the take before switching devices.
+The displayed LOAD is callback time as a percentage of the audio block budget, not total CPU.
+Lower host buffers reduce device latency; pitch estimation still needs a short window of sound.
+
+LIMITS
+Monophonic voice tracking, 65-1000 Hz. This version does not provide polyphonic transcription,
+AI voice cloning, cloud processing, a full synthesizer, or automatic access to DAW routing.
+)HELP";}

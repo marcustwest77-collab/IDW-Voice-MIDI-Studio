@@ -1,3 +1,13 @@
 #include "MPEAllocator.h"
-int MPEAllocator::allocate(int n){if(map.count(n))return map[n];for(int c=first;c<=last;c++)if(!used.count(c)){map[n]=c;used.insert(c);return c;}return first;}
-int MPEAllocator::channelFor(int n)const{auto i=map.find(n);return i==map.end()?1:i->second;}void MPEAllocator::release(int n){auto i=map.find(n);if(i!=map.end()){used.erase(i->second);map.erase(i);}}
+int MPEAllocator::allocate(int n) {
+    if (!juce::isPositiveAndBelow(n,128)) return 0;
+    if (channels[(size_t)n]) return channels[(size_t)n];
+    for(int c=first;c<=last;++c) if(c!=10 && !used[(size_t)c]) {
+        channels[(size_t)n]=c;used[(size_t)c]=true;return c;
+    }
+    return 0; // channel 10 is reserved for drums; never steal an occupied voice
+}
+int MPEAllocator::channelFor(int n) const { return juce::isPositiveAndBelow(n,128) ? channels[(size_t)n] : 0; }
+void MPEAllocator::release(int n) {
+    const int c=channelFor(n);if(c>0){used[(size_t)c]=false;channels[(size_t)n]=0;}
+}

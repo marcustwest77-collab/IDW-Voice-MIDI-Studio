@@ -6,7 +6,7 @@
 #endif
 
 #define AppName "IDW Voice MIDI Studio"
-#define AppVersion "0.9.1"
+#define AppVersion "4.1.0"
 #define Publisher "In Da Wind Entertainment"
 #define AppExeName "IDW Voice MIDI Studio.exe"
 
@@ -33,9 +33,12 @@ Source: "{#BuildRoot}\Standalone\IDW Voice MIDI Studio.exe"; DestDir: "{app}"; F
 Source: "{#BuildRoot}\VST3\IDW Voice MIDI Studio.vst3\*"; DestDir: "{commoncf64}\VST3\IDW Voice MIDI Studio.vst3"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\docs\USER_MANUAL.md"; DestDir: "{app}\Documentation"; Flags: ignoreversion
 
+Source: "..\..\START-HERE.html"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
+
 [Icons]
 Name: "{group}\IDW Voice MIDI Studio"; Filename: "{app}\{#AppExeName}"
-Name: "{group}\IDW Voice MIDI Studio Manual"; Filename: "{app}\Documentation\USER_MANUAL.md"
+Name: "{group}\IDW Voice MIDI Studio Manual"; Filename: "{app}\START-HERE.html"
 Name: "{autodesktop}\IDW Voice MIDI Studio"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Tasks]

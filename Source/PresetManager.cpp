@@ -17,7 +17,7 @@ bool PresetManager::save(const juce::String& name)
 bool PresetManager::load(const juce::String& name)
 {
     auto xml = juce::XmlDocument::parse(dir().getChildFile(name + ".xml"));
-    if (! xml)
+    if (! xml || ! xml->hasTagName(state.state.getType()))
         return false;
 
     state.replaceState(juce::ValueTree::fromXml(*xml));
@@ -79,10 +79,11 @@ bool PresetManager::applyFactoryPreset(const juce::String& name)
     setParameter("mpeFirst", 2.0f);
     setParameter("mpeLast", 16.0f);
     setParameter("latencyMs", 0.0f);
+    setParameter("scaleExpression", 0.0f);
+    setParameter("melody", 1.0f);
 
     if (name == "Clean Vocal")
     {
-        setParameter("beatbox", 1.0f);
         return true;
     }
 
@@ -125,6 +126,7 @@ bool PresetManager::applyFactoryPreset(const juce::String& name)
     {
         // A high vocal gate suppresses most pitched-note output while the
         // independent beatbox detector remains sensitive.
+        setParameter("melody", 0.0f);
         setParameter("gate", .080f);
         setParameter("confidence", .90f);
         setParameter("beatbox", 1.0f);

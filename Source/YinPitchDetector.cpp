@@ -1,14 +1,53 @@
 #include "YinPitchDetector.h"
 #include <cmath>
-#include <algorithm>
-void YinPitchDetector::prepare(double s,int){sr=s;int n=std::max(2048,(int)(s*.05));ring.assign(n,0);frame.assign(n,0);diff.assign(n/2,0);cmnd.assign(n/2,1);reset();}
-void YinPitchDetector::reset(){std::fill(ring.begin(),ring.end(),0);pos=0;conf=level=0;}
-float YinPitchDetector::process(const float*in,int n){if(!in||ring.empty())return 0;double e=0;for(int i=0;i<n;i++){ring[pos]=in[i];pos=(pos+1)%(int)ring.size();e+=in[i]*in[i];}
-level=(float)std::sqrt(e/std::max(1,n));for(size_t i=0;i<frame.size();i++)frame[i]=ring[(pos+(int)i)%(int)ring.size()];return detect();}
-float YinPitchDetector::detect(){int half=(int)diff.size();std::fill(diff.begin(),diff.end(),0);for(int tau=1;tau<half;tau++){double d=0;for(int i=0;i<half;i++){float v=frame[i]-frame[i+tau];d+=v*v;}diff[tau]=(float)d;}
-cmnd[0]=1;double run=0;for(int tau=1;tau<half;tau++){run+=diff[tau];cmnd[tau]=run>0?diff[tau]*tau/(float)run:1;}
-int minTau=std::max(2,(int)(sr/1000)),maxTau=std::min(half-2,(int)(sr/70)),tau=0;
-for(int t=minTau;t<=maxTau;t++)if(cmnd[t]<threshold){while(t+1<=maxTau&&cmnd[t+1]<cmnd[t])t++;tau=t;break;}
-if(!tau){conf=0;return 0;}conf=juce::jlimit(0.f,1.f,1.f-cmnd[tau]);float better=(float)tau;
-if(tau>1&&tau+1<half){float a=cmnd[tau-1],b=cmnd[tau],c=cmnd[tau+1],den=a-2*b+c;if(std::abs(den)>1e-6f)better+=.5f*(a-c)/den;}
-return (float)(sr/better);}
+void YinPitchDetector::prepare(double s, int) {
+    sr = s;
+    minTau = juce::jmax(2, (int) (sr / 1000.0));
+    maxTau = (int) std::ceil(sr / 65.0);
+    window = maxTau; // two periods at the lowest supported pitch
+    ring.assign((size_t) (window + maxTau + 2), 0);
+    frame.resize(ring.size()); diff.resize((size_t) maxTau + 2); cmnd.resize(diff.size());
+    reset();
+}
+void YinPitchDetector::reset() {
+    std::fill(ring.begin(), ring.end(), 0.0f); pos = filled = 0; conf = level = 0;
+}
+float YinPitchDetector::process(const float* in, int n) {
+    if (!in || ring.empty() || n <= 0) return 0;
+    double energy = 0;
+    for (int i = 0; i < n; ++i) {
+        const float x = std::isfinite(in[i]) ? in[i] : 0.0f;
+        ring[(size_t) pos] = x; pos = (pos + 1) % (int) ring.size(); energy += x*x;
+    }
+    level = (float) std::sqrt(energy / n);
+    filled = juce::jmin((int) ring.size(), filled + n);
+    if (filled < (int) ring.size() || level < 0.0001f) { conf = 0; return 0; }
+    for (size_t i = 0; i < frame.size(); ++i) frame[i] = ring[((size_t) pos + i) % ring.size()];
+    return detect();
+}
+float YinPitchDetector::detect() {
+    double running = 0;
+    cmnd[0] = 1;
+    for (int tau = 1; tau <= maxTau + 1; ++tau) {
+        // Float accumulation vectorises well; fixed upper frequency bounds avoid unused work.
+        float sum = 0;
+        for (int i = 0; i < window; ++i) {
+            const float delta = frame[(size_t) i] - frame[(size_t) (i + tau)]; sum += delta * delta;
+        }
+        diff[(size_t) tau] = sum; running += sum;
+        cmnd[(size_t) tau] = running > 1.0e-15 ? (float) (sum * tau / running) : 1.0f;
+    }
+    int selected = 0;
+    for (int t = minTau; t <= maxTau; ++t) {
+        if (cmnd[(size_t) t] < 0.15f) {
+            while (t < maxTau && cmnd[(size_t) (t+1)] < cmnd[(size_t) t]) ++t;
+            selected = t; break;
+        }
+    }
+    if (!selected) { conf = 0; return 0; }
+    conf = juce::jlimit(0.0f, 1.0f, 1.0f - cmnd[(size_t) selected]);
+    const float a = cmnd[(size_t) selected-1], b = cmnd[(size_t) selected], c = cmnd[(size_t) selected+1];
+    const float denom = a - 2*b + c;
+    const float offset = std::abs(denom) > 1.0e-9f ? juce::jlimit(-0.5f, 0.5f, 0.5f*(a-c)/denom) : 0;
+    return (float) (sr / (selected + offset));
+}

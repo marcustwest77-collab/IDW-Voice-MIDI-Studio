@@ -3,7 +3,7 @@ set -euo pipefail
 
 BUILD_ROOT="${1:-build/IDWVoiceMIDIStudio_artefacts/Release}"
 OUT_DIR="${2:-release/Installer}"
-VERSION="0.9.1"
+VERSION="4.0.0"
 PKG_NAME="IDW-Voice-MIDI-Studio-Setup-macOS-arm64.pkg"
 DMG_NAME="IDW-Voice-MIDI-Studio-macOS-arm64.dmg"
 
@@ -31,7 +31,7 @@ pkgbuild \
 cp "$OUT_DIR/$PKG_NAME" release/dmgroot/
 cp docs/USER_MANUAL.md release/dmgroot/USER_MANUAL.md
 cat > release/dmgroot/README.txt <<'EOF'
-IDW Voice MIDI Studio V9.1
+IDW Voice MIDI Studio V4
 
 This installer places:
 - Standalone app in /Applications

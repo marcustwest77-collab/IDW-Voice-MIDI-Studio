@@ -1,12 +1,17 @@
 cmake_minimum_required(VERSION 3.22)
-project(IDWVoiceMIDIStudio VERSION 0.9.1)
+project(IDWVoiceMIDIStudio VERSION 4.1.0)
+
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # JUCE is fetched automatically when it is not checked out locally.
 # A local ThirdParty/JUCE checkout is still supported for offline development.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/JUCE/CMakeLists.txt")
+set(IDW_JUCE_PATH "" CACHE PATH "Optional path to a local JUCE checkout")
+if(IDW_JUCE_PATH)
+    add_subdirectory("${IDW_JUCE_PATH}" "${CMAKE_BINARY_DIR}/JUCE")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/JUCE/CMakeLists.txt")
     add_subdirectory(ThirdParty/JUCE)
 else()
     include(FetchContent)
@@ -67,3 +72,18 @@ target_link_libraries(IDWVoiceMIDIStudio PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags
 )
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(IDWTests Tests/ProcessorTests.cpp)
+    target_include_directories(IDWTests PRIVATE Source "$<TARGET_PROPERTY:IDWVoiceMIDIStudio,JUCE_GENERATED_SOURCES_DIRECTORY>")
+    target_compile_definitions(IDWTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(IDWTests PRIVATE IDWVoiceMIDIStudio juce::juce_audio_utils juce::juce_dsp)
+    add_test(NAME IDWProcessorRegression COMMAND IDWTests)
+    add_executable(IDWSetupTests Tests/SetupDiagnosticsTests.cpp)
+    target_include_directories(IDWSetupTests PRIVATE Source)
+    add_test(NAME IDWSetupDiagnostics COMMAND IDWSetupTests)
+endif()
+
+target_sources(IDWVoiceMIDIStudio_Standalone PRIVATE Source/StandaloneApp.cpp)
+target_compile_definitions(IDWVoiceMIDIStudio_Standalone PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
