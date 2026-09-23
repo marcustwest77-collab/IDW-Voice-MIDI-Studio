@@ -91,6 +91,34 @@ class LyricsStore:
             try:entries.append(self.previous(identifier))  # V6.4 migration.
             except (OSError,ValueError):pass
         return entries[:20]
+    def checkpoint(self,data,label):
+        self.validate(data);self.path(data['id'])
+        if not isinstance(label,str) or not 1<=len(label.strip())<=80:
+            raise ValueError('Use a checkpoint name from 1 to 80 characters.')
+        directory=self.directory/'checkpoints'/data['id'];directory.mkdir(parents=True,exist_ok=True)
+        lock=directory/'.write.lock'
+        try:fd=os.open(lock,os.O_CREAT|os.O_EXCL|os.O_WRONLY)
+        except FileExistsError:raise RuntimeError('Another checkpoint save is in progress. Retry after it finishes.') from None
+        os.close(fd)
+        try:
+            if sum(1 for _ in directory.glob('*.json'))>=100:
+                raise ValueError('This song has 100 checkpoints. Export TXT for additional milestones; existing checkpoints are kept.')
+            entry={'id':uuid.uuid4().hex,'label':label.strip(),
+                   'created':datetime.datetime.now(datetime.timezone.utc).isoformat(),'song':dict(data)}
+            self.atomic_write(directory/(entry['id']+'.json'),json.dumps(entry,ensure_ascii=False,indent=2).encode('utf-8'))
+            return entry
+        finally:lock.unlink(missing_ok=True)
+    def checkpoints(self,identifier):
+        self.path(identifier);entries=[]
+        for path in (self.directory/'checkpoints'/identifier).glob('*.json'):
+            try:
+                if path.stat().st_size>4*1024*1024:continue
+                entry=json.loads(path.read_bytes());self.validate(entry['song'])
+                if (entry['song'].get('id')!=identifier or entry.get('id')!=path.stem
+                    or not isinstance(entry.get('label'),str) or not isinstance(entry.get('created'),str)):continue
+                entries.append(entry)
+            except (OSError,ValueError,KeyError,TypeError):continue
+        return sorted(entries,key=lambda e:e['created'],reverse=True)
     @staticmethod
     def export_text(path,title,text):
         path=Path(path)

@@ -153,7 +153,7 @@ def main(gui_smoke=False, preview_path=None):
     import threading
     import webbrowser
     root = tk.Tk()
-    root.title('IDW Audio Lab — V6.6')
+    root.title('IDW Audio Lab — V6.7')
     root.geometry('1020x900')
     root.minsize(800, 760)
     panel = ttk.Frame(root, padding=18)
@@ -302,6 +302,17 @@ def main(gui_smoke=False, preview_path=None):
         lyrics.text.insert('1.0',demo);root.update()
         assert lyrics.flush(), 'Lyric draft save failed'
         assert lyrics.store.load(lyrics.doc['id'])[0]['text']==demo
+        from unittest.mock import patch
+        with patch('lyrics_ui.simpledialog.askstring',return_value='Original hook'):
+            lyrics.checkpoint()
+        assert lyrics.store.checkpoints(lyrics.doc['id'])[0]['song']['text']==demo
+        original_id=lyrics.doc['id']
+        import_path=Path(lyric_test_folder.name)/'Imported idea.txt';import_path.write_text('[Hook]\nBring this idea home\n',encoding='utf-8')
+        with patch('lyrics_ui.filedialog.askopenfilename',return_value=str(import_path)):
+            lyrics.import_text()
+        assert lyrics.doc['id']!=original_id and lyrics.doc['title']=='Imported idea'
+        assert lyrics.store.load(original_id)[0]['text']==demo
+        lyrics.set_document(*lyrics.store.load(original_id))
         lyrics.commands.set(True)
         lyrics.append_dictation('question mark');root.update()
         punctuated=lyrics.text.get('1.0','end-1c');assert punctuated==demo.rstrip(' \t\r\n')+'?\n'
@@ -323,7 +334,7 @@ def main(gui_smoke=False, preview_path=None):
 
 def cli():
     import argparse
-    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.6')
+    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.7')
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--gui-smoke', action='store_true')
     parser.add_argument('--test-report', type=Path)

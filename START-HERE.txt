@@ -1,16 +1,17 @@
-IDW VOICE MIDI STUDIO V6.6 — WINDOWS x64
+IDW VOICE MIDI STUDIO V6.7 — WINDOWS x64
 
 Extract the entire ZIP. Double-click Run-IDW.cmd for voice-to-MIDI.
 Double-click Run-Audio-Lab.cmd for lyrics, offline dictation, MIDI editing
 and WAV transcription. No separate Python installation is needed in the
 compiled package. Keep the entire Audio-Lab folder intact.
 
-New in V6.6: optional spoken punctuation/section commands, phrase layout,
+New in V6.7: named checkpoints and Import TXT.
+Also included: optional spoken punctuation/section commands, phrase layout,
 Redo and lyric word/line/section counts. Command help lists recognized commands.
 Also included: Find song, Input 1 / Input 2, microphone
 level meter and History (restore earlier lyrics as a separate song).
 Drafts auto-save in your user folder / IDW Audio Lab / Lyrics.
-Read START-HERE.html and docs/V6.6-UPGRADE.md for setup and limits.
+Read START-HERE.html and docs/V6.7-UPGRADE.md for setup and limits.
 
 Pro Tools Intro does not load VST3. Run IDW separately and send MIDI through
 your existing loopMIDI port, or export/import a MIDI file. No AAX is included.

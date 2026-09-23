@@ -2,8 +2,9 @@
 import os
 import queue
 import tkinter as tk
-from tkinter import ttk,filedialog,messagebox
+from tkinter import ttk,filedialog,messagebox,simpledialog
 from lyrics_store import LyricsStore
+from lyric_files import read_lyrics
 from lyric_commands import append_edit,lyric_counts,HELP
 from offline_speech import Dictation,input_devices
 
@@ -23,6 +24,11 @@ class LyricsWorkspace(ttk.Frame):
         ttk.Label(search,text='Find song').pack(side='left',padx=4)
         self.query=tk.StringVar();ttk.Entry(search,textvariable=self.query,width=35).pack(side='left')
         self.query.trace_add('write',lambda *args:self.refresh_songs())
+        row=ttk.Frame(self);row.pack(fill='x',pady=4)
+        self.import_button=ttk.Button(row,text='Import TXT',command=self.import_text);self.import_button.pack(side='left',padx=2)
+        self.checkpoint_button=ttk.Button(row,text='Save checkpoint',command=self.checkpoint);self.checkpoint_button.pack(side='left',padx=2)
+        self.checkpoints_button=ttk.Button(row,text='Checkpoints',command=lambda:self.restore(True));self.checkpoints_button.pack(side='left',padx=2)
+        ttk.Label(row,text='Named versions stay beyond rolling history.').pack(side='left',padx=8)
         row=ttk.Frame(self);row.pack(fill='x',pady=6);ttk.Label(row,text='Song title').pack(side='left',padx=4)
         self.title=tk.StringVar(value=self.doc['title']);ttk.Entry(row,textvariable=self.title).pack(side='left',fill='x',expand=True)
         ttk.Button(row,text='Lyrics folder',command=self.folder).pack(side='left',padx=5)
@@ -119,15 +125,15 @@ class LyricsWorkspace(ttk.Frame):
         if not self.leave_current():return
         try:self.set_document(*self.store.load(identifier))
         except Exception as error:messagebox.showerror('Could not open lyrics',str(error))
-    def restore(self):
+    def restore(self,checkpoints=False):
         if self.listening:return
         try:
-            versions=self.store.history(self.doc['id'])
-            if not versions:messagebox.showinfo('Lyric history','No earlier saved version yet. History starts after your second save.');return
-            window=tk.Toplevel(self);window.title('Lyric history — restore as a new song');window.geometry('650x450')
+            versions=([dict(e['song'],modified=e['created'],checkpoint_label=e['label']) for e in self.store.checkpoints(self.doc['id'])] if checkpoints else self.store.history(self.doc['id']))
+            if not versions:messagebox.showinfo('Lyric versions','No named checkpoints yet. Use Save checkpoint.' if checkpoints else 'No earlier saved version yet. History starts after your second save.');return
+            window=tk.Toplevel(self);window.title(('Checkpoints' if checkpoints else 'Lyric history')+' — restore as a new song');window.geometry('650x450')
             window.transient(self.winfo_toplevel());window.grab_set()
-            ttk.Label(window,text='Last 20 saves. Restoring creates a separate song and keeps the current draft.').pack(pady=8)
-            selector=ttk.Combobox(window,state='readonly',values=[str(i+1)+' / '+d.get('modified','')[:19]+' / '+d['title'][:35] for i,d in enumerate(versions)])
+            ttk.Label(window,text=('Named checkpoints.' if checkpoints else 'Last 20 saves.')+' Restoring creates a separate song and keeps the current draft.').pack(pady=8)
+            selector=ttk.Combobox(window,state='readonly',values=[str(i+1)+' / '+d.get('modified','')[:19]+' / '+d.get('checkpoint_label',d['title'])[:40] for i,d in enumerate(versions)])
             selector.pack(fill='x',padx=10);selector.current(0)
             preview=tk.Text(window,wrap='word',height=12);preview.pack(fill='both',expand=True,padx=10,pady=8)
             def show(event=None):
@@ -142,6 +148,26 @@ class LyricsWorkspace(ttk.Frame):
                 self.query.set('');self.set_document(saved,revision);window.destroy()
             ttk.Button(window,text='Restore as new song',command=recover).pack(pady=8)
         except Exception as error:messagebox.showerror('Lyric history',str(error))
+    def checkpoint(self):
+        if self.listening:return
+        label=simpledialog.askstring('Save checkpoint','Name this version (for example: Original hook):',parent=self)
+        if label is None:return
+        if not self.flush(True):return
+        try:
+            self.store.checkpoint(self.content(),label)
+            self.status.configure(text='Checkpoint saved: '+label.strip()+' — retained beyond rolling history.')
+        except Exception as error:messagebox.showerror('Checkpoint not saved',str(error))
+    def import_text(self):
+        if self.listening:return
+        path=filedialog.askopenfilename(title='Import lyrics as a NEW song',filetypes=[('Plain text','*.txt')])
+        if not path:return
+        try:title,text=read_lyrics(path)
+        except Exception as error:messagebox.showerror('Could not import lyrics',str(error));return
+        if not self.flush(True):return
+        data=self.store.new();data.update(title=title,text=text)
+        try:saved,revision=self.store.save(data)
+        except Exception as error:messagebox.showerror('Could not save imported lyrics',str(error));return
+        self.query.set('');self.set_document(saved,revision)
     def section(self,name):
         self.text.edit_separator();self.text.insert('insert','\n['+name+']\n');self.text.edit_separator();self.text.focus_set()
     def undo(self):
@@ -173,7 +199,7 @@ class LyricsWorkspace(ttk.Frame):
         if self.listening:return
         if self.is_busy():messagebox.showinfo('Audio Lab is working','Wait for the current audio job to finish before starting dictation.');return
         self.listening=True;self.mic.configure(text='Preparing offline dictation…');self.partial.configure(text='')
-        for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button,self.command_toggle,self.line_toggle):button.configure(state='disabled')
+        for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button,self.command_toggle,self.line_toggle,self.import_button,self.checkpoint_button,self.checkpoints_button):button.configure(state='disabled')
         self.channel.configure(state='disabled');self.devices.configure(state='disabled');self.stop_button.configure(state='normal')
         try:self.dictation.start(self.device_ids[max(0,self.devices.current())],self.channel.current()+1)
         except Exception as error:
@@ -197,7 +223,7 @@ class LyricsWorkspace(ttk.Frame):
                 elif kind=='status':self.mic.configure(text=value)
                 elif kind=='done':
                     self.listening=False;self.mic.configure(text=value)
-                    for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button,self.command_toggle,self.line_toggle):button.configure(state='normal')
+                    for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button,self.command_toggle,self.line_toggle,self.import_button,self.checkpoint_button,self.checkpoints_button):button.configure(state='normal')
                     self.channel.configure(state='readonly');self.devices.configure(state='readonly');self.stop_button.configure(state='disabled');self.flush()
                     if self.pending_close:
                         callback=self.pending_close;self.pending_close=None;callback()
