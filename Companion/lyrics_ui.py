@@ -4,6 +4,7 @@ import queue
 import tkinter as tk
 from tkinter import ttk,filedialog,messagebox
 from lyrics_store import LyricsStore
+from lyric_commands import append_edit,lyric_counts,HELP
 from offline_speech import Dictation,input_devices
 
 class LyricsWorkspace(ttk.Frame):
@@ -30,6 +31,7 @@ class LyricsWorkspace(ttk.Frame):
         for heading in ('Intro','Verse','Hook','Bridge','Outro'):
             ttk.Button(row,text=heading,command=lambda name=heading:self.section(name)).pack(side='left',padx=2)
         ttk.Button(row,text='Undo',command=self.undo).pack(side='left',padx=5)
+        ttk.Button(row,text='Redo',command=self.redo).pack(side='left',padx=2)
         row=ttk.Frame(self);row.pack(fill='x',pady=6)
         self.devices=ttk.Combobox(row,state='readonly',width=28,values=['Default microphone']);self.devices.current(0);self.devices.pack(side='left',padx=2)
         self.refresh_button=ttk.Button(row,text='Refresh mics',command=self.refresh_devices);self.refresh_button.pack(side='left',padx=2)
@@ -40,6 +42,13 @@ class LyricsWorkspace(ttk.Frame):
         self.channel=ttk.Combobox(row,state='readonly',width=9,values=['Input 1','Input 2']);self.channel.current(0);self.channel.pack(side='left',padx=5)
         self.meter=ttk.Progressbar(row,length=120,maximum=60);self.meter.pack(side='left',padx=5)
         self.level_text=ttk.Label(row,text='Mic idle',width=42);self.level_text.pack(side='left')
+        row=ttk.Frame(self);row.pack(fill='x',pady=(0,4))
+        self.commands=tk.BooleanVar(value=False);self.phrase_lines=tk.BooleanVar(value=True)
+        self.command_toggle=ttk.Checkbutton(row,text='Voice commands',variable=self.commands);self.command_toggle.pack(side='left')
+        self.line_toggle=ttk.Checkbutton(row,text='New line per phrase',variable=self.phrase_lines);self.line_toggle.pack(side='left',padx=8)
+        ttk.Button(row,text='Command help',command=lambda:messagebox.showinfo('Spoken commands',HELP)).pack(side='left')
+        self.counts=ttk.Label(row,text='0 words / 0 lines / 0 sections');self.counts.pack(side='left',padx=8)
+        self.count_job=None
         self.mic=ttk.Label(self,text='MIC OFF — English dictation runs locally. No recording or upload.',wraplength=700);self.mic.pack(anchor='w')
         self.partial=ttk.Label(self,text='Speak clearly; edit names, slang and punctuation afterward.',wraplength=700);self.partial.pack(anchor='w',pady=(0,4))
         area=ttk.Frame(self);area.pack(fill='both',expand=True)
@@ -52,7 +61,23 @@ class LyricsWorkspace(ttk.Frame):
     def changed(self):
         if not self.loading:self.dirty=True
     def modified(self,event=None):
-        if self.text.edit_modified():self.changed();self.text.edit_modified(False)
+        if self.text.edit_modified():
+            self.changed();self.text.edit_modified(False)
+            if self.count_job is not None:self.after_cancel(self.count_job)
+            self.count_job=self.after(250,self.update_counts)
+    def update_counts(self):
+        self.count_job=None
+        words,lines,sections=lyric_counts(self.text.get('1.0','end-1c'))
+        self.counts.configure(text=f'{words} words / {lines} lines / {sections} sections')
+    def append_dictation(self,phrase):
+        remove,addition=append_edit(self.text.get('1.0','end-1c'),phrase,self.commands.get(),self.phrase_lines.get())
+        if not remove and not addition:return
+        self.text.edit_separator();self.text.configure(autoseparators=False)
+        try:
+            if remove:self.text.delete(f'end-1c - {remove} chars','end-1c')
+            if addition:self.text.insert('end',addition)
+        finally:self.text.configure(autoseparators=True);self.text.edit_separator()
+        self.text.see('end');self.dirty=True
     def content(self):return dict(self.doc,title=self.title.get(),text=self.text.get('1.0','end-1c'))
     def flush(self,show=False):
         if not self.dirty and self.title.get()==self.doc['title'] and self.text.get('1.0','end-1c')==self.doc['text']:return True
@@ -79,7 +104,7 @@ class LyricsWorkspace(ttk.Frame):
     def set_document(self,data,revision):
         self.loading=True;self.doc=data;self.revision=revision;self.title.set(data['title'])
         self.text.delete('1.0','end');self.text.insert('1.0',data['text']);self.text.edit_reset();self.text.edit_modified(False)
-        self.loading=False;self.dirty=False;self.status.configure(text='Opened: '+data['title']);self.refresh_songs()
+        self.update_counts();self.loading=False;self.dirty=False;self.status.configure(text='Opened: '+data['title']);self.refresh_songs()
     def leave_current(self):
         if self.flush():return True
         return messagebox.askyesno('Lyrics not saved','The current draft could not be saved. Discard the displayed edits and continue? Choose No and Export TXT first to keep them.')
@@ -122,6 +147,9 @@ class LyricsWorkspace(ttk.Frame):
     def undo(self):
         try:self.text.edit_undo()
         except tk.TclError:pass
+    def redo(self):
+        try:self.text.edit_redo()
+        except tk.TclError:pass
     def export(self):
         path=filedialog.asksaveasfilename(title='Export lyrics as a NEW text file',defaultextension='.txt',initialfile='IDW-lyrics.txt',filetypes=[('Text file','*.txt')])
         if not path:return
@@ -145,7 +173,7 @@ class LyricsWorkspace(ttk.Frame):
         if self.listening:return
         if self.is_busy():messagebox.showinfo('Audio Lab is working','Wait for the current audio job to finish before starting dictation.');return
         self.listening=True;self.mic.configure(text='Preparing offline dictation…');self.partial.configure(text='')
-        for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button):button.configure(state='disabled')
+        for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button,self.command_toggle,self.line_toggle):button.configure(state='disabled')
         self.channel.configure(state='disabled');self.devices.configure(state='disabled');self.stop_button.configure(state='normal')
         try:self.dictation.start(self.device_ids[max(0,self.devices.current())],self.channel.current()+1)
         except Exception as error:
@@ -163,13 +191,13 @@ class LyricsWorkspace(ttk.Frame):
             while True:
                 kind,value=self.dictation.events.get_nowait()
                 if kind=='text':
-                    self.text.edit_separator();self.text.insert('end',value+'\n');self.text.edit_separator();self.text.see('end');self.dirty=True;self.partial.configure(text='')
+                    self.append_dictation(value);self.partial.configure(text='')
                 elif kind=='partial':self.partial.configure(text=value[:300])
                 elif kind=='error':self.write('Dictation error: '+value);self.partial.configure(text=value[:500])
                 elif kind=='status':self.mic.configure(text=value)
                 elif kind=='done':
                     self.listening=False;self.mic.configure(text=value)
-                    for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button):button.configure(state='normal')
+                    for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button,self.command_toggle,self.line_toggle):button.configure(state='normal')
                     self.channel.configure(state='readonly');self.devices.configure(state='readonly');self.stop_button.configure(state='disabled');self.flush()
                     if self.pending_close:
                         callback=self.pending_close;self.pending_close=None;callback()

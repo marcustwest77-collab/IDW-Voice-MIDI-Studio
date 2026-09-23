@@ -153,7 +153,7 @@ def main(gui_smoke=False, preview_path=None):
     import threading
     import webbrowser
     root = tk.Tk()
-    root.title('IDW Audio Lab — V6.5')
+    root.title('IDW Audio Lab — V6.6')
     root.geometry('1020x900')
     root.minsize(800, 760)
     panel = ttk.Frame(root, padding=18)
@@ -302,6 +302,13 @@ def main(gui_smoke=False, preview_path=None):
         lyrics.text.insert('1.0',demo);root.update()
         assert lyrics.flush(), 'Lyric draft save failed'
         assert lyrics.store.load(lyrics.doc['id'])[0]['text']==demo
+        lyrics.commands.set(True)
+        lyrics.append_dictation('question mark');root.update()
+        punctuated=lyrics.text.get('1.0','end-1c');assert punctuated==demo.rstrip(' \t\r\n')+'?\n'
+        lyrics.undo();root.update();assert lyrics.text.get('1.0','end-1c')==demo
+        lyrics.redo();root.update();assert lyrics.text.get('1.0','end-1c')==punctuated
+        lyrics.undo();lyrics.commands.set(False);root.update();lyrics.update_counts()
+        assert '2 sections' in lyrics.counts.cget('text')
         lyrics.query.set('songwriting');root.update();assert lyrics.doc['id'] in lyrics.song_ids
         lyrics.query.set('no matching song 8472');root.update();assert not lyrics.song_ids
         lyrics.query.set('');lyrics.dictation.level=(-18.0,False);lyrics.listening=True;lyrics.poll();root.update()
@@ -316,7 +323,7 @@ def main(gui_smoke=False, preview_path=None):
 
 def cli():
     import argparse
-    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.5')
+    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.6')
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--gui-smoke', action='store_true')
     parser.add_argument('--test-report', type=Path)
