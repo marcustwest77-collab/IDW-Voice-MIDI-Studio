@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(IDWVoiceMIDIStudio VERSION 6.0.0)
+project(IDWVoiceMIDIStudio VERSION 6.1.0)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
@@ -89,6 +89,9 @@ if(BUILD_TESTING)
     add_executable(IDWSynthTests Tests/StudioSynthTests.cpp)
     target_include_directories(IDWSynthTests PRIVATE Source)
     add_test(NAME IDWStudioSynth COMMAND IDWSynthTests)
+    add_executable(IDWRollingTests Tests/RollingMidiTests.cpp)
+    target_include_directories(IDWRollingTests PRIVATE Source)
+    add_test(NAME IDWRetrospective COMMAND IDWRollingTests)
 endif()
 
 target_sources(IDWVoiceMIDIStudio_Standalone PRIVATE Source/StandaloneApp.cpp)

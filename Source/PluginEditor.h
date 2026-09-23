@@ -49,6 +49,9 @@ private:
     bool calibrating=false;double calibrationStarted=0;float noisePeak=0;
     std::array<float,220> history{};int historyPos=0;
     int previousDrumEvents=0,flashPad=-1,flashTicks=0;
+    void saveRetrospective();
+    juce::TextButton saveRecent{"Save last 30s"};
+    juce::ToggleButton rememberMidi{"Remember voice MIDI"};
     juce::TextButton instrumentButton{"Studio instrument"};
     std::unique_ptr<InstrumentPanel> instrumentPanel;
     bool instrumentVisible=false;

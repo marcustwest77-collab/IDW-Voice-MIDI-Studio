@@ -57,11 +57,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout IDWVoiceMIDIStudioAudioProce
     p.add(std::make_unique<F>("synthAttack", "Instrument Attack", .001f, 1.f, .008f));
     p.add(std::make_unique<F>("synthRelease", "Instrument Release", .01f, 2.f, .25f));
     p.add(std::make_unique<F>("synthDelay", "Instrument Echo", 0.f, .6f, .12f));
+    p.add(std::make_unique<B>("retroEnabled", "Remember Voice MIDI", true));
     return p;
 }
 
 
 void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
+    retrospective.resetAudio();
     studioSynth.prepare(sr);incomingMidi.clear();synthWasEnabled=false;
     heldHarmony={};
     inputPeak.store(0);observedRate.store(sr);observedBlock.store(block);
@@ -235,6 +237,7 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
     for(const auto event:out){++events;if(event.getMessage().isNoteOn())++notes;}
     emittedNotes.fetch_add(notes);emittedEvents.fetch_add(events);
     capture.finishBlock(out,count);
+    retrospective.finishBlock(out,count,sampleRateHz,value("retroEnabled")>0.5f);
     const double load=(juce::Time::getMillisecondCounterHiRes()-started)/(1000.0*count/sampleRateHz);
     cpuLoad.store(cpuLoad.load()*0.95+load*0.05);
 }

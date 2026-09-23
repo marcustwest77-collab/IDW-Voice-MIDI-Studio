@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "InstrumentPanel.h"
+#include "SongScenes.h"
 #include "MidiExport.h"
 #include "VoiceProfiles.h"
 #include <iostream>
@@ -173,6 +174,34 @@ void testStudioInstrument(){
     check(restored->apvts.getRawParameterValue("synthEnabled")->load()==1,"Instrument state failed to restore");
     std::cout<<"PASS V6 instrument MIDI offsets / incoming polyphony / Panic / state persistence\n";
 }
+void testRetrospectiveCapture(){
+    auto p=processor(48000,256);run(*p,48000,256,0.4,220);check(!p->capture.isRecording(),"Retrospective capture started Record MIDI");
+    auto take=p->retrospective.snapshot();check(!take.empty(),"Unrecorded voice performance missing");
+    bool note=false;for(auto& e:take)if((e.data[0]&0xf0)==0x90&&e.data[2]>0)note=true;check(note,"Recent take has no notes");
+    check(p->takes.size()==0,"Retrospective capture overwrote recorded take");
+    parameter(*p,"retroEnabled",0);run(*p,48000,256,.02,0);check(p->retrospective.snapshot().empty(),"Disabled retrospective retained notes");
+    parameter(*p,"retroEnabled",1);run(*p,48000,256,.15,330);check(!p->retrospective.snapshot().empty(),"Re-enabled retrospective failed");
+    const auto file=juce::File::getCurrentWorkingDirectory().getChildFile("V61-Retrospective.mid");check(writePerformanceMidi(file,p->retrospective.snapshot(),120),"Cannot export retrospective MIDI");
+    juce::FileInputStream input(file);juce::MidiFile midi;check(midi.readFrom(input),"Retrospective MIDI unreadable");
+    auto overflow=std::make_unique<RetrospectiveCapture>();juce::MidiBuffer burst;
+    for(int i=0;i<40000;++i)burst.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)90),0);
+    overflow->finishBlock(burst,512,48000,true);check(overflow->snapshot().empty()&&overflow->incomplete(),"Overflow did not discard incomplete history");
+    burst.clear();burst.addEvent(juce::MidiMessage::noteOn(1,64,(juce::uint8)90),0);overflow->finishBlock(burst,512,48000,true);check(!overflow->snapshot().empty(),"Buffer did not recover after overflow");
+    std::cout<<"PASS V6.1 retrospective capture without Record / isolated take / disable-clear / resume / MIDI export / queue overflow recovery\n";
+}
+void testSongScenes(){
+    auto p=processor(48000,128);const auto name="QA-scene-"+juce::Uuid().toString();
+    parameter(*p,"synthEnabled",1);parameter(*p,"synthLead",4);parameter(*p,"harmonyMode",2);parameter(*p,"harmonyBass",1);
+    check(SongScenes::save(p->apvts,name),"Scene save failed");
+    parameter(*p,"synthLead",0);parameter(*p,"harmonyMode",0);parameter(*p,"gate",.025f);parameter(*p,"voiceLow",50);parameter(*p,"captureBpm",93);parameter(*p,"retroEnabled",0);
+    check(SongScenes::load(p->apvts,name),"Scene load failed");
+    check(p->apvts.getRawParameterValue("synthLead")->load()==4&&p->apvts.getRawParameterValue("harmonyMode")->load()==2,"Musical scene did not recall");
+    check(std::abs(p->apvts.getRawParameterValue("gate")->load()-.025f)<.0001f&&p->apvts.getRawParameterValue("voiceLow")->load()==50,"Scene changed microphone/voice profile");
+    check(p->apvts.getRawParameterValue("captureBpm")->load()==93&&p->apvts.getRawParameterValue("retroEnabled")->load()==0,"Scene changed tempo or capture preference");
+    const auto file=SongScenes::directory().getChildFile(name+".xml");auto xml=juce::XmlDocument::parse(file);check(xml!=nullptr,"Scene XML unavailable");xml->setAttribute("synthLead",0);xml->setAttribute("harmonyMode","not-a-number");check(xml->writeTo(file),"Cannot write invalid fixture");
+    check(!SongScenes::load(p->apvts,name),"Malformed scene accepted");check(p->apvts.getRawParameterValue("synthLead")->load()==4,"Failed scene partially changed settings");file.deleteFile();
+    std::cout<<"PASS V6.1 scene recall / microphone-profile isolation / tempo isolation / invalid-file atomic rejection\n";
+}
 void renderEditor(){
     auto p=processor(48000,128);std::vector<float> before;for(auto* parameter:p->getParameters())before.push_back(parameter->getValue());std::unique_ptr<juce::AudioProcessorEditor> editor(p->createEditor());for(int i=0;i<p->getParameters().size();++i)check(std::abs(before[(size_t)i]-p->getParameters()[i]->getValue())<1.0e-6f,"Opening editor modifies processor parameters");editor->setVisible(true);
     for(auto size:{std::pair<int,int>{1120,900},{1040,890}}){
@@ -198,5 +227,5 @@ void renderEditor(){
     std::cout<<"PASS V6 performance/default/minimum, Studio and Instrument editor render / bounds\n";
 }
 }
-int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testStudioInstrument();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
+int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testStudioInstrument();testRetrospectiveCapture();testSongScenes();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
 

@@ -1,6 +1,10 @@
+# IDW Voice MIDI Studio V6.1
+
+Adds retrospective voice-MIDI capture and saved song scenes. See [V6.1 setup and boundaries](docs/V6.1-UPGRADE.md). Windows validation runs on the approved idw-v6-build branch.
+
 # IDW Voice MIDI Studio V6 candidate
 
-Local source candidate; no V6 Windows binary has been validated yet.
+The prior V6 Windows build passed; this source adds the V6.1 changes for validation.
 
 Read [V6 upgrade and status](docs/V6-UPGRADE.md) and open START-HERE.html.
 

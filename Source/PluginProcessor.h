@@ -10,6 +10,7 @@
 #include "HarmonyEngine.h"
 #include "TakeArchive.h"
 #include "StudioSynth.h"
+#include "RetrospectiveCapture.h"
 class IDWVoiceMIDIStudioAudioProcessor : public juce::AudioProcessor {
 public:
     IDWVoiceMIDIStudioAudioProcessor();
@@ -38,6 +39,7 @@ public:
     BeatboxClassifier beats;
     PerformanceCapture capture;
     TakeArchive takes{capture};
+    RetrospectiveCapture retrospective;
     void requestPanic(){panicRequested.store(true);}
     void requestTestNote(){testRequested.store(true);}
     void saveExtraState();

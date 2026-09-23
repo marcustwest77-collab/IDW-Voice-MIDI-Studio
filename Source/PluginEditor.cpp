@@ -75,8 +75,13 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     trainTarget.setSelectedId(1);train.onClick=[this]{p.beats.train(trainTarget.getSelectedId()-1);p.requestPanic();};cancelTrain.onClick=[this]{p.beats.cancel();};clearTrain.onClick=[this]{p.beats.clearModels();status.setText("Drum profiles reset; basic kick/snare/hat detection restored.",juce::dontSendNotification);};
     beatSlider.setSliderStyle(juce::Slider::LinearHorizontal);beatSlider.setTextBoxStyle(juce::Slider::TextBoxRight,false,60,22);beatSlider.setNumDecimalPlacesToDisplay(3);addAndMakeVisible(beatSlider);attachSlider("beatThreshold",beatSlider);beatSlider.textFromValueFunction=[](double v){return juce::String(v,3);};beatSlider.updateText();
     beatLabel.setText("Hit threshold",juce::dontSendNotification);addAndMakeVisible(beatLabel);
+    addAndMakeVisible(saveRecent);addAndMakeVisible(rememberMidi);
+    buttons.push_back(std::make_unique<ButtonAttachment>(p.apvts,"retroEnabled",rememberMidi));
+    saveRecent.onClick=[this]{saveRetrospective();};
+    rememberMidi.setTooltip("Keeps up to 30 seconds of generated voice MIDI in memory while audio runs. No microphone audio or automatic disk recording.");
+    saveRecent.setTooltip("Freeze the recent MIDI now, then choose where to save. Your current recorded take is preserved.");
     addAndMakeVisible(instrumentButton);
-    instrumentPanel=std::make_unique<InstrumentPanel>(p.apvts,[this]{instrumentVisible=false;resized();});
+    instrumentPanel=std::make_unique<InstrumentPanel>(p.apvts,[this]{instrumentVisible=false;resized();},[this]{p.requestPanic();});
     addChildComponent(*instrumentPanel);
     instrumentButton.onClick=[this]{instrumentVisible=!instrumentVisible;resized();};
     setupV5();history.fill(-1);refreshPresets();syncScale();showHelp(false);resized();timerCallback();startTimerHz(30);
@@ -101,12 +106,12 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
     g.fillAll(background);const float w=(float)getWidth();
     if(performanceView){
         g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,250,w-48,165},{24,435,w-48,190},{24,646,w-48,145}})g.fillRoundedRectangle(r,12);
-        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6",getWidth()-355,22,330,30,juce::Justification::centredRight);
+        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.1",getWidth()-355,22,330,30,juce::Justification::centredRight);
         g.setColour(muted);g.setFont(juce::FontOptions(12));g.drawText("IN DA WIND ENTERTAINMENT / PERFORMANCE",30,getHeight()-24,650,22,juce::Justification::centredLeft);
         return;
     }
     g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,242,w-48,170},{24,592,w-48,198}})g.fillRoundedRectangle(r,12);
-    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6",getWidth()-335,22,310,30,juce::Justification::centredRight);
+    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.1",getWidth()-335,22,310,30,juce::Justification::centredRight);
     const juce::Rectangle<float> plot(365,110,w-420,93);
     g.setColour(juce::Colour(0xff263144));for(int j=0;j<=4;++j){const float y=plot.getY()+j*plot.getHeight()/4;g.drawHorizontalLine((int)y,plot.getX(),plot.getRight());}
     float centre=60;const float current=history[(size_t)((historyPos+219)%220)];if(current>=0)centre=std::round(current/12)*12;
@@ -200,7 +205,7 @@ juce::String IDWVoiceMIDIStudioAudioProcessorEditor::diagnosticReport() const {
     text += "Status: "+setupStatus.getText()+"\nDAW receipt, instrument selection and audio output audibility are not detectable by this plugin.\n";
     return text;
 }
-juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText(){return R"HELP(IDW VOICE MIDI STUDIO / VERSION 6
+juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText(){return R"HELP(IDW VOICE MIDI STUDIO / VERSION 6.1
 
 PERFORMANCE VIEW
 Open Studio instrument to enable the built-in 32-voice synth and choose lead, chord and bass sounds. It replaces Preview sound while enabled. Audio Lab is a separate companion for file transcription and optional cloud conversion.
@@ -342,8 +347,24 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::layoutV5(){
         record.setBounds(42,667,190,45);exportMidi.setBounds(245,667,150,45);recover.setBounds(408,667,155,45);bpmLabel.setBounds(587,674,40,28);bpmSlider.setBounds(629,667,200,45);
         captureLabel.setBounds(42,727,w-84,45);preview.setBounds(32,801,145,34);test.setBounds(190,801,140,34);panic.setBounds(344,801,135,34);help.setBounds(w-205,801,165,34);diagnostics.setBounds(498,792,w-720,45);
     }else{readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));}
+    rememberMidi.setVisible(performanceView);saveRecent.setVisible(performanceView);
+    if(performanceView){saveRecent.setBounds(w-195,670,150,38);rememberMidi.setBounds(w-250,737,210,28);captureLabel.setBounds(42,727,w-330,45);}
     instrumentButton.setVisible(true);instrumentButton.setBounds(700,24,150,30);
     if(instrumentPanel){instrumentPanel->setBounds(25,78,w-50,getHeight()-128);instrumentPanel->setVisible(instrumentVisible);}
     if(instrumentVisible&&instrumentPanel)instrumentPanel->toFront(false);
     helpText.setVisible(helpVisible);closeHelp.setVisible(helpVisible);if(helpVisible){helpText.toFront(false);closeHelp.toFront(false);}
+}
+
+void IDWVoiceMIDIStudioAudioProcessorEditor::saveRetrospective(){
+    if(p.apvts.getRawParameterValue("retroEnabled")->load()<0.5f){status.setText("Enable Remember voice MIDI, then perform with audio running.",juce::dontSendNotification);return;}
+    auto take=std::make_shared<std::vector<PerformanceCapture::Event>>(p.retrospective.snapshot());
+    if(take->empty()){status.setText("No recent voice notes yet. Sing with Melody enabled and audio running.",juce::dontSendNotification);return;}
+    const double tempo=p.apvts.getRawParameterValue("captureBpm")->load();const bool incomplete=p.retrospective.incomplete();
+    chooser=std::make_unique<juce::FileChooser>("Save retrospective MIDI",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW-recent.mid"),"*.mid");
+    const juce::Component::SafePointer<IDWVoiceMIDIStudioAudioProcessorEditor> safe(this);
+    chooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles|juce::FileBrowserComponent::warnAboutOverwriting,[safe,take,tempo,incomplete](const juce::FileChooser& c){
+        if(!safe||c.getResult()==juce::File{})return;juce::TemporaryFile temp(c.getResult());
+        const bool ok=writePerformanceMidi(temp.getFile(),*take,tempo)&&temp.overwriteTargetFileWithTemporary();
+        safe->status.setText(ok?(incomplete?"Recent MIDI saved; a buffer gap/limit was detected. Check this take.":"Recent MIDI saved. Your recorded take is unchanged."):"Could not save recent MIDI; check the destination.",juce::dontSendNotification);
+    });
 }
