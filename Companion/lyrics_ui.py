@@ -48,7 +48,8 @@ class LyricsWorkspace(ttk.Frame):
     def flush(self,show=False):
         if not self.dirty and self.title.get()==self.doc['title'] and self.text.get('1.0','end-1c')==self.doc['text']:return True
         try:
-            self.doc,self.revision=self.store.save(self.content(),self.revision);self.dirty=False
+            self.doc,self.revision=self.store.save(self.content(),self.revision)
+            self.loading=True;self.title.set(self.doc['title']);self.loading=False;self.dirty=False
             self.status.configure(text='Saved locally: '+self.doc['title']+' | '+self.doc['modified'][:19].replace('T',' ')+' UTC')
             self.refresh_songs();return True
         except Exception as error:
@@ -67,15 +68,18 @@ class LyricsWorkspace(ttk.Frame):
         self.loading=True;self.doc=data;self.revision=revision;self.title.set(data['title'])
         self.text.delete('1.0','end');self.text.insert('1.0',data['text']);self.text.edit_reset();self.text.edit_modified(False)
         self.loading=False;self.dirty=False;self.status.configure(text='Opened: '+data['title']);self.refresh_songs()
+    def leave_current(self):
+        if self.flush():return True
+        return messagebox.askyesno('Lyrics not saved','The current draft could not be saved. Discard the displayed edits and continue? Choose No and Export TXT first to keep them.')
     def new(self):
         if self.listening:return
-        if self.flush(True):self.set_document(self.store.new(),None);self.saved.set('')
+        if self.leave_current():self.set_document(self.store.new(),None);self.saved.set('')
     def open(self):
         if self.listening:return
         index=self.saved.current()
         if index<0:return
         identifier=self.song_ids[index]
-        if not self.flush(True):return
+        if not self.leave_current():return
         try:self.set_document(*self.store.load(identifier))
         except Exception as error:messagebox.showerror('Could not open lyrics',str(error))
     def restore(self):
@@ -137,6 +141,10 @@ class LyricsWorkspace(ttk.Frame):
                     for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button):button.configure(state='normal')
                     self.devices.configure(state='readonly');self.stop_button.configure(state='disabled');self.flush()
                     if self.pending_close:
-                        callback=self.pending_close;self.pending_close=None;callback();return
+                        callback=self.pending_close;self.pending_close=None;callback()
+                        try:
+                            if self.winfo_exists():self.after(100,self.poll)
+                        except tk.TclError:pass
+                        return
         except queue.Empty:pass
         self.after(100,self.poll)
