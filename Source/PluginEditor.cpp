@@ -84,7 +84,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     instrumentPanel=std::make_unique<InstrumentPanel>(p.apvts,[this]{instrumentVisible=false;resized();},[this]{p.requestPanic();});
     addChildComponent(*instrumentPanel);
     instrumentButton.onClick=[this]{connectionVisible=false;instrumentVisible=!instrumentVisible;resized();};
-    addAndMakeVisible(audioLabButton);audioLabButton.onClick=[this]{openAudioLab();};
+    addAndMakeVisible(audioLabButton);audioLabButton.onClick=[this]{connectionVisible=false;instrumentVisible=false;showHelp(false);resized();openAudioLab();};
     connectionPanel=std::make_unique<ConnectionPanel>([this]{connectionVisible=false;resized();},[this]{showHelp(true);},[this]{p.requestTestNote();},[this](bool local){p.requestPanic();setValue("synthEnabled",local?1.0f:0.0f);setValue("previewAudio",0);setValue("monitorMic",0);},[this]{juce::SystemClipboard::copyTextToClipboard(diagnosticReport());});
     addChildComponent(*connectionPanel);
     setupV5();history.fill(-1);refreshPresets();syncScale();showHelp(false);resized();timerCallback();startTimerHz(30);

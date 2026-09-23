@@ -10,7 +10,7 @@ public:
         title.setText("CONNECTION CHECK / VOICE TO SOUND",juce::dontSendNotification);
         done.setButtonText("Close setup"); done.onClick=std::move(close);
         route.addItemList({"IDW built-in sound", "FL Studio VST3", "Other Windows VST3 host", "Standalone MIDI output"},1);
-        route.onChange=[this]{resetConfirmation();refreshInstructions();}; route.setSelectedId(1);
+        route.onChange=[this]{resetConfirmation();refreshInstructions();}; route.setSelectedId(1,juce::dontSendNotification);refreshInstructions();
         for(auto* label:{&instructions,&signals,&hint}) label->setJustificationType(juce::Justification::topLeft);
         signals.setFont(juce::FontOptions(18));
         testButton.setButtonText("Send test note");
