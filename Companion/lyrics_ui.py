@@ -17,7 +17,11 @@ class LyricsWorkspace(ttk.Frame):
         self.open_button=ttk.Button(bar,text='Open song',command=self.open);self.open_button.pack(side='left',padx=2)
         ttk.Button(bar,text='Save now',command=lambda:self.flush(True)).pack(side='left',padx=2)
         ttk.Button(bar,text='Export TXT',command=self.export).pack(side='left',padx=2)
-        self.restore_button=ttk.Button(bar,text='Previous save',command=self.restore);self.restore_button.pack(side='left',padx=2)
+        self.restore_button=ttk.Button(bar,text='History',command=self.restore);self.restore_button.pack(side='left',padx=2)
+        search=ttk.Frame(self);search.pack(fill='x',pady=(4,0))
+        ttk.Label(search,text='Find song').pack(side='left',padx=4)
+        self.query=tk.StringVar();ttk.Entry(search,textvariable=self.query,width=35).pack(side='left')
+        self.query.trace_add('write',lambda *args:self.refresh_songs())
         row=ttk.Frame(self);row.pack(fill='x',pady=6);ttk.Label(row,text='Song title').pack(side='left',padx=4)
         self.title=tk.StringVar(value=self.doc['title']);ttk.Entry(row,textvariable=self.title).pack(side='left',fill='x',expand=True)
         ttk.Button(row,text='Lyrics folder',command=self.folder).pack(side='left',padx=5)
@@ -31,6 +35,11 @@ class LyricsWorkspace(ttk.Frame):
         self.refresh_button=ttk.Button(row,text='Refresh mics',command=self.refresh_devices);self.refresh_button.pack(side='left',padx=2)
         self.start_button=ttk.Button(row,text='Start dictation',command=self.start);self.start_button.pack(side='left',padx=2)
         self.stop_button=ttk.Button(row,text='Stop',command=self.stop,state='disabled');self.stop_button.pack(side='left',padx=2)
+        row=ttk.Frame(self);row.pack(fill='x',pady=(0,4))
+        ttk.Label(row,text='Mic channel').pack(side='left')
+        self.channel=ttk.Combobox(row,state='readonly',width=9,values=['Input 1','Input 2']);self.channel.current(0);self.channel.pack(side='left',padx=5)
+        self.meter=ttk.Progressbar(row,length=120,maximum=60);self.meter.pack(side='left',padx=5)
+        self.level_text=ttk.Label(row,text='Mic idle',width=42);self.level_text.pack(side='left')
         self.mic=ttk.Label(self,text='MIC OFF — English dictation runs locally. No recording or upload.',wraplength=700);self.mic.pack(anchor='w')
         self.partial=ttk.Label(self,text='Speak clearly; edit names, slang and punctuation afterward.',wraplength=700);self.partial.pack(anchor='w',pady=(0,4))
         area=ttk.Frame(self);area.pack(fill='both',expand=True)
@@ -60,9 +69,12 @@ class LyricsWorkspace(ttk.Frame):
         self.flush();self.after(2000,self.autosave)
     def refresh_songs(self):
         try:
-            songs=self.store.list();self.song_ids=[d['id'] for d in songs]
+            songs=self.store.list();query=self.query.get().strip().casefold()
+            songs=[d for d in songs if query in (d['title']+' '+d['text']).casefold()]
+            self.song_ids=[d['id'] for d in songs]
             self.saved['values']=[d['title']+' / '+d.get('modified','')[:10] for d in songs]
             if self.doc['id'] in self.song_ids:self.saved.current(self.song_ids.index(self.doc['id']))
+            else:self.saved.set('')
         except Exception as error:self.status.configure(text='Could not list songs: '+str(error))
     def set_document(self,data,revision):
         self.loading=True;self.doc=data;self.revision=revision;self.title.set(data['title'])
@@ -85,10 +97,26 @@ class LyricsWorkspace(ttk.Frame):
     def restore(self):
         if self.listening:return
         try:
-            data=self.store.previous(self.doc['id'])
-            if messagebox.askyesno('Restore previous save','Replace the displayed lyrics with the previous saved version? Current unsaved text will be replaced.'):
-                self.set_document(data,self.revision);self.dirty=True;self.flush(True)
-        except Exception as error:messagebox.showerror('Previous lyrics',str(error))
+            versions=self.store.history(self.doc['id'])
+            if not versions:messagebox.showinfo('Lyric history','No earlier saved version yet. History starts after your second save.');return
+            window=tk.Toplevel(self);window.title('Lyric history — restore as a new song');window.geometry('650x450')
+            window.transient(self.winfo_toplevel());window.grab_set()
+            ttk.Label(window,text='Last 20 saves. Restoring creates a separate song and keeps the current draft.').pack(pady=8)
+            selector=ttk.Combobox(window,state='readonly',values=[str(i+1)+' / '+d.get('modified','')[:19]+' / '+d['title'][:35] for i,d in enumerate(versions)])
+            selector.pack(fill='x',padx=10);selector.current(0)
+            preview=tk.Text(window,wrap='word',height=12);preview.pack(fill='both',expand=True,padx=10,pady=8)
+            def show(event=None):
+                preview.configure(state='normal');preview.delete('1.0','end');preview.insert('1.0',versions[selector.current()]['text']);preview.configure(state='disabled')
+            selector.bind('<<ComboboxSelected>>',show);show()
+            def recover():
+                if not self.flush(True):return
+                data=self.store.new();old=versions[selector.current()]
+                data.update(title=(old['title'][:188]+' (recovered)'),text=old['text'])
+                try:saved,revision=self.store.save(data)
+                except Exception as error:messagebox.showerror('Recovery failed',str(error),parent=window);return
+                self.query.set('');self.set_document(saved,revision);window.destroy()
+            ttk.Button(window,text='Restore as new song',command=recover).pack(pady=8)
+        except Exception as error:messagebox.showerror('Lyric history',str(error))
     def section(self,name):
         self.text.edit_separator();self.text.insert('insert','\n['+name+']\n');self.text.edit_separator();self.text.focus_set()
     def undo(self):
@@ -118,8 +146,8 @@ class LyricsWorkspace(ttk.Frame):
         if self.is_busy():messagebox.showinfo('Audio Lab is working','Wait for the current audio job to finish before starting dictation.');return
         self.listening=True;self.mic.configure(text='Preparing offline dictation…');self.partial.configure(text='')
         for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button):button.configure(state='disabled')
-        self.devices.configure(state='disabled');self.stop_button.configure(state='normal')
-        try:self.dictation.start(self.device_ids[max(0,self.devices.current())])
+        self.channel.configure(state='disabled');self.devices.configure(state='disabled');self.stop_button.configure(state='normal')
+        try:self.dictation.start(self.device_ids[max(0,self.devices.current())],self.channel.current()+1)
         except Exception as error:
             self.dictation.events.put(('error',str(error)));self.dictation.events.put(('done','MIC OFF — could not start dictation.'))
     def stop(self):
@@ -128,6 +156,9 @@ class LyricsWorkspace(ttk.Frame):
         if self.listening:self.pending_close=callback;self.stop()
         else:callback()
     def poll(self):
+        db,clipped=self.dictation.level
+        self.meter['value']=max(0,db+60) if self.listening else 0
+        self.level_text.configure(text=(f'{db:.0f} dBFS — '+('Clipping: lower input gain' if clipped else 'Quiet: check mic/gain' if db < -55 else 'Signal detected')) if self.listening else 'Mic idle')
         try:
             while True:
                 kind,value=self.dictation.events.get_nowait()
@@ -139,7 +170,7 @@ class LyricsWorkspace(ttk.Frame):
                 elif kind=='done':
                     self.listening=False;self.mic.configure(text=value)
                     for button in (self.start_button,self.new_button,self.open_button,self.restore_button,self.refresh_button):button.configure(state='normal')
-                    self.devices.configure(state='readonly');self.stop_button.configure(state='disabled');self.flush()
+                    self.channel.configure(state='readonly');self.devices.configure(state='readonly');self.stop_button.configure(state='disabled');self.flush()
                     if self.pending_close:
                         callback=self.pending_close;self.pending_close=None;callback()
                         try:
@@ -148,3 +179,4 @@ class LyricsWorkspace(ttk.Frame):
                         return
         except queue.Empty:pass
         self.after(100,self.poll)
+

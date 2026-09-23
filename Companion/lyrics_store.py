@@ -49,8 +49,18 @@ class LyricsStore:
                 raise RuntimeError('This song changed in another window. Export TXT before reopening it; your current text has been kept.')
             saved=dict(data);saved['title']=saved['title'].strip() or 'Untitled song';saved['modified']=datetime.datetime.now(datetime.timezone.utc).isoformat()
             raw=json.dumps(saved,ensure_ascii=False,indent=2).encode('utf-8')
-            if old is not None:self.atomic_write(path.with_suffix('.previous.json'),old)
+            if old is not None:
+                self.atomic_write(path.with_suffix('.previous.json'),old)
+                history=self.directory/'history'/data['id'];history.mkdir(parents=True,exist_ok=True)
+                # Retain distinct pre-save versions; current draft is never pruned.
+                snapshot=history/(datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%f')+'-'+uuid.uuid4().hex+'.json')
+                self.atomic_write(snapshot,old)
             self.atomic_write(path,raw)
+            history=self.directory/'history'/data['id']
+            if history.exists():
+                for extra in sorted(history.glob('*.json'),reverse=True)[20:]:
+                    try:extra.unlink()
+                    except OSError:pass  # Do not report a successful draft save as failed.
             return saved,self.revision(raw)
         finally:lock.unlink(missing_ok=True)
     def list(self):
@@ -68,6 +78,19 @@ class LyricsStore:
         data=json.loads(path.read_bytes());self.validate(data)
         if data.get('id')!=identifier:raise ValueError('Song identity mismatch.')
         return data
+    def history(self,identifier):
+        self.path(identifier)  # Validate before building any history path.
+        entries=[]
+        for path in sorted((self.directory/'history'/identifier).glob('*.json'),reverse=True):
+            try:
+                if path.stat().st_size>4*1024*1024:continue
+                data=json.loads(path.read_bytes());self.validate(data)
+                if data.get('id')==identifier:entries.append(data)
+            except (OSError,ValueError):continue
+        if not entries:
+            try:entries.append(self.previous(identifier))  # V6.4 migration.
+            except (OSError,ValueError):pass
+        return entries[:20]
     @staticmethod
     def export_text(path,title,text):
         path=Path(path)
@@ -80,3 +103,4 @@ class LyricsStore:
             if created:path.unlink(missing_ok=True)
             raise
         return path
+

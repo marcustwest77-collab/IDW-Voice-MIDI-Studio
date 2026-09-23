@@ -153,7 +153,7 @@ def main(gui_smoke=False, preview_path=None):
     import threading
     import webbrowser
     root = tk.Tk()
-    root.title('IDW Audio Lab — V6.4')
+    root.title('IDW Audio Lab — V6.5')
     root.geometry('1020x900')
     root.minsize(800, 760)
     panel = ttk.Frame(root, padding=18)
@@ -302,6 +302,11 @@ def main(gui_smoke=False, preview_path=None):
         lyrics.text.insert('1.0',demo);root.update()
         assert lyrics.flush(), 'Lyric draft save failed'
         assert lyrics.store.load(lyrics.doc['id'])[0]['text']==demo
+        lyrics.query.set('songwriting');root.update();assert lyrics.doc['id'] in lyrics.song_ids
+        lyrics.query.set('no matching song 8472');root.update();assert not lyrics.song_ids
+        lyrics.query.set('');lyrics.dictation.level=(-18.0,False);lyrics.listening=True;lyrics.poll();root.update()
+        assert 'Signal detected' in lyrics.level_text.cget('text')
+        lyrics.listening=False;lyrics.dictation.level=(-100.0,False);lyrics.poll();root.update()
         check_bounds(lyrics)
         if preview_path:
             root.update();x,y=lyrics.winfo_rootx(),lyrics.winfo_rooty()
@@ -311,7 +316,7 @@ def main(gui_smoke=False, preview_path=None):
 
 def cli():
     import argparse
-    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.4')
+    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.5')
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--gui-smoke', action='store_true')
     parser.add_argument('--test-report', type=Path)
@@ -348,3 +353,4 @@ def cli():
 
 if __name__ == '__main__':
     sys.exit(cli())
+

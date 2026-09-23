@@ -1,9 +1,14 @@
-IDW V6 SOURCE CANDIDATE
+IDW VOICE MIDI STUDIO V6.5 — WINDOWS x64
 
-This candidate has no newly compiled Windows EXE. Use your V5 portable build until V6 passes its Windows checks.
+Extract the entire ZIP. Double-click Run-IDW.cmd for voice-to-MIDI.
+Double-click Run-Audio-Lab.cmd for lyrics, offline dictation, MIDI editing
+and WAV transcription. No separate Python installation is needed in the
+compiled package. Keep the entire Audio-Lab folder intact.
 
-Open START-HERE.html for features, setup and validation status.
-Developers: BUILD-WINDOWS.cmd builds the native program with Visual Studio 2022 C++ tools.
-Optional Audio Lab: Python 3.10 required; open Companion/Run-Audio-Lab.cmd.
-Install its transcription model with Companion/Setup-Transcription.cmd.
-See docs/V6-UPGRADE.md for cloud voice conversion and FL routing instructions.
+New: Lyrics / talk to text > Find song, Input 1 / Input 2, microphone
+level meter and History (restore earlier lyrics as a separate song).
+Drafts auto-save in your user folder / IDW Audio Lab / Lyrics.
+Read START-HERE.html and docs/V6.5-UPGRADE.md for setup and limits.
+
+Pro Tools Intro does not load VST3. Run IDW separately and send MIDI through
+your existing loopMIDI port, or export/import a MIDI file. No AAX is included.

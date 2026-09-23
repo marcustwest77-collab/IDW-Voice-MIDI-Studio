@@ -38,4 +38,28 @@ class LyricsTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):self.store.save(song)
         with self.assertRaises(ValueError):self.store.save(dict(song,text=123))
 
+    def test_history_retains_twenty_and_current(self):
+        song=self.store.new();song['text']='0';song,rev=self.store.save(song)
+        for i in range(1,25):
+            song['text']=str(i);song,rev=self.store.save(song,rev)
+        versions=self.store.history(song['id'])
+        self.assertEqual([d['text'] for d in versions],[str(i) for i in range(23,3,-1)])
+        self.assertEqual(self.store.load(song['id'])[0]['text'],'24')
+        recovered=self.store.new();recovered.update(title='Recovered',text=versions[-1]['text'])
+        self.store.save(recovered)
+        self.assertEqual(self.store.load(song['id'])[0]['text'],'24')
+        self.assertEqual(self.store.load(recovered['id'])[0]['text'],'4')
+    def test_history_failure_preserves_current(self):
+        song,rev=self.store.save(self.store.new());original=self.store.path(song['id']).read_bytes()
+        song['text']='new'
+        with patch('lyrics_store.Path.mkdir',side_effect=OSError('disk full')),self.assertRaises(OSError):self.store.save(song,rev)
+        self.assertEqual(self.store.path(song['id']).read_bytes(),original)
+    def test_v64_previous_fallback_and_corrupt_history(self):
+        song,rev=self.store.save(self.store.new());song['text']='second';self.store.save(song,rev)
+        history=self.store.directory/'history'/song['id']
+        for p in history.glob('*.json'):p.write_text('bad json')
+        self.assertEqual(self.store.history(song['id'])[0]['text'],'')
+        with self.assertRaises(ValueError):self.store.history('../bad')
+
 if __name__=='__main__':unittest.main()
+
