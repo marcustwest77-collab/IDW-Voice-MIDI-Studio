@@ -159,7 +159,7 @@ def main(gui_smoke=False, preview_path=None):
     panel = ttk.Frame(root, padding=18)
     panel.pack(fill='both', expand=True)
     ttk.Label(panel, text='IDW / AUDIO LAB', font=('Segoe UI', 20, 'bold')).pack(anchor='w')
-    ttk.Label(panel, text='Offline transcription • recording inspection • MIDI take editing • optional cloud voices').pack(anchor='w', pady=(0, 12))
+    ttk.Label(panel, text='Local transcription • MIDI editing • lyrics and offline dictation • optional cloud voices').pack(anchor='w', pady=(0, 12))
     chosen = tk.StringVar()
     file_row = ttk.Frame(panel); file_row.pack(fill='x')
     ttk.Entry(file_row, textvariable=chosen).pack(side='left', fill='x', expand=True)
@@ -169,7 +169,7 @@ def main(gui_smoke=False, preview_path=None):
             chosen.set(path)
     ttk.Button(file_row, text='Choose WAV', command=choose).pack(side='left', padx=8)
     ttk.Label(panel, text='16-bit PCM WAV • mono/stereo • up to 10 minutes and 25 MiB').pack(anchor='w')
-    notebook = ttk.Notebook(panel); notebook.pack(fill='x', pady=16)
+    notebook = ttk.Notebook(panel); notebook.pack(fill='both', expand=True, pady=12)
     local = ttk.Frame(notebook, padding=14); cloud = ttk.Frame(notebook, padding=14)
     notebook.add(local, text='Local recording tools'); notebook.add(cloud, text='Cloud / trained voices')
     ttk.Label(local, text='Transcribe chords or a single instrument into MIDI. Full mixes may need isolated stems first.\nThe Windows portable edition includes the local model; this is file processing, not live polyphonic tracking.').pack(anchor='w')
@@ -184,12 +184,13 @@ def main(gui_smoke=False, preview_path=None):
     ttk.Label(local, text='Lower thresholds detect quieter notes but may add false notes. Longer minimums remove short notes.\nTempo sets the MIDI tempo map; it does not quantize or change the audio speed.').pack(anchor='w')
     latest_midi = [None]
     result_queue = queue.Queue(); busy = False; actions = []
-    output = tk.Text(panel, height=6, wrap='word'); output.pack(fill='both', expand=True)
+    output = tk.Text(panel, height=4, wrap='word'); output.pack(fill='x')
     def write(text):
         output.insert('end', str(text) + '\n'); output.see('end')
     def run(fn):
         nonlocal busy
         if busy: return
+        if lyrics.listening: write('Stop dictation before starting another Audio Lab job.'); return
         busy = True
         for button in actions: button.configure(state='disabled')
         write('Working…')
@@ -221,6 +222,11 @@ def main(gui_smoke=False, preview_path=None):
         if destination: run(lambda: ('transcription', str(transcribe(path, destination, **settings))))
     from take_editor_ui import TakeEditor
     review = TakeEditor(notebook, write); notebook.add(review, text='MIDI take editor')
+    from lyrics_ui import LyricsWorkspace
+    import tempfile
+    lyric_test_folder = tempfile.TemporaryDirectory() if gui_smoke else None
+    lyrics = LyricsWorkspace(notebook, write, lambda: busy, lyric_test_folder.name if lyric_test_folder else None)
+    notebook.add(lyrics, text='Lyrics / talk to text')
     def review_latest():
         if latest_midi[0] is None: write('Transcribe a WAV first, or open an existing .mid in MIDI take editor.'); return
         if review.confirm_discard():
@@ -260,7 +266,11 @@ def main(gui_smoke=False, preview_path=None):
         if not review.confirm_discard(): return
         if busy and not messagebox.askyesno('Work is running', 'Close Audio Lab? Local processing will stop. An accepted cloud job may continue in your Kits account.'):
             return
-        key.set(''); root.destroy()
+        def finish():
+            if not lyrics.flush() and not messagebox.askyesno('Lyrics not saved','Could not save the lyric draft. Close without saving it? Choose No to export TXT or retry saving.'):
+                return
+            key.set(''); root.destroy()
+        lyrics.close_when_ready(finish)
     root.protocol('WM_DELETE_WINDOW', close)
     write('Local tools do not upload audio. Choose WAV, inspect the levels, then transcribe. Cloud conversion requires your Kits account.')
     poll()
@@ -286,6 +296,16 @@ def main(gui_smoke=False, preview_path=None):
             root.lift();root.update()
             x,y=review.winfo_rootx(),review.winfo_rooty()
             ImageGrab.grab(bbox=(x,y,x+review.winfo_width(),y+review.winfo_height())).save(preview_path)
+        notebook.select(lyrics)
+        lyrics.title.set('IDW songwriting demo')
+        demo='[Verse]\nIdeas turn to melodies\nI write them as they come to me\n\n[Hook]\nKeep the words, keep the feeling\nBuild the song from what I am hearing\n'
+        lyrics.text.insert('1.0',demo);root.update()
+        assert lyrics.flush(), 'Lyric draft save failed'
+        assert lyrics.store.load(lyrics.doc['id'])[0]['text']==demo
+        check_bounds(lyrics)
+        if preview_path:
+            root.update();x,y=lyrics.winfo_rootx(),lyrics.winfo_rooty()
+            ImageGrab.grab(bbox=(x,y,x+lyrics.winfo_width(),y+lyrics.winfo_height())).save(preview_path.with_name('IDW-V6-Lyrics.png'))
         root.after(1000, root.destroy)
     root.mainloop()
 
@@ -296,6 +316,7 @@ def cli():
     parser.add_argument('--gui-smoke', action='store_true')
     parser.add_argument('--test-report', type=Path)
     parser.add_argument('--preview-path', type=Path)
+    parser.add_argument('--speech-test', type=Path)
     args = parser.parse_args()
     # Windowed executables have no stdout. Libraries still expect a writable stream.
     import os
@@ -307,8 +328,11 @@ def cli():
             result = run()
             from take_editor_smoke import run as editor_test
             result += '\n' + editor_test()
+            from offline_speech import speech_smoke
+            if not args.speech_test: raise ValueError('Provide --speech-test with the official Vosk example WAV for packaged testing.')
+            result += '\n' + speech_smoke(args.speech_test)
             main(gui_smoke=True, preview_path=args.preview_path)
-            result += '\nPASS packaged Tk GUI startup / piano-roll drawing / minimum-width editor bounds'
+            result += '\nPASS packaged Tk GUI startup / piano-roll drawing / minimum-width editor bounds / lyric draft save and reopen'
             if args.test_report: args.test_report.write_text(result, encoding='utf-8')
             print(result)
         else: main(gui_smoke=args.gui_smoke)

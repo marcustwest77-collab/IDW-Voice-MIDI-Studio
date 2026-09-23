@@ -24,9 +24,9 @@ class TakeEditor(ttk.Frame):
         ttk.Button(tools,text='Transpose semitones',command=self.transpose).pack(side='left',padx=4)
         self.grid=ttk.Combobox(tools,state='readonly',width=5,values=['1/4','1/8','1/16','1/32']);self.grid.set('1/16');self.grid.pack(side='left')
         ttk.Button(tools,text='Snap starts',command=self.quantize).pack(side='left',padx=4)
-        area=ttk.Frame(self);area.pack(fill='x',pady=6)
+        area=ttk.Frame(self);area.pack(fill='both',expand=True,pady=6)
         self.canvas=tk.Canvas(area,height=210,background='#101722',highlightthickness=0)
-        self.canvas.grid(row=0,column=0,sticky='nsew');area.columnconfigure(0,weight=1)
+        self.canvas.grid(row=0,column=0,sticky='nsew');area.columnconfigure(0,weight=1);area.rowconfigure(0,weight=1)
         self.xscroll=ttk.Scrollbar(area,orient='horizontal',command=self.scroll_x);self.xscroll.grid(row=1,column=0,sticky='ew')
         self.yscroll=ttk.Scrollbar(area,orient='vertical',command=self.scroll_y);self.yscroll.grid(row=0,column=1,sticky='ns')
         self.canvas.configure(xscrollcommand=self.xscroll.set,yscrollcommand=self.yscroll.set)
@@ -76,7 +76,10 @@ class TakeEditor(ttk.Frame):
         self.draw()
 
     def filter(self,event=None):
-        self.track=self.track_ids[self.tracks.current()];self.selected=None;self.draw()
+        self.track=self.track_ids[self.tracks.current()];self.selected=None
+        notes=[n for n in self.take.notes if self.track is None or n.track==self.track] if self.take else []
+        if notes:self.canvas.yview_moveto(max(0,(127-max(n.pitch for n in notes)-2)*self.ROW)/(128*self.ROW+24))
+        self.draw()
     def undo(self):
         if self.take:self.take.undo();self.selected=None;self.refresh()
     def redo(self):
@@ -135,7 +138,7 @@ class TakeEditor(ttk.Frame):
             if 50+beat*self.scale>=left+42:c.create_text(50+beat*self.scale+2,top+3,anchor='nw',fill='#b5c2d3',text=str(beat))
 
     def click(self,event):
-        if not self.take:return
+        if not self.take or event.x<42 or event.y<19:return
         hits=self.canvas.find_overlapping(self.canvas.canvasx(event.x),self.canvas.canvasy(event.y),self.canvas.canvasx(event.x),self.canvas.canvasy(event.y))
         for item in reversed(hits):
             tags=self.canvas.gettags(item)

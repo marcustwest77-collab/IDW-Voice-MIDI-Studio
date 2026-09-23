@@ -45,6 +45,7 @@ jobs:
           Copy-Item pluginval-result.txt $package.FullName
           Copy-Item audio-lab-packaged-test.txt $package.FullName
           Copy-Item IDW-V6-Take-Editor.png (Join-Path $package.FullName 'Previews')
+          Copy-Item IDW-V6-Lyrics.png (Join-Path $package.FullName 'Previews')
           Copy-Item -Recurse audio-lab-dist/IDW-Audio-Lab (Join-Path $package.FullName 'Audio-Lab')
           Set-Content -Path (Join-Path $package.FullName 'Run-Audio-Lab.cmd') -Value '@echo off', 'cd /d "%~dp0"', 'start "" "Audio-Lab\IDW-Audio-Lab.exe"' -Encoding ascii
           Compress-Archive -Path $package.FullName -DestinationPath ($package.FullName + '.zip') -Force
