@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "StateCompatibility.h"
 #include <cmath>
 IDWVoiceMIDIStudioAudioProcessor::IDWVoiceMIDIStudioAudioProcessor()
  : AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::mono(),true)
@@ -42,11 +43,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout IDWVoiceMIDIStudioAudioProce
     const int extraDrumNotes[]={39,45,46,49,51};
     for (int i=3;i<8;++i)
         p.add(std::make_unique<I>("pad"+juce::String(i+1), "Drum Pad "+juce::String(i+1), 0, 127, extraDrumNotes[i-3]));
+    p.add(std::make_unique<I>("harmonyMode", "Harmony Scale", 0, 2, 0));
+    p.add(std::make_unique<I>("harmonyVoicing", "Chord Voicing", 0, 1, 0));
+    p.add(std::make_unique<B>("harmonyBass", "Bass Layer", false));
+    p.add(std::make_unique<I>("voiceLow", "Lowest Voice Note", 0, 127, 0));
+    p.add(std::make_unique<I>("voiceHigh", "Highest Voice Note", 0, 127, 127));
     return p;
 }
 
 
 void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
+    heldHarmony={};
     inputPeak.store(0);observedRate.store(sr);observedBlock.store(block);
     sampleRateHz=sr;hopSize=juce::jmax(1,(int)std::lround(sr*0.005));hop.assign((size_t)hopSize,0);hopFill=0;
     pitch.prepare(sr,block);beats.prepare(sr);mpe.reset();learn.prepare(apvts);capture.resetAudio();
@@ -62,7 +69,21 @@ bool IDWVoiceMIDIStudioAudioProcessor::isBusesLayoutSupported(const BusesLayout&
     return (i==juce::AudioChannelSet::mono()||i==juce::AudioChannelSet::stereo())
         && (o==juce::AudioChannelSet::mono()||o==juce::AudioChannelSet::stereo());
 }
+void IDWVoiceMIDIStudioAudioProcessor::stopHarmony(juce::MidiBuffer& out,int at){
+    for(int note:heldHarmony.chord)if(note>=0)out.addEvent(juce::MidiMessage::noteOff(2,note),at);
+    if(heldHarmony.bass>=0)out.addEvent(juce::MidiMessage::noteOff(3,heldHarmony.bass),at);
+    heldHarmony={};
+}
+void IDWVoiceMIDIStudioAudioProcessor::updateHarmony(juce::MidiBuffer& out,int at){
+    // MPE occupies member channels, including 2/3. Never mix the two modes.
+    const auto wanted=value("mpe")>0.5f?idw::HarmonyNotes{}:idw::harmonize(active,(int)value("root"),(int)value("harmonyMode"),value("harmonyVoicing")>0.5f,value("harmonyBass")>0.5f);
+    if(wanted==heldHarmony)return;
+    stopHarmony(out,at);heldHarmony=wanted;
+    for(int note:heldHarmony.chord)if(note>=0)out.addEvent(juce::MidiMessage::noteOn(2,note,(juce::uint8)80),at);
+    if(heldHarmony.bass>=0)out.addEvent(juce::MidiMessage::noteOn(3,heldHarmony.bass,(juce::uint8)90),at);
+}
 void IDWVoiceMIDIStudioAudioProcessor::endVoice(juce::MidiBuffer& out,int at){
+    stopHarmony(out,at);
     if(active>=0){out.addEvent(juce::MidiMessage::noteOff(activeChannel,active),at);out.addEvent(juce::MidiMessage::pitchWheel(activeChannel,8192),at);mpe.release(active);}
     active=candidate=-1;candidateSamples=0;midi.store(-1);lastWheel=-1;lastCC=-1;displayedBend.store(0);
 }
@@ -86,7 +107,9 @@ void IDWVoiceMIDIStudioAudioProcessor::analyse(juce::MidiBuffer& out,int at){
     const int first=(int)value("mpeFirst"),last=(int)value("mpeLast");
     if(mpeOn!=previousMpe||first!=previousFirst||last!=previousLast){endVoice(out,at);mpe.reset();negotiatedRanges.fill(-1);previousMpe=mpeOn;previousFirst=first;previousLast=last;}
     mpe.setZone(first,last);scale.setMask((uint16_t)value("scaleMask"));
-    const bool valid=detected>0 && rms>=value("gate") && quality>=value("confidence") && value("melody")>0.5f && inhibitSamples==0 && beats.trainingPad()<0;
+    const float voiceNote=detected>0?69.0f+12.0f*std::log2(detected/440.0f):-1000.0f;
+    const bool inVoiceRange=voiceNote>=juce::jmin(value("voiceLow"),value("voiceHigh"))-0.5f && voiceNote<=juce::jmax(value("voiceLow"),value("voiceHigh"))+0.5f;
+    const bool valid=inVoiceRange && detected>0 && rms>=value("gate") && quality>=value("confidence") && value("melody")>0.5f && inhibitSamples==0 && beats.trainingPad()<0;
     if(valid){
         const float measured=69.0f+12.0f*std::log2(detected/440.0f)+value("tuneCents")/100.0f;
         if(smoothNote<0||std::abs(measured-smoothNote)>7)smoothNote=measured;
@@ -127,6 +150,7 @@ void IDWVoiceMIDIStudioAudioProcessor::analyse(juce::MidiBuffer& out,int at){
         candidate=-1;candidateSamples=0;silentSamples=juce::jmin((int)sampleRateHz,silentSamples+hopSize);
         if(silentSamples>=(int)(sampleRateHz*0.075)||value("melody")<0.5f){endVoice(out,at);smoothNote=-1;lastHz=0;}
     }
+    updateHarmony(out,at);
     // Always run onset bookkeeping so toggling beatbox cannot resurrect a stale onset.
     const auto hit=beats.process(hop.data(),hopSize,value("beatThreshold"));
     if(value("beatbox")>0.5f && inhibitSamples==0 && hit.pad>=0){
@@ -192,7 +216,7 @@ void IDWVoiceMIDIStudioAudioProcessor::getStateInformation(juce::MemoryBlock& da
     if(auto xml=state.createXml())copyXmlToBinary(*xml,data);
 }
 void IDWVoiceMIDIStudioAudioProcessor::setStateInformation(const void* data,int size){
-    if(auto xml=getXmlFromBinary(data,size))if(xml->hasTagName(apvts.state.getType())){apvts.replaceState(juce::ValueTree::fromXml(*xml));restoreExtraState();}
+    if(auto xml=getXmlFromBinary(data,size))if(xml->hasTagName(apvts.state.getType())){apvts.replaceState(withV5Defaults(juce::ValueTree::fromXml(*xml),apvts));restoreExtraState();}
 }
 juce::AudioProcessorEditor* IDWVoiceMIDIStudioAudioProcessor::createEditor(){return new IDWVoiceMIDIStudioAudioProcessorEditor(*this);}
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new IDWVoiceMIDIStudioAudioProcessor();}

@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "MidiExport.h"
+#include "VoiceProfiles.h"
 #include <iostream>
 #include <random>
 #include <chrono>
@@ -103,6 +104,58 @@ void testPreviewAndStereo(){
     for(int base=0;base<9600;base+=128){juce::AudioBuffer<float> audio(2,128);audio.clear();juce::MidiBuffer events;for(int i=0;i<128;++i)audio.setSample(1,i,0.1f*(float)std::sin(juce::MathConstants<double>::twoPi*220*(base+i)/48000));p->processBlock(audio,events);check(audio.getRMSLevel(0,0,128)==0&&audio.getRMSLevel(1,0,128)==0,"Microphone monitoring not muted by default");for(auto e:events)if(e.getMessage().isNoteOn())played=true;}
     check(played,"Right-channel microphone not tracked");std::cout<<"PASS audible preview / right-channel input / default monitor mute\n";
 }
+void testArrangement(){
+    auto p=processor(48000,128);parameter(*p,"harmonyMode",1);parameter(*p,"harmonyBass",1);
+    auto e=run(*p,48000,128,0.2,220);int lead=0,chords=0,bass=0;
+    for(const auto& x:e)if(x.message.isNoteOn()){
+        const int ch=x.message.getChannel(),n=x.message.getNoteNumber();
+        if(ch==1){check(n==57,"Wrong lead note");++lead;}
+        if(ch==2){check(n==57||n==60||n==64,"Wrong diatonic chord");++chords;}
+        if(ch==3){check(n==33,"Wrong bass octave");++bass;}
+    }
+    check(lead==1&&chords==3&&bass==1,"Arrangement layers missing or retriggered");
+    parameter(*p,"harmonyMode",0);e=run(*p,48000,128,0.02,220,0.1f,9600);int off=0;
+    for(const auto& x:e)if(x.message.isNoteOff()&&(x.message.getChannel()==2||x.message.getChannel()==3))++off;
+    check(off==4,"Disabling harmony left held notes");check(p->note()==57,"Harmony disable interrupted lead");
+    parameter(*p,"harmonyMode",1);parameter(*p,"mpe",1);e=run(*p,48000,128,0.1,220,0.1f,10560);int ons=0;
+    for(const auto& x:e)if(x.message.isNoteOn())++ons;check(ons==1,"MPE should produce only one lead, not chord/bass layers");
+    auto ranged=processor(48000,128);parameter(*ranged,"voiceLow",60);parameter(*ranged,"voiceHigh",72);
+    e=run(*ranged,48000,128,0.2,220);for(const auto& x:e)check(!x.message.isNoteOn(),"Voice range did not reject low note");
+    std::cout<<"PASS V5 arrangement / channel separation / mode release / MPE exclusion / voice range\n";
+}
+void testLegacyState(){
+    auto p=processor(48000,128);auto legacy=p->apvts.copyState();
+    for(const char* id:{"harmonyMode","harmonyVoicing","harmonyBass","voiceLow","voiceHigh"})legacy.removeChild(legacy.getChildWithProperty("id",id),nullptr);
+    parameter(*p,"harmonyMode",2);parameter(*p,"harmonyBass",1);parameter(*p,"voiceLow",70);
+    auto xml=legacy.createXml();juce::MemoryBlock data;juce::AudioProcessor::copyXmlToBinary(*xml,data);p->setStateInformation(data.getData(),(int)data.getSize());
+    check(p->apvts.getRawParameterValue("harmonyMode")->load()==0,"Legacy state left harmony enabled");
+    check(p->apvts.getRawParameterValue("voiceLow")->load()==0&&p->apvts.getRawParameterValue("voiceHigh")->load()==127,"Legacy state retained restrictive voice profile");
+    std::cout<<"PASS V4 state migration defaults V5-only controls\n";
+}
+void testVoiceProfiles(){
+    auto p=processor(48000,128);const auto name="Regression-"+juce::Uuid().toString();
+    parameter(*p,"voiceLow",48);parameter(*p,"voiceHigh",76);parameter(*p,"gate",0.019f);parameter(*p,"harmonyMode",2);
+    check(VoiceProfiles::save(p->apvts,name),"Voice profile save failed");
+    parameter(*p,"voiceLow",0);parameter(*p,"gate",0.002f);parameter(*p,"harmonyMode",1);
+    check(VoiceProfiles::load(p->apvts,name),"Voice profile load failed");
+    check(p->apvts.getRawParameterValue("voiceLow")->load()==48,"Voice range did not restore");
+    check(std::abs(p->apvts.getRawParameterValue("gate")->load()-0.019f)<0.0001f,"Voice calibration did not restore");
+    check(p->apvts.getRawParameterValue("harmonyMode")->load()==1,"Voice profile overwrote arrangement");
+    VoiceProfiles::directory().getChildFile(name+".xml").deleteFile();
+    std::cout<<"PASS V5 named voice profile roundtrip / musical-state isolation\n";
+}
+void testTakeRecovery(){
+    auto p=processor(48000,128);check(p->takes.start(123),"Cannot start processor-owned take");run(*p,48000,128,0.15,220);
+    p->takes.drain();const auto size=p->takes.size();check(size>0,"Take not retained by processor");
+    {std::unique_ptr<juce::AudioProcessorEditor> editor(p->createEditor());}
+    check(p->capture.isRecording(),"Closing editor stopped recording");check(p->takes.size()>=size,"Closing editor discarded take");
+    run(*p,48000,128,0.1,220,0.1f,7200);p->capture.stop();run(*p,48000,128,0.01,220,0.1f,12000);p->takes.drain();
+    const auto file=juce::File::getCurrentWorkingDirectory().getChildFile("V5-Recovery-Test.mid");check(p->takes.exportTo(file),"Export retained take failed");
+    auto restored=processor(48000,128);check(restored->takes.recover(file),"Recovery MIDI load failed");
+    check(restored->takes.size()>0&&std::abs(restored->takes.tempo()-123)<0.01,"Recovered take or tempo invalid");
+    const auto before=restored->takes.size();check(!restored->takes.recover(file.getSiblingFile("nonexistent.mid")),"Invalid recovery file accepted");check(restored->takes.size()==before,"Failed recovery destroyed take");
+    std::cout<<"PASS V5 recording survives editor close / MIDI recovery / tempo / failed-load preservation\n";
+}
 void renderEditor(){
     auto p=processor(48000,128);std::vector<float> before;for(auto* parameter:p->getParameters())before.push_back(parameter->getValue());std::unique_ptr<juce::AudioProcessorEditor> editor(p->createEditor());for(int i=0;i<p->getParameters().size();++i)check(std::abs(before[(size_t)i]-p->getParameters()[i]->getValue())<1.0e-6f,"Opening editor modifies processor parameters");editor->setVisible(true);
     for(auto size:{std::pair<int,int>{1120,900},{1040,890}}){
@@ -110,10 +163,15 @@ void renderEditor(){
         for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Visible control outside editor bounds");
         juce::Image image(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(image);editor->paintEntireComponent(graphics,true);}
         check(image.getPixelAt(1,1).getAlpha()>0,"Editor render is empty");juce::MemoryOutputStream output;juce::PNGImageFormat png;check(png.writeImageToStream(image,output),"Cannot render UI preview");
-        const auto file=juce::File::getCurrentWorkingDirectory().getChildFile(size.first==1120?"IDW-V4-Preview.png":"IDW-V4-Minimum.png");check(file.replaceWithData(output.getData(),output.getDataSize()),"Cannot save UI preview");
+        const auto file=juce::File::getCurrentWorkingDirectory().getChildFile(size.first==1120?"IDW-V5-Preview.png":"IDW-V5-Minimum.png");check(file.replaceWithData(output.getData(),output.getDataSize()),"Cannot save UI preview");
     }
-    std::cout<<"PASS editor rendering / default and minimum-size control bounds\n";
+    for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Studio controls"){button->onClick();break;}
+    for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Studio control outside editor bounds");
+    juce::Image studio(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(studio);editor->paintEntireComponent(graphics,true);}
+    juce::MemoryOutputStream stream;juce::PNGImageFormat png;check(png.writeImageToStream(studio,stream),"Cannot render Studio view");
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V5-Studio.png").replaceWithData(stream.getData(),stream.getDataSize()),"Cannot save Studio preview");
+    std::cout<<"PASS V5 performance/default/minimum and Studio editor render / bounds\n";
 }
 }
-int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
+int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
 

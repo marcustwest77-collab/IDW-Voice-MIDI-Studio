@@ -1,52 +1,17 @@
-# IDW Voice MIDI Studio 4.1 — source upgrade
+# IDW Voice MIDI Studio V5 — arrangement and recovery candidate
 
-Open **START-HERE.html** for build, installation, routing, troubleshooting and test instructions.
+This source candidate builds on V4.1. No V5 EXE has been compiled yet.
 
-**No new EXE or VST3 is included in this source package.** Run BUILD-WINDOWS.cmd on a configured Windows development computer to build and test them. Read docs/VALIDATION-4.1.md for current verification limits and docs/CHANGES-4.1.md for changes.
+Open START-HERE.html for the visual setup guide. Run BUILD-WINDOWS.cmd with VS2022 Desktop development with C++, CMake, Windows SDK and Git installed to produce a tested local build. The branch-scoped windows-v5.yml workflow is prepared for GitHub but requires approval before upload/run.
 
-## Original V4 documentation (historical)
+## New in V5
+- Diatonic major/natural-minor triads or sevenths from one detected voice note, with optional bass.
+- Lead/channel 1, chord/channel 2, bass/channel 3, drums/channel 10. MPE suppresses harmony layers to prevent collisions.
+- Named voice profiles: input channel, noise gate, confidence, tuning and comfortable note range. A 12-second range learner helps set the limits.
+- Processor-owned takes continue when the editor is closed; periodic MIDI recovery files and recovery-file picker.
+- Performance screen plus the full Studio controls, using IDW's dark/gold visual style.
+- Explicit default migration for older V4 states/presets.
 
-# IDW Voice MIDI Studio 4.0
+Read docs/V5-VALIDATION.md for checks performed versus pending. No latency reduction, polyphonic transcription, microphone auto-selection or additional synthesizer is claimed.
 
-Windows standalone and VST3 voice-to-MIDI, built with JUCE 9.0.2. This upgrade retains the original plugin identifier and IDW_V9 session tree for compatibility.
-
-## What changed
-
-- Fixed 5 ms analysis hops independent of the host audio buffer; bounded YIN analysis and time-based smoothing, note confirmation and release.
-- Strict scale mode keeps pitch bends centered; Natural vibrato retains up to 45 cents of local expression.
-- Mono/stereo input support, selectable analysis channel, independent microphone monitoring and a simple sine preview instrument.
-- Test Note, Panic, live pitch history, MIDI event counts and callback load display.
-- MPE note-offs use the channel that originally started the note. Channel 10 is reserved for drums. Pitch-bend range is sent using RPN.
-- Channel-aware MIDI Learn handles all CC events in a block. Mappings persist with sessions and user presets.
-- Eight trainable drum pads using five local spectral examples per pad; velocity-sensitive hits and 40 ms MIDI drum durations.
-- MIDI recording up to ten minutes with export of tempo, notes, bends and CCs. Export explicitly closes held notes.
-- Standalone input is enabled for analysis while direct microphone monitoring defaults off at startup.
-- UI-to-audio communication uses atomic commands / a bounded single-producer queue; no disk writes or training allocations in the audio callback.
-
-See [the manual](docs/USER_MANUAL.md), [FL Studio setup](docs/FL_STUDIO_SETUP.md), and [the validation report](docs/VALIDATION.md).
-
-## Build
-
-Requirements: CMake 3.22+, a C++17 compiler, and JUCE 9.0.2. On Windows use Visual Studio 2022 Build Tools with the Desktop C++ workload and Windows SDK.
-
-```powershell
-./scripts/build-windows.ps1 -JucePath 'C:/path/to/JUCE'
-```
-
-Alternatively:
-
-```text
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DIDW_JUCE_PATH=/path/to/JUCE
-cmake --build build --config Release --parallel 3
-ctest --test-dir build -C Release --output-on-failure
-```
-
-If no local JUCE path is supplied, CMake fetches the pinned 9.0.2 tag. Windows uses a static MSVC runtime so the portable app does not require installing a new Visual C++ runtime. macOS source/build recipes are included but this delivery was built on Windows only.
-
-## Compatibility and scope
-
-The VST3 identity is unchanged: install one version at a time and back up important DAW sessions before upgrading. Existing settings load; old presets without drum profiles or MIDI mappings get empty maps. Version 3 exposed a latencyMs parameter that did not implement delay; its ID is retained for session compatibility, but it is not presented as a working latency control.
-
-This is monophonic voice tracking, not polyphonic transcription. Drum recognition uses local spectral templates rather than a neural model. The MIDI take is editor-local: export before closing the editor. Tempo is fixed per take. No cloud service or API key is needed.
-
-JUCE and its bundled components retain their upstream licenses. This source package does not change the project's existing licensing terms. Build tools are not included.
+Plugin identity and old parameter IDs are retained. Test on a copy of a DAW session before replacing the existing V4.1 plugin. Keep only one version in scanned plugin folders.

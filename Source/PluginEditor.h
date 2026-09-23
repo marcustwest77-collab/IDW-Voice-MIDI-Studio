@@ -15,6 +15,8 @@ private:
     juce::String diagnosticReport() const;
     bool audioRunning() const;
     void configureSlider(juce::Slider&,juce::Label&,const juce::String&,const juce::String&);
+    void setupV5();void layoutV5();void refreshProfiles();void recoverTake();
+    void setValue(const char*,float);
     void refreshPresets();void loadPreset();void syncScale();void showHelp(bool);
     void beginCapture();void drainCapture();void exportCapture();
     bool writeMidi(const juce::File&);
@@ -46,8 +48,14 @@ private:
     bool calibrating=false;double calibrationStarted=0;float noisePeak=0;
     std::array<float,220> history{};int historyPos=0;
     int previousDrumEvents=0,flashPad=-1,flashTicks=0;
-    std::vector<PerformanceCapture::Event> take;
-    double takeBpm=120;bool captureOwned=false,takeTruncated=false;
+    bool performanceView=true,helpVisible=false,learningRange=false;
+    double rangeStarted=0;int learnedLow=127,learnedHigh=0,rangeSamples=0;
+    juce::TextButton viewButton{"Studio controls"},saveProfile{"Save voice"},learnRange{"Learn range"},recover{"Recover take"};
+    juce::ComboBox harmonyMode,harmonyVoicing,profileSelector;
+    juce::ToggleButton bassLayer{"Bass layer"};
+    juce::Slider voiceLow,voiceHigh;
+    juce::Label arrangementTitle,arrangementStatus,profileTitle,lowLabel,highLabel;
+    juce::StringArray profileNames;
     juce::TooltipWindow tooltips{this,500};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IDWVoiceMIDIStudioAudioProcessorEditor)
 };

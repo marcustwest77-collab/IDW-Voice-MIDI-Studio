@@ -1,3 +1,7 @@
+# V5 additions
+
+See ../START-HERE.html for the performance view, channel-separated arrangement, voice profiles and recovery workflow. See V5-VALIDATION.md for current build status. The following earlier setup instructions still apply except that MIDI takes now survive editor closure.
+
 # IDW V4 + FL Studio
 
 ## Try the standalone first
@@ -35,7 +39,7 @@ The port number 10 is a routing connection, not MIDI channel 10. Melody normally
 
 ## Record and export
 
-Set IDW's BPM to your project tempo. Press Record MIDI before performing, stop the take, and Export MIDI. Drag the exported `.mid` file into FL Studio and assign your sounds. Export before closing the IDW editor. The take includes expression CC and pitch bends; how these import depends on the DAW/instrument.
+Set IDW's BPM to your project tempo. Press Record MIDI before performing, stop the take, and Export MIDI. Drag the exported `.mid` file into FL Studio and assign your sounds. Takes survive editor closure; export a project copy. The take includes expression CC and pitch bends; how these import depends on the DAW/instrument.
 
 ## Standalone to FL Studio
 

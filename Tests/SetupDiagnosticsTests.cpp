@@ -12,5 +12,6 @@ int main(){using namespace idw;
  check(diagnose(true,.1f,.08f,.01f,false,true,false,.4f,.75f,false),SetupState::uncertain);
  check(diagnose(true,.1f,.08f,.01f,false,true,false,.9f,.75f,true),SetupState::tracking);
  check(diagnose(true,.1f,.005f,.01f,false,false,true,0,.75f,false),SetupState::listening);
- std::cout<<"PASS: nine setup diagnostic scenarios\n";
+ check(diagnose(true,.1f,.08f,.01f,false,true,false,.9f,.75f,false,false),SetupState::outsideRange);
+ std::cout<<"PASS: ten setup diagnostic scenarios\n";
 }

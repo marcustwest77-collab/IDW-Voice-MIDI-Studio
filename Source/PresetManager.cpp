@@ -1,4 +1,5 @@
 #include "PresetManager.h"
+#include "StateCompatibility.h"
 
 juce::File PresetManager::dir() const
 {
@@ -20,7 +21,7 @@ bool PresetManager::load(const juce::String& name)
     if (! xml || ! xml->hasTagName(state.state.getType()))
         return false;
 
-    state.replaceState(juce::ValueTree::fromXml(*xml));
+    state.replaceState(withV5Defaults(juce::ValueTree::fromXml(*xml),state));
     return true;
 }
 
@@ -81,6 +82,8 @@ bool PresetManager::applyFactoryPreset(const juce::String& name)
     setParameter("latencyMs", 0.0f);
     setParameter("scaleExpression", 0.0f);
     setParameter("melody", 1.0f);
+    setParameter("harmonyMode", 0.0f);
+    setParameter("harmonyBass", 0.0f);
 
     if (name == "Clean Vocal")
     {

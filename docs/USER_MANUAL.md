@@ -1,3 +1,7 @@
+# V5 additions
+
+See ../START-HERE.html for the performance view, channel-separated arrangement, voice profiles and recovery workflow. See V5-VALIDATION.md for current build status. The following earlier setup instructions still apply except that MIDI takes now survive editor closure.
+
 # IDW Voice MIDI Studio 4.0
 
 IDW VOICE MIDI STUDIO / VERSION 4

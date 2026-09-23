@@ -7,6 +7,8 @@
 #include "MidiLearnManager.h"
 #include "BeatboxClassifier.h"
 #include "PerformanceCapture.h"
+#include "HarmonyEngine.h"
+#include "TakeArchive.h"
 class IDWVoiceMIDIStudioAudioProcessor : public juce::AudioProcessor {
 public:
     IDWVoiceMIDIStudioAudioProcessor();
@@ -34,6 +36,7 @@ public:
     MidiLearnManager learn;
     BeatboxClassifier beats;
     PerformanceCapture capture;
+    TakeArchive takes{capture};
     void requestPanic(){panicRequested.store(true);}
     void requestTestNote(){testRequested.store(true);}
     void saveExtraState();
@@ -56,6 +59,9 @@ private:
     float value(const char* id) const{return apvts.getRawParameterValue(id)->load();}
     void analyse(juce::MidiBuffer&,int);
     void endVoice(juce::MidiBuffer&,int);
+    void updateHarmony(juce::MidiBuffer&,int);
+    void stopHarmony(juce::MidiBuffer&,int);
+    idw::HarmonyNotes heldHarmony;
     void allOff(juce::MidiBuffer&,int);
     void negotiateBend(juce::MidiBuffer&,int,int,int);
     YinPitchDetector pitch;

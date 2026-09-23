@@ -1,0 +1,15 @@
+IDW VOICE MIDI STUDIO V5
+
+If you downloaded SOURCE: open START-HERE.html. BUILD-WINDOWS.cmd needs the documented Windows C++ tools. This source ZIP is not an installed program.
+
+If you downloaded a COMPILED WINDOWS PACKAGE: extract the entire ZIP and run Run-IDW.cmd. No development tools are needed for the compiled package.
+
+New performance screen: choose Major/Minor, root and Triad/Seventh. Bass is optional.
+MIDI channels: Lead 1, Chords 2, Bass 3, Drums 10. Use an instrument that can assign parts to channels. Preview sound plays only the lead.
+Studio controls opens all the familiar V4 controls, including microphone channel, MPE, beatbox and presets.
+Save voice creates a named input/range profile. Learn range listens for 12 seconds.
+MIDI recording survives closing the editor. Recover take opens dated recovery MIDI files. Checkpoints occur about every 5 seconds while the message thread runs. Export a project copy after your performance.
+
+Full guide: START-HERE.html
+Current validation: docs/V5-VALIDATION.md
+Live checklist: docs/V5-TEST-CHECKLIST.md
