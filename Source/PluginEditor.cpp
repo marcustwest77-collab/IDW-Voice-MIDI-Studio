@@ -106,12 +106,12 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
     g.fillAll(background);const float w=(float)getWidth();
     if(performanceView){
         g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,250,w-48,165},{24,435,w-48,190},{24,646,w-48,145}})g.fillRoundedRectangle(r,12);
-        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.1",getWidth()-355,22,330,30,juce::Justification::centredRight);
+        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.2",getWidth()-355,22,330,30,juce::Justification::centredRight);
         g.setColour(muted);g.setFont(juce::FontOptions(12));g.drawText("IN DA WIND ENTERTAINMENT / PERFORMANCE",30,getHeight()-24,650,22,juce::Justification::centredLeft);
         return;
     }
     g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,242,w-48,170},{24,592,w-48,198}})g.fillRoundedRectangle(r,12);
-    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.1",getWidth()-335,22,310,30,juce::Justification::centredRight);
+    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.2",getWidth()-335,22,310,30,juce::Justification::centredRight);
     const juce::Rectangle<float> plot(365,110,w-420,93);
     g.setColour(juce::Colour(0xff263144));for(int j=0;j<=4;++j){const float y=plot.getY()+j*plot.getHeight()/4;g.drawHorizontalLine((int)y,plot.getX(),plot.getRight());}
     float centre=60;const float current=history[(size_t)((historyPos+219)%220)];if(current>=0)centre=std::round(current/12)*12;
@@ -205,7 +205,7 @@ juce::String IDWVoiceMIDIStudioAudioProcessorEditor::diagnosticReport() const {
     text += "Status: "+setupStatus.getText()+"\nDAW receipt, instrument selection and audio output audibility are not detectable by this plugin.\n";
     return text;
 }
-juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText(){return R"HELP(IDW VOICE MIDI STUDIO / VERSION 6.1
+juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText(){return R"HELP(IDW VOICE MIDI STUDIO / VERSION 6.2
 
 PERFORMANCE VIEW
 Open Studio instrument to enable the built-in 32-voice synth and choose lead, chord and bass sounds. It replaces Preview sound while enabled. Audio Lab is a separate companion for file transcription and optional cloud conversion.

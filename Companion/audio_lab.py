@@ -50,12 +50,25 @@ def inspect_wav(path):
                 'clipped_samples': clipped, 'silent': peak == 0}
 
 
+def transcription_settings(onset=.5, frame=.3, minimum_ms=127.7, tempo=120):
+    values = dict(onset=onset, frame=frame, minimum_ms=minimum_ms, tempo=tempo)
+    ranges = dict(onset=(.001, 1), frame=(.001, 1), minimum_ms=(20, 2000), tempo=(40, 240))
+    for name, value in values.items():
+        try: value = float(value)
+        except (ValueError, TypeError): raise ValueError(name + ' must be a number.') from None
+        lo, hi = ranges[name]
+        if not math.isfinite(value) or not lo <= value <= hi:
+            raise ValueError('%s must be between %s and %s.' % (name, lo, hi))
+        values[name] = value
+    return values
+
+
 def transcribe(path, destination, onset=.5, frame=.3, minimum_ms=127.7, tempo=120):
     info = inspect_wav(path)
     if info['silent']:
         raise ValueError('The recording is digital silence. Check the input before transcribing.')
-    if not (0 < onset <= 1 and 0 < frame <= 1 and 20 <= minimum_ms <= 2000 and 40 <= tempo <= 240):
-        raise ValueError('Invalid transcription settings.')
+    settings = transcription_settings(onset, frame, minimum_ms, tempo)
+    onset, frame, minimum_ms, tempo = (settings[k] for k in ('onset', 'frame', 'minimum_ms', 'tempo'))
     try:
         from basic_pitch.inference import predict
     except ImportError as error:
@@ -75,7 +88,7 @@ def transcribe(path, destination, onset=.5, frame=.3, minimum_ms=127.7, tempo=12
         writer.writerow(['start_seconds', 'end_seconds', 'midi_note', 'amplitude'])
         for start, end, pitch, amplitude, *_ in notes:
             writer.writerow([float(start), float(end), int(pitch), float(amplitude)])
-    (job / 'report.json').write_text(json.dumps({'engine': 'Spotify Basic Pitch', 'mode': 'offline file transcription', 'notes': len(notes), 'input': info}, indent=2), encoding='utf-8')
+    (job / 'report.json').write_text(json.dumps({'engine': 'Spotify Basic Pitch', 'mode': 'offline file transcription', 'notes': len(notes), 'input': info, 'settings': settings}, indent=2), encoding='utf-8')
     return job
 
 
@@ -133,16 +146,16 @@ class KitsClient:
         return self._request('voice-conversions', body, 'multipart/form-data; boundary=' + boundary)
 
 
-def main():
+def main(gui_smoke=False):
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
     import queue
     import threading
     import webbrowser
     root = tk.Tk()
-    root.title('IDW Audio Lab — V6 candidate')
-    root.geometry('920x700')
-    root.minsize(800, 650)
+    root.title('IDW Audio Lab — V6.2')
+    root.geometry('920x800')
+    root.minsize(800, 760)
     panel = ttk.Frame(root, padding=18)
     panel.pack(fill='both', expand=True)
     ttk.Label(panel, text='IDW / AUDIO LAB', font=('Segoe UI', 20, 'bold')).pack(anchor='w')
@@ -159,7 +172,16 @@ def main():
     notebook = ttk.Notebook(panel); notebook.pack(fill='x', pady=16)
     local = ttk.Frame(notebook, padding=14); cloud = ttk.Frame(notebook, padding=14)
     notebook.add(local, text='Local recording tools'); notebook.add(cloud, text='Cloud / trained voices')
-    ttk.Label(local, text='Transcribe chords or a single instrument into MIDI. Full mixes may need isolated stems first.\nThe model runs locally after installation; this is file processing, not live polyphonic tracking.').pack(anchor='w')
+    ttk.Label(local, text='Transcribe chords or a single instrument into MIDI. Full mixes may need isolated stems first.\nThe Windows portable edition includes the local model; this is file processing, not live polyphonic tracking.').pack(anchor='w')
+    settings_row = ttk.Frame(local); settings_row.pack(fill='x', pady=10)
+    settings_vars = {}
+    for column, (name, label, default) in enumerate([
+            ('tempo', 'MIDI tempo (BPM)', '120'), ('onset', 'Note onset threshold', '0.5'),
+            ('frame', 'Sustain threshold', '0.3'), ('minimum_ms', 'Minimum note (ms)', '127.7')]):
+        variable = tk.StringVar(value=default); settings_vars[name] = variable
+        ttk.Label(settings_row, text=label).grid(row=0, column=column, padx=6, sticky='w')
+        ttk.Entry(settings_row, textvariable=variable, width=17).grid(row=1, column=column, padx=6, sticky='w')
+    ttk.Label(local, text='Lower thresholds detect quieter notes but may add false notes. Longer minimums remove short notes.\nTempo sets the MIDI tempo map; it does not quantize or change the audio speed.').pack(anchor='w')
     result_queue = queue.Queue(); busy = False; actions = []
     output = tk.Text(panel, height=12, wrap='word'); output.pack(fill='both', expand=True)
     def write(text):
@@ -189,8 +211,10 @@ def main():
         path = chosen.get(); run(lambda: json.dumps(inspect_wav(path), indent=2))
     def local_transcribe():
         path = chosen.get()
+        try: settings = transcription_settings(**{k: v.get() for k, v in settings_vars.items()})
+        except ValueError as error: messagebox.showerror('Check transcription settings', str(error)); return
         destination = filedialog.askdirectory(title='Folder for the new MIDI take')
-        if destination: run(lambda: 'Saved MIDI, note table and report in: ' + str(transcribe(path, destination)))
+        if destination: run(lambda: 'Saved MIDI, note table and report in: ' + str(transcribe(path, destination, **settings)))
     add_button(local, 'Inspect recording levels', inspect)
     add_button(local, 'Transcribe WAV to MIDI locally', local_transcribe)
     ttk.Label(cloud, text='Uses an existing trained or licensed Kits voice model. Training is done in Kits.\nAn account/key and provider credits may be required. Nothing uploads until you confirm.').pack(anchor='w')
@@ -226,8 +250,40 @@ def main():
             return
         key.set(''); root.destroy()
     root.protocol('WM_DELETE_WINDOW', close)
-    write('Local tools do not upload audio. Model inference and cloud account tests are pending for this candidate.')
-    poll(); root.mainloop()
+    write('Local tools do not upload audio. Choose WAV, inspect the levels, then transcribe. Cloud conversion requires your Kits account.')
+    poll()
+    if gui_smoke: root.after(1000, root.destroy)
+    root.mainloop()
+
+def cli():
+    import argparse
+    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.2')
+    parser.add_argument('--self-test', action='store_true')
+    parser.add_argument('--gui-smoke', action='store_true')
+    parser.add_argument('--test-report', type=Path)
+    args = parser.parse_args()
+    # Windowed executables have no stdout. Libraries still expect a writable stream.
+    import os
+    if sys.stdout is None: sys.stdout = open(os.devnull, 'w')
+    if sys.stderr is None: sys.stderr = open(os.devnull, 'w')
+    try:
+        if args.self_test:
+            from model_selftest import run
+            result = run()
+            main(gui_smoke=True)
+            result += '\nPASS packaged Tk GUI startup'
+            if args.test_report: args.test_report.write_text(result, encoding='utf-8')
+            print(result)
+        else: main(gui_smoke=args.gui_smoke)
+    except Exception:
+        import traceback
+        error = traceback.format_exc()
+        if args.test_report: args.test_report.write_text(error, encoding='utf-8')
+        else:
+            from tkinter import messagebox
+            messagebox.showerror('Audio Lab could not start', error)
+        return 1
+    return 0
 
 if __name__ == '__main__':
-    main()
+    sys.exit(cli())

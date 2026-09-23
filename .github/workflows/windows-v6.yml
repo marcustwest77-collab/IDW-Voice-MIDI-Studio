@@ -25,6 +25,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Transcription dependencies failed' }
           python Tests/transcription_smoke.py
           if ($LASTEXITCODE -ne 0) { throw 'Transcription model check failed' }
+      - name: Package and test standalone Audio Lab
+        run: ./scripts/package-audio-lab.ps1
       - name: Build and run regression suites
         run: ./scripts/build-windows.ps1
       - name: Validate VST3
@@ -41,6 +43,9 @@ jobs:
           $package = Get-ChildItem -Directory -Filter 'IDW-V6-Windows-*' | Select-Object -First 1
           if (-not $package) { throw 'Portable build missing' }
           Copy-Item pluginval-result.txt $package.FullName
+          Copy-Item audio-lab-packaged-test.txt $package.FullName
+          Copy-Item -Recurse audio-lab-dist/IDW-Audio-Lab (Join-Path $package.FullName 'Audio-Lab')
+          Set-Content -Path (Join-Path $package.FullName 'Run-Audio-Lab.cmd') -Value '@echo off', 'cd /d "%~dp0"', 'start "" "Audio-Lab\IDW-Audio-Lab.exe"' -Encoding ascii
           Compress-Archive -Path $package.FullName -DestinationPath ($package.FullName + '.zip') -Force
       - name: Upload tested Windows candidate
         uses: actions/upload-artifact@v4
@@ -57,5 +62,6 @@ jobs:
           path: |
             build-win-6/Testing/Temporary/*.log
             pluginval-result.txt
+            audio-lab-packaged-test.txt
           if-no-files-found: ignore
           retention-days: 14

@@ -31,6 +31,12 @@ class AudioTests(unittest.TestCase):
         with wave.open(str(self.wav), 'wb') as w:
             w.setparams((1, 2, 8000, 0, 'NONE', 'not compressed'))
             w.writeframes(struct.pack('<' + 'h' * len(samples), *samples))
+    def test_settings_validate_before_model(self):
+        self.assertEqual(audio_lab.transcription_settings(tempo='95')['tempo'], 95)
+        for key, value in [('tempo', 'nan'), ('onset', 'inf'), ('frame', 0), ('minimum_ms', 19), ('tempo', 'bad')]:
+            with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                audio_lab.transcription_settings(**{key: value})
+
     def test_inspection(self):
         result = audio_lab.inspect_wav(self.wav)
         self.assertEqual(result['seconds'], 1);self.assertFalse(result['silent']);self.assertEqual(result['clipped_samples'], 0)
