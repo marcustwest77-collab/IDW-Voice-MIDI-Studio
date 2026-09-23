@@ -64,7 +64,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     preview.setTooltip("Simple local sine instrument for setup. Turn off when using your DAW synth.");
     helpText.setMultiLine(true);helpText.setReadOnly(true);helpText.setScrollbarsShown(true);helpText.setCaretVisible(false);
     helpText.setColour(juce::TextEditor::backgroundColourId,background);helpText.setColour(juce::TextEditor::outlineColourId,gold);helpText.setFont(juce::FontOptions(16));helpText.setText(manualText());
-    addAndMakeVisible(helpText);addAndMakeVisible(closeHelp);help.onClick=[this]{showHelp(true);};closeHelp.onClick=[this]{showHelp(false);};
+    addAndMakeVisible(helpText);addAndMakeVisible(closeHelp);help.onClick=[this]{instrumentVisible=false;connectionVisible=true;connectionPanel->begin(p.eventCount());connectionPanel->update(audioRunning(),p.peak(),p.level(),p.eventCount(),setupStatus.getText(),p.apvts.getRawParameterValue("synthEnabled")->load()>0.5f||p.apvts.getRawParameterValue("previewAudio")->load()>0.5f);resized();};closeHelp.onClick=[this]{showHelp(false);};
     record.onClick=[this]{if(p.capture.isRecording()){p.capture.stop();record.setButtonText("Stopping...");}else beginCapture();};
     exportMidi.onClick=[this]{exportCapture();};exportMidi.setEnabled(false);
     bpmSlider.setSliderStyle(juce::Slider::LinearHorizontal);bpmSlider.setTextBoxStyle(juce::Slider::TextBoxRight,false,55,24);bpmSlider.setNumDecimalPlacesToDisplay(0);addAndMakeVisible(bpmSlider);attachSlider("captureBpm",bpmSlider);bpmSlider.textFromValueFunction=[](double v){return juce::String(v,0);};bpmSlider.updateText();
@@ -83,7 +83,10 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     addAndMakeVisible(instrumentButton);
     instrumentPanel=std::make_unique<InstrumentPanel>(p.apvts,[this]{instrumentVisible=false;resized();},[this]{p.requestPanic();});
     addChildComponent(*instrumentPanel);
-    instrumentButton.onClick=[this]{instrumentVisible=!instrumentVisible;resized();};
+    instrumentButton.onClick=[this]{connectionVisible=false;instrumentVisible=!instrumentVisible;resized();};
+    addAndMakeVisible(audioLabButton);audioLabButton.onClick=[this]{openAudioLab();};
+    connectionPanel=std::make_unique<ConnectionPanel>([this]{connectionVisible=false;resized();},[this]{showHelp(true);},[this]{p.requestTestNote();},[this](bool local){p.requestPanic();setValue("synthEnabled",local?1.0f:0.0f);setValue("previewAudio",0);setValue("monitorMic",0);},[this]{juce::SystemClipboard::copyTextToClipboard(diagnosticReport());});
+    addChildComponent(*connectionPanel);
     setupV5();history.fill(-1);refreshPresets();syncScale();showHelp(false);resized();timerCallback();startTimerHz(30);
 }
 IDWVoiceMIDIStudioAudioProcessorEditor::~IDWVoiceMIDIStudioAudioProcessorEditor(){stopTimer();p.takes.drain();p.takes.checkpoint();setLookAndFeel(nullptr);}
@@ -106,12 +109,12 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
     g.fillAll(background);const float w=(float)getWidth();
     if(performanceView){
         g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,250,w-48,165},{24,435,w-48,190},{24,646,w-48,145}})g.fillRoundedRectangle(r,12);
-        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.2",getWidth()-355,22,330,30,juce::Justification::centredRight);
+        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.3",getWidth()-355,22,330,30,juce::Justification::centredRight);
         g.setColour(muted);g.setFont(juce::FontOptions(12));g.drawText("IN DA WIND ENTERTAINMENT / PERFORMANCE",30,getHeight()-24,650,22,juce::Justification::centredLeft);
         return;
     }
     g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,242,w-48,170},{24,592,w-48,198}})g.fillRoundedRectangle(r,12);
-    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.2",getWidth()-335,22,310,30,juce::Justification::centredRight);
+    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6.3",getWidth()-335,22,310,30,juce::Justification::centredRight);
     const juce::Rectangle<float> plot(365,110,w-420,93);
     g.setColour(juce::Colour(0xff263144));for(int j=0;j<=4;++j){const float y=plot.getY()+j*plot.getHeight()/4;g.drawHorizontalLine((int)y,plot.getX(),plot.getRight());}
     float centre=60;const float current=history[(size_t)((historyPos+219)%220)];if(current>=0)centre=std::round(current/12)*12;
@@ -188,24 +191,29 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::timerCallback(){
     if(previousDrumEvents!=p.drumEventCount()){previousDrumEvents=p.drumEventCount();flashPad=p.lastDrum();flashTicks=6;}
     if(flashTicks>0)--flashTicks;
     for(int i=0;i<8;++i){drumPads[i].setButtonText(juce::String(i+1)+(p.beats.examples(i)>=3?" / trained":i==0?" / kick":i==1?" / snare":i==2?" / hat":" / empty"));drumPads[i].setToggleState(training==i||(flashTicks>0&&flashPad==i),juce::dontSendNotification);}
+    if(connectionPanel&&connectionVisible)connectionPanel->update(audioRunning(),p.peak(),p.level(),p.eventCount(),setupStatus.getText(),param("synthEnabled")>0.5f||param("previewAudio")>0.5f);
     train.setEnabled(training<0);cancelTrain.setEnabled(training>=0);syncScale();drainCapture();repaint(24,78,getWidth()-48,150);
 }
 bool IDWVoiceMIDIStudioAudioProcessorEditor::audioRunning() const {
     return lastAudioChange>0 && juce::Time::getMillisecondCounterHiRes()-lastAudioChange<1000;
 }
 juce::String IDWVoiceMIDIStudioAudioProcessorEditor::diagnosticReport() const {
-    juce::String text="IDW Voice MIDI Studio 5.0.0 setup report\n";
+    juce::String text="IDW Voice MIDI Studio 6.3.0 setup report\n";
     text += "Audio callbacks active: "+juce::String(audioRunning()?"yes":"no")+"\n";
     text += "Sample rate: "+juce::String(p.deviceRate(),0)+" Hz; block: "+juce::String(p.deviceBlock())+" samples\n";
     text += "Input RMS: "+juce::String(juce::Decibels::gainToDecibels(p.level(),-100.0f),1)+" dBFS; peak: "+juce::String(p.peak(),4)+"\n";
-    for(const char* id:{"inputMode","gate","confidence","melody","beatbox","previewAudio","monitorMic","mpe","bend","harmonyMode","harmonyVoicing","harmonyBass","voiceLow","voiceHigh"})
+    for(const char* id:{"inputMode","gate","confidence","melody","beatbox","previewAudio","monitorMic","mpe","bend","harmonyMode","harmonyVoicing","harmonyBass","voiceLow","voiceHigh","synthEnabled","synthGain","retroEnabled"})
         text += juce::String(id)+": "+juce::String(p.apvts.getRawParameterValue(id)->load(),3)+"\n";
     text += "Pitch: "+juce::String(p.hz(),1)+" Hz; confidence: "+juce::String(p.conf(),2)+"\n";
     text += "Generated MIDI: "+juce::String(p.noteCount())+" notes, "+juce::String(p.eventCount())+" events\n";
     text += "Status: "+setupStatus.getText()+"\nDAW receipt, instrument selection and audio output audibility are not detectable by this plugin.\n";
+    if(connectionPanel)text+=connectionPanel->report();
     return text;
 }
-juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText(){return R"HELP(IDW VOICE MIDI STUDIO / VERSION 6.2
+juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText(){return R"HELP(IDW VOICE MIDI STUDIO / VERSION 6.3
+
+CONNECTION CHECK
+Setup / Help opens live signal readings and route instructions. Send a test note, then manually confirm if audible. Full manual returns here. Audio Lab opens the bundled companion or asks you to locate its EXE.
 
 PERFORMANCE VIEW
 Open Studio instrument to enable the built-in 32-voice synth and choose lead, chord and bass sounds. It replaces Preview sound while enabled. Audio Lab is a separate companion for file transcription and optional cloud conversion.
@@ -349,9 +357,11 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::layoutV5(){
     }else{readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));}
     rememberMidi.setVisible(performanceView);saveRecent.setVisible(performanceView);
     if(performanceView){saveRecent.setBounds(w-195,670,150,38);rememberMidi.setBounds(w-250,737,210,28);captureLabel.setBounds(42,727,w-330,45);}
+    audioLabButton.setVisible(true);audioLabButton.setBounds(865,24,105,30);
     instrumentButton.setVisible(true);instrumentButton.setBounds(700,24,150,30);
     if(instrumentPanel){instrumentPanel->setBounds(25,78,w-50,getHeight()-128);instrumentPanel->setVisible(instrumentVisible);}
     if(instrumentVisible&&instrumentPanel)instrumentPanel->toFront(false);
+    if(connectionPanel){connectionPanel->setBounds(25,78,w-50,getHeight()-128);connectionPanel->setVisible(connectionVisible);if(connectionVisible)connectionPanel->toFront(false);}
     helpText.setVisible(helpVisible);closeHelp.setVisible(helpVisible);if(helpVisible){helpText.toFront(false);closeHelp.toFront(false);}
 }
 
@@ -367,4 +377,27 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::saveRetrospective(){
         const bool ok=writePerformanceMidi(temp.getFile(),*take,tempo)&&temp.overwriteTargetFileWithTemporary();
         safe->status.setText(ok?(incomplete?"Recent MIDI saved; a buffer gap/limit was detected. Check this take.":"Recent MIDI saved. Your recorded take is unchanged."):"Could not save recent MIDI; check the destination.",juce::dontSendNotification);
     });
+}
+
+void IDWVoiceMIDIStudioAudioProcessorEditor::openAudioLab(){
+#if JUCE_WINDOWS
+    const auto settings=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("IDW Voice MIDI Studio").getChildFile("audio-lab-location.txt");
+    const auto bundled=juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getParentDirectory().getParentDirectory().getChildFile("Audio-Lab/IDW-Audio-Lab.exe");
+    const auto valid=[](const juce::File& file){return file.existsAsFile()&&file.getFileName().equalsIgnoreCase("IDW-Audio-Lab.exe");};
+    juce::File target=bundled;
+    if(!valid(target)){const auto saved=settings.loadFileAsString().trim();if(juce::File::isAbsolutePath(saved))target=juce::File(saved);}
+    if(valid(target)){status.setText(target.startAsProcess()?"Audio Lab launch requested.":"Audio Lab could not start. Open Run-Audio-Lab.cmd from the extracted package.",juce::dontSendNotification);return;}
+    labChooser=std::make_unique<juce::FileChooser>("Locate Audio-Lab/IDW-Audio-Lab.exe in your extracted IDW download",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"IDW-Audio-Lab.exe");
+    audioLabButton.setEnabled(false);
+    const juce::Component::SafePointer<IDWVoiceMIDIStudioAudioProcessorEditor> safe(this);
+    labChooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,[safe,settings,valid](const juce::FileChooser& dialog){
+        if(!safe)return;safe->audioLabButton.setEnabled(true);const auto file=dialog.getResult();if(file==juce::File{})return;
+        if(!valid(file)){safe->status.setText("Choose IDW-Audio-Lab.exe from the extracted Audio-Lab folder.",juce::dontSendNotification);return;}
+        if(!file.startAsProcess()){safe->status.setText("Audio Lab could not start. Keep its entire folder intact.",juce::dontSendNotification);return;}
+        settings.getParentDirectory().createDirectory();settings.replaceWithText(file.getFullPathName());
+        safe->status.setText("Audio Lab launch requested. Its location is remembered on this PC.",juce::dontSendNotification);
+    });
+#else
+    status.setText("The bundled Audio Lab executable requires Windows. Use the companion Python source on other platforms.",juce::dontSendNotification);
+#endif
 }

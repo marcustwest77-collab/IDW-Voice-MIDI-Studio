@@ -18,3 +18,6 @@ for dist in metadata.distributions():
                 target = folder / str(item).replace('..', '_').replace('\\', '_').replace('/', '_')
                 shutil.copyfile(source, target)
 (root / 'inventory.json').write_text(json.dumps(inventory, indent=2), encoding='utf-8')
+
+python_license = Path(sys.base_prefix) / "LICENSE.txt"
+if python_license.is_file(): shutil.copyfile(python_license, root / "Python-LICENSE.txt")

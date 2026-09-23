@@ -153,7 +153,7 @@ def main(gui_smoke=False):
     import threading
     import webbrowser
     root = tk.Tk()
-    root.title('IDW Audio Lab — V6.2')
+    root.title('IDW Audio Lab — V6.3')
     root.geometry('920x800')
     root.minsize(800, 760)
     panel = ttk.Frame(root, padding=18)
@@ -257,7 +257,7 @@ def main(gui_smoke=False):
 
 def cli():
     import argparse
-    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.2')
+    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.3')
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--gui-smoke', action='store_true')
     parser.add_argument('--test-report', type=Path)

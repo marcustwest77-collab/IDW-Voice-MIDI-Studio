@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 #include "InstrumentPanel.h"
+#include "ConnectionPanel.h"
 class IDWVoiceMIDIStudioAudioProcessorEditor : public juce::AudioProcessorEditor,private juce::Timer {
 public:
     explicit IDWVoiceMIDIStudioAudioProcessorEditor(IDWVoiceMIDIStudioAudioProcessor&);
@@ -50,6 +51,11 @@ private:
     std::array<float,220> history{};int historyPos=0;
     int previousDrumEvents=0,flashPad=-1,flashTicks=0;
     void saveRetrospective();
+    void openAudioLab();
+    std::unique_ptr<juce::FileChooser> labChooser;
+    juce::TextButton audioLabButton{"Audio Lab"};
+    std::unique_ptr<ConnectionPanel> connectionPanel;
+    bool connectionVisible=false;
     juce::TextButton saveRecent{"Save last 30s"};
     juce::ToggleButton rememberMidi{"Remember voice MIDI"};
     juce::TextButton instrumentButton{"Studio instrument"};
