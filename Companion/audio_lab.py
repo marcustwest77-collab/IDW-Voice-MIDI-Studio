@@ -154,9 +154,10 @@ def main(gui_smoke=False, preview_path=None):
     import webbrowser
     root = tk.Tk()
     root.title('IDW Audio Lab — V6.7')
-    root.geometry('1020x900')
-    root.minsize(800, 760)
-    panel = ttk.Frame(root, padding=18)
+    start_height=max(640,min(900,root.winfo_screenheight()-100))
+    root.geometry(f'{max(800,min(1020,root.winfo_screenwidth()-40))}x{start_height}+10+10')
+    root.minsize(800, 640)
+    panel = ttk.Frame(root, padding=12)
     panel.pack(fill='both', expand=True)
     ttk.Label(panel, text='IDW / AUDIO LAB', font=('Segoe UI', 20, 'bold')).pack(anchor='w')
     ttk.Label(panel, text='Local transcription • MIDI editing • lyrics and offline dictation • optional cloud voices').pack(anchor='w', pady=(0, 12))
@@ -168,7 +169,7 @@ def main(gui_smoke=False, preview_path=None):
         if path:
             chosen.set(path)
     ttk.Button(file_row, text='Choose WAV', command=choose).pack(side='left', padx=8)
-    ttk.Label(panel, text='16-bit PCM WAV • mono/stereo • up to 10 minutes and 25 MiB').pack(anchor='w')
+    wav_hint=ttk.Label(panel, text='16-bit PCM WAV • mono/stereo • up to 10 minutes and 25 MiB');wav_hint.pack(anchor='w')
     notebook = ttk.Notebook(panel); notebook.pack(fill='both', expand=True, pady=12)
     local = ttk.Frame(notebook, padding=14); cloud = ttk.Frame(notebook, padding=14)
     notebook.add(local, text='Local recording tools'); notebook.add(cloud, text='Cloud / trained voices')
@@ -184,7 +185,7 @@ def main(gui_smoke=False, preview_path=None):
     ttk.Label(local, text='Lower thresholds detect quieter notes but may add false notes. Longer minimums remove short notes.\nTempo sets the MIDI tempo map; it does not quantize or change the audio speed.').pack(anchor='w')
     latest_midi = [None]
     result_queue = queue.Queue(); busy = False; actions = []
-    output = tk.Text(panel, height=4, wrap='word'); output.pack(fill='x')
+    output = tk.Text(panel, height=2, wrap='word'); output.pack(side='bottom',fill='x',before=notebook)
     def write(text):
         output.insert('end', str(text) + '\n'); output.see('end')
     def run(fn):
@@ -227,6 +228,13 @@ def main(gui_smoke=False, preview_path=None):
     lyric_test_folder = tempfile.TemporaryDirectory() if gui_smoke else None
     lyrics = LyricsWorkspace(notebook, write, lambda: busy, lyric_test_folder.name if lyric_test_folder else None)
     notebook.add(lyrics, text='Lyrics / talk to text')
+    def tab_layout(event=None):
+        if notebook.select() in (str(lyrics),str(review)):
+            file_row.pack_forget();wav_hint.pack_forget()
+        else:
+            file_row.pack(fill='x',before=notebook);wav_hint.pack(anchor='w',before=notebook)
+    notebook.bind('<<NotebookTabChanged>>',tab_layout)
+    tab_layout()
     def review_latest():
         if latest_midi[0] is None: write('Transcribe a WAV first, or open an existing .mid in MIDI take editor.'); return
         if review.confirm_discard():
@@ -280,7 +288,7 @@ def main(gui_smoke=False, preview_path=None):
         fixture_folder = tempfile.TemporaryDirectory()
         fixture = Path(fixture_folder.name) / 'IDW-demo-take.mid'
         create_fixture(fixture);review.load_path(fixture);notebook.select(review)
-        root.geometry('800x800+0+0');root.update()
+        root.geometry(f'800x{start_height}+0+0');root.update()
         review.draw();root.update()
         def check_bounds(widget):
             for child in widget.winfo_children():
@@ -326,6 +334,8 @@ def main(gui_smoke=False, preview_path=None):
         assert 'Signal detected' in lyrics.level_text.cget('text')
         lyrics.listening=False;lyrics.dictation.level=(-100.0,False);lyrics.poll();root.update()
         check_bounds(lyrics)
+        check_bounds(root)
+        assert lyrics.winfo_rooty()+lyrics.winfo_height()<=root.winfo_screenheight()-40, 'Lyrics extend outside visible desktop'
         if preview_path:
             root.update();x,y=lyrics.winfo_rootx(),lyrics.winfo_rooty()
             ImageGrab.grab(bbox=(x,y,x+lyrics.winfo_width(),y+lyrics.winfo_height())).save(preview_path.with_name('IDW-V6-Lyrics.png'))

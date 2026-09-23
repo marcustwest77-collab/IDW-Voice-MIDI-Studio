@@ -61,7 +61,7 @@ class LyricsWorkspace(ttk.Frame):
         self.text=tk.Text(area,height=10,wrap='word',undo=True,maxundo=100,font=('Segoe UI',12),background='#101722',foreground='#e9eef5',insertbackground='#eac36c',padx=10,pady=8)
         self.text.pack(side='left',fill='both',expand=True);scroll=ttk.Scrollbar(area,command=self.text.yview);scroll.pack(side='right',fill='y');self.text.configure(yscrollcommand=scroll.set)
         self.text.bind('<<Modified>>',self.modified)
-        self.status=ttk.Label(self,text='Drafts auto-save locally every 2 seconds after edits. Dictation sessions stop after 10 minutes.',wraplength=700);self.status.pack(anchor='w',pady=5)
+        self.status=ttk.Label(self,text='Drafts auto-save locally every 2 seconds after edits. Dictation sessions stop after 10 minutes.',wraplength=700);self.status.pack(side='bottom',anchor='w',pady=5,before=area)
         self.refresh_songs();self.after(100,self.poll);self.after(2000,self.autosave)
 
     def changed(self):
