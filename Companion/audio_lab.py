@@ -146,20 +146,20 @@ class KitsClient:
         return self._request('voice-conversions', body, 'multipart/form-data; boundary=' + boundary)
 
 
-def main(gui_smoke=False):
+def main(gui_smoke=False, preview_path=None):
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
     import queue
     import threading
     import webbrowser
     root = tk.Tk()
-    root.title('IDW Audio Lab — V6.3')
-    root.geometry('920x800')
+    root.title('IDW Audio Lab — V6.4')
+    root.geometry('1020x900')
     root.minsize(800, 760)
     panel = ttk.Frame(root, padding=18)
     panel.pack(fill='both', expand=True)
     ttk.Label(panel, text='IDW / AUDIO LAB', font=('Segoe UI', 20, 'bold')).pack(anchor='w')
-    ttk.Label(panel, text='Offline transcription • recording inspection • optional cloud voice conversion').pack(anchor='w', pady=(0, 12))
+    ttk.Label(panel, text='Offline transcription • recording inspection • MIDI take editing • optional cloud voices').pack(anchor='w', pady=(0, 12))
     chosen = tk.StringVar()
     file_row = ttk.Frame(panel); file_row.pack(fill='x')
     ttk.Entry(file_row, textvariable=chosen).pack(side='left', fill='x', expand=True)
@@ -182,8 +182,9 @@ def main(gui_smoke=False):
         ttk.Label(settings_row, text=label).grid(row=0, column=column, padx=6, sticky='w')
         ttk.Entry(settings_row, textvariable=variable, width=17).grid(row=1, column=column, padx=6, sticky='w')
     ttk.Label(local, text='Lower thresholds detect quieter notes but may add false notes. Longer minimums remove short notes.\nTempo sets the MIDI tempo map; it does not quantize or change the audio speed.').pack(anchor='w')
+    latest_midi = [None]
     result_queue = queue.Queue(); busy = False; actions = []
-    output = tk.Text(panel, height=12, wrap='word'); output.pack(fill='both', expand=True)
+    output = tk.Text(panel, height=6, wrap='word'); output.pack(fill='both', expand=True)
     def write(text):
         output.insert('end', str(text) + '\n'); output.see('end')
     def run(fn):
@@ -200,7 +201,10 @@ def main(gui_smoke=False):
         nonlocal busy
         try:
             status, value = result_queue.get_nowait()
-            write(('ERROR: ' if status == 'error' else '') + str(value))
+            if status == 'ok' and isinstance(value, tuple) and value[0] == 'transcription':
+                latest_midi[0] = Path(value[1]) / 'transcription.mid'
+                write('Saved MIDI, note table and report in: ' + value[1] + '\nClick Review latest MIDI to correct notes.')
+            else: write(('ERROR: ' if status == 'error' else '') + str(value))
             busy = False
             for button in actions: button.configure(state='normal')
         except queue.Empty: pass
@@ -214,7 +218,14 @@ def main(gui_smoke=False):
         try: settings = transcription_settings(**{k: v.get() for k, v in settings_vars.items()})
         except ValueError as error: messagebox.showerror('Check transcription settings', str(error)); return
         destination = filedialog.askdirectory(title='Folder for the new MIDI take')
-        if destination: run(lambda: 'Saved MIDI, note table and report in: ' + str(transcribe(path, destination, **settings)))
+        if destination: run(lambda: ('transcription', str(transcribe(path, destination, **settings))))
+    from take_editor_ui import TakeEditor
+    review = TakeEditor(notebook, write); notebook.add(review, text='MIDI take editor')
+    def review_latest():
+        if latest_midi[0] is None: write('Transcribe a WAV first, or open an existing .mid in MIDI take editor.'); return
+        if review.confirm_discard():
+            review.attempt(lambda: review.load_path(latest_midi[0])); notebook.select(review)
+    add_button(local, 'Review latest MIDI', review_latest)
     add_button(local, 'Inspect recording levels', inspect)
     add_button(local, 'Transcribe WAV to MIDI locally', local_transcribe)
     ttk.Label(cloud, text='Uses an existing trained or licensed Kits voice model. Training is done in Kits.\nAn account/key and provider credits may be required. Nothing uploads until you confirm.').pack(anchor='w')
@@ -246,21 +257,45 @@ def main(gui_smoke=False):
     add_button(cloud, 'Check job / show download URL', check_job)
     ttk.Button(cloud, text='Open Kits to create your own voice', command=lambda:webbrowser.open('https://app.kits.ai/')).pack(anchor='w', pady=5)
     def close():
+        if not review.confirm_discard(): return
         if busy and not messagebox.askyesno('Work is running', 'Close Audio Lab? Local processing will stop. An accepted cloud job may continue in your Kits account.'):
             return
         key.set(''); root.destroy()
     root.protocol('WM_DELETE_WINDOW', close)
     write('Local tools do not upload audio. Choose WAV, inspect the levels, then transcribe. Cloud conversion requires your Kits account.')
     poll()
-    if gui_smoke: root.after(1000, root.destroy)
+    if gui_smoke:
+        import tempfile
+        from take_editor_smoke import create_fixture
+        fixture_folder = tempfile.TemporaryDirectory()
+        fixture = Path(fixture_folder.name) / 'IDW-demo-take.mid'
+        create_fixture(fixture);review.load_path(fixture);notebook.select(review)
+        root.geometry('800x800+0+0');root.update()
+        review.draw();root.update()
+        def check_bounds(widget):
+            for child in widget.winfo_children():
+                if child.winfo_ismapped():
+                    assert child.winfo_x() >= -2 and child.winfo_y() >= -2
+                    assert child.winfo_x()+child.winfo_width() <= widget.winfo_width()+2, 'Editor control exceeds width: '+str(child)
+                    assert child.winfo_y()+child.winfo_height() <= widget.winfo_height()+2, 'Editor control exceeds height: '+str(child)
+                    check_bounds(child)
+        check_bounds(review)
+        assert review.canvas.find_withtag('note'), 'Piano roll rendered no notes'
+        if preview_path:
+            from PIL import ImageGrab
+            root.lift();root.update()
+            x,y=review.winfo_rootx(),review.winfo_rooty()
+            ImageGrab.grab(bbox=(x,y,x+review.winfo_width(),y+review.winfo_height())).save(preview_path)
+        root.after(1000, root.destroy)
     root.mainloop()
 
 def cli():
     import argparse
-    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.3')
+    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.4')
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--gui-smoke', action='store_true')
     parser.add_argument('--test-report', type=Path)
+    parser.add_argument('--preview-path', type=Path)
     args = parser.parse_args()
     # Windowed executables have no stdout. Libraries still expect a writable stream.
     import os
@@ -270,8 +305,10 @@ def cli():
         if args.self_test:
             from model_selftest import run
             result = run()
-            main(gui_smoke=True)
-            result += '\nPASS packaged Tk GUI startup'
+            from take_editor_smoke import run as editor_test
+            result += '\n' + editor_test()
+            main(gui_smoke=True, preview_path=args.preview_path)
+            result += '\nPASS packaged Tk GUI startup / piano-roll drawing / minimum-width editor bounds'
             if args.test_report: args.test_report.write_text(result, encoding='utf-8')
             print(result)
         else: main(gui_smoke=args.gui_smoke)

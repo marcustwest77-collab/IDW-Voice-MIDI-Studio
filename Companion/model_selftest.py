@@ -25,4 +25,8 @@ def run():
         notes = [n for instrument in midi.instruments for n in instrument.notes]
         assert notes, 'Model emitted no notes'
         assert any(a.pitch != b.pitch and min(a.end,b.end)-max(a.start,b.start)>.1 for a in notes for b in notes), 'Model did not recover overlapping pitches'
+        from take_editor import Take
+        take = Take.load(result/'transcription.mid')
+        take.export_copy(root/'model-edited-copy.mid')
+        assert len(Take.load(root/'model-edited-copy.mid').notes)==len(take.notes)
         return ('PASS real Basic Pitch inference: readable MIDI with overlapping pitches on synthetic triad; not a music-quality benchmark')
