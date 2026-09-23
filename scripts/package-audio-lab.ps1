@@ -3,7 +3,8 @@ python -m pip install pyinstaller==6.16.0 Pillow==11.3.0 -r Companion/requiremen
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller/speech installation failed' }
 python scripts/fetch-speech-model.py
 if ($LASTEXITCODE -ne 0) { throw 'Speech assets download failed' }
-python -m PyInstaller --noconfirm --clean --onedir --windowed --name IDW-Audio-Lab --distpath audio-lab-dist --workpath audio-lab-build --specpath audio-lab-build --paths Companion --collect-all vosk --collect-all _sounddevice_data --add-data "speech-model;speech-model" --collect-all basic_pitch --collect-all librosa --collect-all onnxruntime --collect-all lazy_loader --exclude-module tensorflow --exclude-module coremltools --exclude-module tflite_runtime Companion/audio_lab.py
+$speechData = (Resolve-Path 'speech-model').Path + ';speech-model'
+python -m PyInstaller --noconfirm --clean --onedir --windowed --name IDW-Audio-Lab --distpath audio-lab-dist --workpath audio-lab-build --specpath audio-lab-build --paths Companion --collect-all vosk --collect-all _sounddevice_data --add-data $speechData --collect-all basic_pitch --collect-all librosa --collect-all onnxruntime --collect-all lazy_loader --exclude-module tensorflow --exclude-module coremltools --exclude-module tflite_runtime Companion/audio_lab.py
 if ($LASTEXITCODE -ne 0) { throw 'Audio Lab packaging failed' }
 $exe = (Resolve-Path 'audio-lab-dist/IDW-Audio-Lab/IDW-Audio-Lab.exe').Path
 $report = Join-Path $PWD 'audio-lab-packaged-test.txt'
