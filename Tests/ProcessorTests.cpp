@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "InstrumentPanel.h"
 #include "MidiExport.h"
 #include "VoiceProfiles.h"
 #include <iostream>
@@ -156,6 +157,22 @@ void testTakeRecovery(){
     const auto before=restored->takes.size();check(!restored->takes.recover(file.getSiblingFile("nonexistent.mid")),"Invalid recovery file accepted");check(restored->takes.size()==before,"Failed recovery destroyed take");
     std::cout<<"PASS V5 recording survives editor close / MIDI recovery / tempo / failed-load preservation\n";
 }
+void testStudioInstrument(){
+    auto p=processor(48000,256);parameter(*p,"synthEnabled",1);parameter(*p,"melody",0);parameter(*p,"synthDelay",0);
+    juce::AudioBuffer<float> buffer(2,256);buffer.clear();juce::MidiBuffer notes;
+    notes.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)100),128);
+    notes.addEvent(juce::MidiMessage::noteOn(2,64,(juce::uint8)100),128);
+    notes.addEvent(juce::MidiMessage::noteOn(3,36,(juce::uint8)100),128);
+    p->processBlock(buffer,notes);
+    check(buffer.getMagnitude(0,0,128)==0,"Synth plays before MIDI event offset");
+    check(buffer.getRMSLevel(0,128,128)>0.001f,"Incoming MIDI does not play studio instrument");
+    check(notes.isEmpty(),"Incoming synth notes unexpectedly passed to outgoing MIDI");
+    p->requestPanic();buffer.clear();notes.clear();p->processBlock(buffer,notes);
+    check(buffer.getMagnitude(0,0,256)==0,"Panic left synth audio sounding");
+    juce::MemoryBlock saved;p->getStateInformation(saved);auto restored=processor(48000,256);restored->setStateInformation(saved.getData(),(int)saved.getSize());
+    check(restored->apvts.getRawParameterValue("synthEnabled")->load()==1,"Instrument state failed to restore");
+    std::cout<<"PASS V6 instrument MIDI offsets / incoming polyphony / Panic / state persistence\n";
+}
 void renderEditor(){
     auto p=processor(48000,128);std::vector<float> before;for(auto* parameter:p->getParameters())before.push_back(parameter->getValue());std::unique_ptr<juce::AudioProcessorEditor> editor(p->createEditor());for(int i=0;i<p->getParameters().size();++i)check(std::abs(before[(size_t)i]-p->getParameters()[i]->getValue())<1.0e-6f,"Opening editor modifies processor parameters");editor->setVisible(true);
     for(auto size:{std::pair<int,int>{1120,900},{1040,890}}){
@@ -163,15 +180,23 @@ void renderEditor(){
         for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Visible control outside editor bounds");
         juce::Image image(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(image);editor->paintEntireComponent(graphics,true);}
         check(image.getPixelAt(1,1).getAlpha()>0,"Editor render is empty");juce::MemoryOutputStream output;juce::PNGImageFormat png;check(png.writeImageToStream(image,output),"Cannot render UI preview");
-        const auto file=juce::File::getCurrentWorkingDirectory().getChildFile(size.first==1120?"IDW-V5-Preview.png":"IDW-V5-Minimum.png");check(file.replaceWithData(output.getData(),output.getDataSize()),"Cannot save UI preview");
+        const auto file=juce::File::getCurrentWorkingDirectory().getChildFile(size.first==1120?"IDW-V6-Preview.png":"IDW-V6-Minimum.png");check(file.replaceWithData(output.getData(),output.getDataSize()),"Cannot save UI preview");
     }
     for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Studio controls"){button->onClick();break;}
     for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Studio control outside editor bounds");
     juce::Image studio(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(studio);editor->paintEntireComponent(graphics,true);}
     juce::MemoryOutputStream stream;juce::PNGImageFormat png;check(png.writeImageToStream(studio,stream),"Cannot render Studio view");
-    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V5-Studio.png").replaceWithData(stream.getData(),stream.getDataSize()),"Cannot save Studio preview");
-    std::cout<<"PASS V5 performance/default/minimum and Studio editor render / bounds\n";
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V6-Studio.png").replaceWithData(stream.getData(),stream.getDataSize()),"Cannot save Studio preview");
+    for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Studio instrument"){button->onClick();break;}
+    for(auto* child:editor->getChildren())if(auto* panel=dynamic_cast<InstrumentPanel*>(child)){
+        check(panel->isVisible(),"Instrument panel not visible");
+        for(auto* control:panel->getChildren())check(panel->getLocalBounds().contains(control->getBounds()),"Instrument control outside panel");
+    }
+    juce::Image instrument(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(instrument);editor->paintEntireComponent(graphics,true);}
+    juce::MemoryOutputStream instrumentStream;check(png.writeImageToStream(instrument,instrumentStream),"Cannot render instrument view");
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V6-Instrument.png").replaceWithData(instrumentStream.getData(),instrumentStream.getDataSize()),"Cannot save instrument preview");
+    std::cout<<"PASS V6 performance/default/minimum, Studio and Instrument editor render / bounds\n";
 }
 }
-int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
+int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testStudioInstrument();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
 

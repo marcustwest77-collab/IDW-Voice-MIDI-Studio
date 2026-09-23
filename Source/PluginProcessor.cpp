@@ -48,11 +48,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout IDWVoiceMIDIStudioAudioProce
     p.add(std::make_unique<B>("harmonyBass", "Bass Layer", false));
     p.add(std::make_unique<I>("voiceLow", "Lowest Voice Note", 0, 127, 0));
     p.add(std::make_unique<I>("voiceHigh", "Highest Voice Note", 0, 127, 127));
+    p.add(std::make_unique<B>("synthEnabled", "Studio Instrument", false));
+    p.add(std::make_unique<I>("synthLead", "Lead Sound", 0, 4, 1));
+    p.add(std::make_unique<I>("synthChord", "Chord Sound", 0, 4, 3));
+    p.add(std::make_unique<I>("synthBass", "Bass Sound", 0, 4, 0));
+    p.add(std::make_unique<F>("synthGain", "Instrument Volume", 0.f, 1.f, .55f));
+    p.add(std::make_unique<F>("synthTone", "Instrument Brightness", 0.f, 1.f, .65f));
+    p.add(std::make_unique<F>("synthAttack", "Instrument Attack", .001f, 1.f, .008f));
+    p.add(std::make_unique<F>("synthRelease", "Instrument Release", .01f, 2.f, .25f));
+    p.add(std::make_unique<F>("synthDelay", "Instrument Echo", 0.f, .6f, .12f));
     return p;
 }
 
 
 void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
+    studioSynth.prepare(sr);incomingMidi.clear();synthWasEnabled=false;
     heldHarmony={};
     inputPeak.store(0);observedRate.store(sr);observedBlock.store(block);
     sampleRateHz=sr;hopSize=juce::jmax(1,(int)std::lround(sr*0.005));hop.assign((size_t)hopSize,0);hopFill=0;
@@ -164,7 +174,7 @@ void IDWVoiceMIDIStudioAudioProcessor::analyse(juce::MidiBuffer& out,int at){
 void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& out){
     juce::ScopedNoDenormals noDenormals;
     const double started=juce::Time::getMillisecondCounterHiRes();
-    learn.process(out,apvts);out.clear();
+    incomingMidi.clear();incomingMidi.swapWith(out);learn.process(incomingMidi,apvts);out.clear();
     const int count=buffer.getNumSamples(),channels=buffer.getNumChannels();
     if(count<=0 || channels<=0 || hop.empty())return;
     callbacks.fetch_add(1,std::memory_order_relaxed);
@@ -177,7 +187,19 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
         out.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)100),0);
         testRemaining=(int)(sampleRateHz*0.350);inhibitSamples=(int)(sampleRateHz*0.500);
     }
-    const bool monitor=value("monitorMic")>0.5f,preview=value("previewAudio")>0.5f;
+    const bool synthEnabled=value("synthEnabled")>0.5f;
+    const bool startingSynth=synthEnabled&&!synthWasEnabled;
+    if(synthEnabled!=synthWasEnabled){studioSynth.reset();synthWasEnabled=synthEnabled;}
+    if(synthEnabled){
+        studioSynth.configure({(int)value("synthLead"),(int)value("synthChord"),(int)value("synthBass"),value("synthGain"),value("synthTone"),value("synthAttack"),value("synthRelease"),value("synthDelay"),value("mpe")>0.5f});
+        if(startingSynth){
+            if(testRemaining>0)studioSynth.message(0x90,60,100);
+            else if(active>=0)studioSynth.message(0x90+activeChannel-1,active,90);
+            for(int n:heldHarmony.chord)if(n>=0)studioSynth.message(0x91,n,80);
+            if(heldHarmony.bass>=0)studioSynth.message(0x92,heldHarmony.bass,90);
+        }
+    }
+    const bool monitor=value("monitorMic")>0.5f,preview=value("previewAudio")>0.5f && value("synthEnabled")<0.5f;
     const int inputMode=(int)value("inputMode"),inputs=juce::jmin(getTotalNumInputChannels(),channels);
     for(int i=0;i<count;++i){
         if(inhibitSamples>0)--inhibitSamples;
@@ -195,6 +217,18 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
         phase+=juce::MathConstants<double>::twoPi*noteHz/sampleRateHz;if(phase>=juce::MathConstants<double>::twoPi)phase-=juce::MathConstants<double>::twoPi;
         const float tone=previewGain*(float)std::sin(phase);
         for(int ch=0;ch<channels;++ch)buffer.setSample(ch,i,(monitor?(ch<inputs?buffer.getSample(ch,i):left):0.0f)+tone);
+    }
+    if(synthEnabled){
+        auto input=incomingMidi.begin(),generated=out.begin();
+        const auto dispatch=[this](const juce::MidiMessageMetadata& event){
+            const auto* d=event.data;
+            if(event.numBytes>=3)studioSynth.message(d[0],d[1],d[2]);
+        };
+        for(int i=0;i<count;++i){
+            while(input!=incomingMidi.end()&&(*input).samplePosition<=i){dispatch(*input);++input;}
+            while(generated!=out.end()&&(*generated).samplePosition<=i){dispatch(*generated);++generated;}
+            const auto sound=studioSynth.sample();for(int ch=0;ch<channels;++ch)buffer.addSample(ch,i,sound);
+        }
     }
     inputPeak.store(juce::jmax(blockPeak,inputPeak.load()*(float)std::exp(-count/(sampleRateHz*0.5))));
     int notes=0,events=0;

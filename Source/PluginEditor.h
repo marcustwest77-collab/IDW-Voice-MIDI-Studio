@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include "InstrumentPanel.h"
 class IDWVoiceMIDIStudioAudioProcessorEditor : public juce::AudioProcessorEditor,private juce::Timer {
 public:
     explicit IDWVoiceMIDIStudioAudioProcessorEditor(IDWVoiceMIDIStudioAudioProcessor&);
@@ -48,6 +49,9 @@ private:
     bool calibrating=false;double calibrationStarted=0;float noisePeak=0;
     std::array<float,220> history{};int historyPos=0;
     int previousDrumEvents=0,flashPad=-1,flashTicks=0;
+    juce::TextButton instrumentButton{"Studio instrument"};
+    std::unique_ptr<InstrumentPanel> instrumentPanel;
+    bool instrumentVisible=false;
     bool performanceView=true,helpVisible=false,learningRange=false;
     double rangeStarted=0;int learnedLow=127,learnedHigh=0,rangeSamples=0;
     juce::TextButton viewButton{"Studio controls"},saveProfile{"Save voice"},learnRange{"Learn range"},recover{"Recover take"};

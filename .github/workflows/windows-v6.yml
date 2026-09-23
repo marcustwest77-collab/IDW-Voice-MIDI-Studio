@@ -1,0 +1,61 @@
+name: IDW V6 Windows candidate
+on:
+  push:
+    branches: [idw-v6-build]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Test Audio Lab and FL routing contracts
+        run: python -m unittest discover -s Tests -p 'test_*.py' -v
+      - name: Install and smoke-test local transcription model
+        run: |
+          python -m pip install -r Companion/requirements-transcription.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Transcription dependencies failed' }
+          python Tests/transcription_smoke.py
+          if ($LASTEXITCODE -ne 0) { throw 'Transcription model check failed' }
+      - name: Build and run regression suites
+        run: ./scripts/build-windows.ps1
+      - name: Validate VST3
+        run: |
+          Invoke-WebRequest 'https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip' -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval
+          $validator = Get-ChildItem pluginval -Recurse -Filter pluginval.exe | Select-Object -First 1
+          if (-not $validator) { throw 'pluginval not found' }
+          $plugin = (Resolve-Path 'build-win-6/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3').Path
+          & $validator.FullName --headless --strictness-level 5 --validate $plugin 2>&1 | Tee-Object pluginval-result.txt
+          if ($LASTEXITCODE -ne 0) { throw "pluginval failed: $LASTEXITCODE" }
+      - name: Include validation results in portable ZIP
+        run: |
+          $package = Get-ChildItem -Directory -Filter 'IDW-V6-Windows-*' | Select-Object -First 1
+          if (-not $package) { throw 'Portable build missing' }
+          Copy-Item pluginval-result.txt $package.FullName
+          Compress-Archive -Path $package.FullName -DestinationPath ($package.FullName + '.zip') -Force
+      - name: Upload tested Windows candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: IDW-V6-Windows-Candidate
+          path: IDW-V6-Windows-*.zip
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload logs even if a check fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: IDW-V6-Build-Logs
+          path: |
+            build-win-6/Testing/Temporary/*.log
+            pluginval-result.txt
+          if-no-files-found: ignore
+          retention-days: 14

@@ -75,6 +75,10 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     trainTarget.setSelectedId(1);train.onClick=[this]{p.beats.train(trainTarget.getSelectedId()-1);p.requestPanic();};cancelTrain.onClick=[this]{p.beats.cancel();};clearTrain.onClick=[this]{p.beats.clearModels();status.setText("Drum profiles reset; basic kick/snare/hat detection restored.",juce::dontSendNotification);};
     beatSlider.setSliderStyle(juce::Slider::LinearHorizontal);beatSlider.setTextBoxStyle(juce::Slider::TextBoxRight,false,60,22);beatSlider.setNumDecimalPlacesToDisplay(3);addAndMakeVisible(beatSlider);attachSlider("beatThreshold",beatSlider);beatSlider.textFromValueFunction=[](double v){return juce::String(v,3);};beatSlider.updateText();
     beatLabel.setText("Hit threshold",juce::dontSendNotification);addAndMakeVisible(beatLabel);
+    addAndMakeVisible(instrumentButton);
+    instrumentPanel=std::make_unique<InstrumentPanel>(p.apvts,[this]{instrumentVisible=false;resized();});
+    addChildComponent(*instrumentPanel);
+    instrumentButton.onClick=[this]{instrumentVisible=!instrumentVisible;resized();};
     setupV5();history.fill(-1);refreshPresets();syncScale();showHelp(false);resized();timerCallback();startTimerHz(30);
 }
 IDWVoiceMIDIStudioAudioProcessorEditor::~IDWVoiceMIDIStudioAudioProcessorEditor(){stopTimer();p.takes.drain();p.takes.checkpoint();setLookAndFeel(nullptr);}
@@ -97,12 +101,12 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
     g.fillAll(background);const float w=(float)getWidth();
     if(performanceView){
         g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,250,w-48,165},{24,435,w-48,190},{24,646,w-48,145}})g.fillRoundedRectangle(r,12);
-        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("VERSION 5 / ONE VOICE, FULL ARRANGEMENT",getWidth()-355,22,330,30,juce::Justification::centredRight);
+        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6",getWidth()-355,22,330,30,juce::Justification::centredRight);
         g.setColour(muted);g.setFont(juce::FontOptions(12));g.drawText("IN DA WIND ENTERTAINMENT / PERFORMANCE",30,getHeight()-24,650,22,juce::Justification::centredLeft);
         return;
     }
     g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,242,w-48,170},{24,592,w-48,198}})g.fillRoundedRectangle(r,12);
-    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("VERSION 5  /  LOCAL VOICE ENGINE",getWidth()-335,22,310,30,juce::Justification::centredRight);
+    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V6",getWidth()-335,22,310,30,juce::Justification::centredRight);
     const juce::Rectangle<float> plot(365,110,w-420,93);
     g.setColour(juce::Colour(0xff263144));for(int j=0;j<=4;++j){const float y=plot.getY()+j*plot.getHeight()/4;g.drawHorizontalLine((int)y,plot.getX(),plot.getRight());}
     float centre=60;const float current=history[(size_t)((historyPos+219)%220)];if(current>=0)centre=std::round(current/12)*12;
@@ -196,9 +200,11 @@ juce::String IDWVoiceMIDIStudioAudioProcessorEditor::diagnosticReport() const {
     text += "Status: "+setupStatus.getText()+"\nDAW receipt, instrument selection and audio output audibility are not detectable by this plugin.\n";
     return text;
 }
-juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText(){return R"HELP(IDW VOICE MIDI STUDIO / VERSION 5
+juce::String IDWVoiceMIDIStudioAudioProcessorEditor::manualText(){return R"HELP(IDW VOICE MIDI STUDIO / VERSION 6
 
 PERFORMANCE VIEW
+Open Studio instrument to enable the built-in 32-voice synth and choose lead, chord and bass sounds. It replaces Preview sound while enabled. Audio Lab is a separate companion for file transcription and optional cloud conversion.
+
 Switch between the performance screen and Studio controls at the top.
 Choose Major or Minor and a root to harmonize your voice into diatonic triads or sevenths.
 Lead: MIDI channel 1. Chords: channel 2. Optional bass: channel 3. Drums: channel 10.
@@ -336,5 +342,8 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::layoutV5(){
         record.setBounds(42,667,190,45);exportMidi.setBounds(245,667,150,45);recover.setBounds(408,667,155,45);bpmLabel.setBounds(587,674,40,28);bpmSlider.setBounds(629,667,200,45);
         captureLabel.setBounds(42,727,w-84,45);preview.setBounds(32,801,145,34);test.setBounds(190,801,140,34);panic.setBounds(344,801,135,34);help.setBounds(w-205,801,165,34);diagnostics.setBounds(498,792,w-720,45);
     }else{readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));}
+    instrumentButton.setVisible(true);instrumentButton.setBounds(700,24,150,30);
+    if(instrumentPanel){instrumentPanel->setBounds(25,78,w-50,getHeight()-128);instrumentPanel->setVisible(instrumentVisible);}
+    if(instrumentVisible&&instrumentPanel)instrumentPanel->toFront(false);
     helpText.setVisible(helpVisible);closeHelp.setVisible(helpVisible);if(helpVisible){helpText.toFront(false);closeHelp.toFront(false);}
 }
