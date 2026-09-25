@@ -19,6 +19,14 @@ jobs:
       - name: Checkout IDW Voice MIDI Studio
         uses: actions/checkout@v4
 
+      - name: Run actions/setup-python@v5
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Test Audio Lab and FL routing contracts
+        run: python -m unittest discover -s Tests -p 'test_*.py' -v
+
       - name: Install CMake
         uses: lukka/get-cmake@latest
 
