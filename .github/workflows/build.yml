@@ -28,6 +28,9 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel 2
 
+      - name: Run regression tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
       - name: Download pluginval on Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -42,7 +45,7 @@ jobs:
           $validator = Get-ChildItem -Path pluginval -Recurse -Filter pluginval.exe | Select-Object -First 1
           if (-not $validator) { throw "pluginval.exe not found" }
           $plugin = Resolve-Path "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3"
-          & $validator.FullName --strictness-level 5 $plugin
+          & $validator.FullName --headless --strictness-level 5 --validate $plugin
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Download pluginval on macOS
@@ -57,7 +60,7 @@ jobs:
         run: |
           VALIDATOR=$(find pluginval -type f -path "*/Contents/MacOS/pluginval" | head -n 1)
           if [ -z "$VALIDATOR" ]; then echo "pluginval executable not found"; exit 1; fi
-          "$VALIDATOR" --strictness-level 5 "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3"
+          "$VALIDATOR" --headless --strictness-level 5 --validate "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3"
 
       - name: Validate Audio Unit on macOS
         if: runner.os == 'macOS'

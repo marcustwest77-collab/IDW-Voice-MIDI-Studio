@@ -1,0 +1,7 @@
+23 September 2026
+PASS StudioSynthTests C++ executable: five patches, three sample rates, polyphony, channel isolation, sustain, stealing, Panic, drums.
+PASS HarmonyTests: examples plus 6144 combinations.
+PASS SetupDiagnosticsTests: ten scenarios.
+PASS Python unittest: 13 adapter / recording / routing tests. Model and API responses mocked in contract tests.
+PASS g++ C++17 syntax-only processor, editor and ProcessorTests against JUCE 9.0.2 headers.
+NOT RUN: Windows link, actual plugin rendering, full processor regression execution, pluginval, Basic Pitch model inference, live Kits roundtrip, physical microphone/FL Studio.

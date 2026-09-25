@@ -1,0 +1,5 @@
+Local checks, 23 September 2026
+PASS: HarmonyTests, known examples plus 6144 scale/root/pitch/voicing combinations.
+PASS: SetupDiagnosticsTests, ten guidance scenarios.
+PASS: g++ C++17 syntax-only compilation of PluginEditor.cpp, PluginProcessor.cpp, PresetManager.cpp and ProcessorTests.cpp against JUCE headers.
+PENDING: Windows link, full processor regression execution, rendered UI inspection, pluginval, real mic and DAW listening/routing.

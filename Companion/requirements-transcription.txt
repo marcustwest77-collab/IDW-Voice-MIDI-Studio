@@ -1,0 +1,2 @@
+# Python 3.10 recommended; Basic Pitch supplies the model and platform runtime.
+basic-pitch==0.4.0
