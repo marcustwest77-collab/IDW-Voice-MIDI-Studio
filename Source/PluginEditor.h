@@ -41,6 +41,14 @@ private:
     juce::TextButton train{"Train 5 hits"},cancelTrain{"Cancel"},clearTrain{"Reset pads"};
     juce::TextButton drumPads[8];juce::Slider drumNotes[8];
     juce::TextEditor helpText;
+    // NOTE: the controls below must be declared before the attachment vectors
+    // (sliders/buttons/combos). C++ destroys members in reverse declaration
+    // order, and each *Attachment destructor calls removeListener on its
+    // control; if the control were destroyed first, that call would touch
+    // freed memory (use-after-free / crash on teardown).
+    juce::ComboBox harmonyMode,harmonyVoicing,profileSelector;
+    juce::ToggleButton bassLayer{"Bass layer"};
+    juce::Slider voiceLow,voiceHigh;
     std::vector<std::unique_ptr<SliderAttachment>> sliders;
     std::vector<std::unique_ptr<ButtonAttachment>> buttons;
     std::vector<std::unique_ptr<ComboAttachment>> combos;
@@ -64,9 +72,6 @@ private:
     bool performanceView=true,helpVisible=false,learningRange=false;
     double rangeStarted=0;int learnedLow=127,learnedHigh=0,rangeSamples=0;
     juce::TextButton viewButton{"Studio controls"},saveProfile{"Save voice"},learnRange{"Learn range"},recover{"Recover take"};
-    juce::ComboBox harmonyMode,harmonyVoicing,profileSelector;
-    juce::ToggleButton bassLayer{"Bass layer"};
-    juce::Slider voiceLow,voiceHigh;
     juce::Label arrangementTitle,arrangementStatus,profileTitle,lowLabel,highLabel;
     juce::StringArray profileNames;
     juce::TooltipWindow tooltips{this,500};
