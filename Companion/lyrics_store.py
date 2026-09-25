@@ -53,7 +53,17 @@ class LyricsStore:
                 self.atomic_write(path.with_suffix('.previous.json'),old)
                 history=self.directory/'history'/data['id'];history.mkdir(parents=True,exist_ok=True)
                 # Retain distinct pre-save versions; current draft is never pruned.
-                snapshot=history/(datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%f')+'-'+uuid.uuid4().hex+'.json')
+                # A monotonic sequence number (not just a timestamp) breaks ties when two
+                # saves land in the same clock tick - wall-clock resolution is coarse enough
+                # on some platforms (notably Windows) that back-to-back saves in a tight loop
+                # can share an identical microsecond timestamp, which previously left the sort
+                # order to fall back on the random UUID suffix and made history() nondeterministic.
+                seq_path=history/'.seq'
+                try:seq=int(seq_path.read_text())+1
+                except (OSError,ValueError):seq=1
+                seq_path.write_text(str(seq))
+                timestamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%f')
+                snapshot=history/(f'{timestamp}-{seq:012d}-'+uuid.uuid4().hex+'.json')
                 self.atomic_write(snapshot,old)
             self.atomic_write(path,raw)
             history=self.directory/'history'/data['id']
