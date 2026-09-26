@@ -107,13 +107,44 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::syncScale(){const int mask=(int)p.a
 void IDWVoiceMIDIStudioAudioProcessorEditor::showHelp(bool visible){helpVisible=visible;helpText.setVisible(visible);closeHelp.setVisible(visible);if(visible){helpText.toFront(false);closeHelp.toFront(false);}}
 void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
     g.fillAll(background);const float w=(float)getWidth();
+    auto drawPanel=[&](juce::Rectangle<float> r){
+        juce::ColourGradient grad(card.brighter(0.14f),r.getX(),r.getY(),card.darker(0.30f),r.getX(),r.getBottom(),false);
+        g.setGradientFill(grad);g.fillRoundedRectangle(r,12);
+        g.setColour(juce::Colours::white.withAlpha(0.05f));g.drawRoundedRectangle(r.reduced(0.5f),12,1.0f);
+        g.setColour(gold.withAlpha(0.30f));g.drawLine(r.getX()+14,r.getY()+1.2f,r.getRight()-14,r.getY()+1.2f,1.2f);
+    };
+    auto drawBrandHeader=[&]{
+        const float iconX=26,iconY=24,iconSize=28;
+        juce::Path bars;const float barW=4.2f;const float heights[4]={0.45f,0.85f,0.62f,1.0f};
+        for(int i=0;i<4;++i){const float h=iconSize*heights[i];bars.addRoundedRectangle(iconX+i*(barW+3.4f),iconY+(iconSize-h),barW,h,1.4f);}
+        g.setColour(gold);g.fillPath(bars);
+        g.setColour(muted);g.setFont(juce::FontOptions(10.5f,juce::Font::bold));
+        g.drawText("IDW ENT.",(int)iconX-2,(int)(iconY+iconSize+3),80,12,juce::Justification::centredLeft);
+        const float rowRight=juce::jmin((float)getWidth()-155.0f,970.0f);
+        const float meterLeft=juce::jmax(title.getRight()+20.0f,545.0f)+48.0f,meterRight=rowRight;
+        if(meterRight>meterLeft+50){
+            g.setColour(muted);g.setFont(juce::FontOptions(9.5f,juce::Font::bold));
+            g.drawText("MIC",(int)meterLeft-46,64,40,10,juce::Justification::centredLeft);
+            const juce::Rectangle<float> meter(meterLeft,64,meterRight-meterLeft,9);
+            g.setColour(juce::Colour(0xff1b2130));g.fillRoundedRectangle(meter,4.5f);
+            const float db=juce::Decibels::gainToDecibels(meterSmoothed,-60.0f);
+            const float norm=juce::jlimit(0.0f,1.0f,(db+60.0f)/60.0f);
+            if(norm>0.008f){
+                const juce::Colour meterColour=norm<0.72f?mint:norm<0.9f?gold:juce::Colour(0xffe0685c);
+                g.setColour(meterColour);g.fillRoundedRectangle(meter.withWidth(meter.getWidth()*norm),4.5f);
+            }
+            g.setColour(juce::Colours::white.withAlpha(0.08f));g.drawRoundedRectangle(meter,4.5f,1.0f);
+        }
+    };
     if(performanceView){
-        g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,250,w-48,165},{24,435,w-48,190},{24,646,w-48,145}})g.fillRoundedRectangle(r,12);
+        for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,250,w-48,165},{24,435,w-48,190},{24,646,w-48,145}})drawPanel(r);
+        drawBrandHeader();
         g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V9.2",getWidth()-355,22,330,30,juce::Justification::centredRight);
         g.setColour(muted);g.setFont(juce::FontOptions(12));g.drawText("IN DA WIND ENTERTAINMENT / PERFORMANCE",30,getHeight()-24,650,22,juce::Justification::centredLeft);
         return;
     }
-    g.setColour(card);for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,242,w-48,170},{24,592,w-48,198}})g.fillRoundedRectangle(r,12);
+    for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,242,w-48,170},{24,592,w-48,198}})drawPanel(r);
+    drawBrandHeader();
     g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V9.2",getWidth()-335,22,310,30,juce::Justification::centredRight);
     const juce::Rectangle<float> plot(365,110,w-420,93);
     g.setColour(juce::Colour(0xff263144));for(int j=0;j<=4;++j){const float y=plot.getY()+j*plot.getHeight()/4;g.drawHorizontalLine((int)y,plot.getX(),plot.getRight());}
@@ -127,7 +158,7 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
 }
 void IDWVoiceMIDIStudioAudioProcessorEditor::resized(){
     const int w=getWidth(),inner=w-64;
-    title.setBounds(25,18,650,40);readout.setBounds(42,98,305,48);traceLabel.setBounds(367,84,360,22);status.setBounds(42,157,310,53);
+    title.setBounds(64,18,611,40);readout.setBounds(42,98,305,48);traceLabel.setBounds(367,84,360,22);status.setBounds(42,157,310,53);
     const int knobW=(inner-300)/4;
     juce::Slider* ss[]={&gateSlider,&confidenceSlider,&bendSlider,&tuneSlider};juce::Label* ls[]={&gateLabel,&confidenceLabel,&bendLabel,&tuneLabel};
     for(int i=0;i<4;++i){ls[i]->setBounds(35+i*knobW,252,knobW,23);ss[i]->setBounds(35+i*knobW,277,knobW,121);}
@@ -192,7 +223,8 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::timerCallback(){
     if(flashTicks>0)--flashTicks;
     for(int i=0;i<8;++i){drumPads[i].setButtonText(juce::String(i+1)+(p.beats.examples(i)>=3?" / trained":i==0?" / kick":i==1?" / snare":i==2?" / hat":" / empty"));drumPads[i].setToggleState(training==i||(flashTicks>0&&flashPad==i),juce::dontSendNotification);}
     if(connectionPanel&&connectionVisible)connectionPanel->update(audioRunning(),p.peak(),p.level(),p.eventCount(),setupStatus.getText(),param("synthEnabled")>0.5f||param("previewAudio")>0.5f);
-    train.setEnabled(training<0);cancelTrain.setEnabled(training>=0);syncScale();drainCapture();repaint(24,78,getWidth()-48,150);
+    meterSmoothed=juce::jmax(meterSmoothed*0.72f,p.level());
+    train.setEnabled(training<0);cancelTrain.setEnabled(training>=0);syncScale();drainCapture();repaint(0,0,getWidth(),228);
 }
 bool IDWVoiceMIDIStudioAudioProcessorEditor::audioRunning() const {
     return lastAudioChange>0 && juce::Time::getMillisecondCounterHiRes()-lastAudioChange<1000;
@@ -345,7 +377,7 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::layoutV5(){
     const int w=getWidth();
     for(auto* child:getChildren())child->setVisible(!performanceView);
     for(auto* c:std::initializer_list<juce::Component*>{&harmonyMode,&harmonyVoicing,&bassLayer,&arrangementTitle,&arrangementStatus,&profileTitle,&profileSelector,&saveProfile,&learnRange,&voiceLow,&voiceHigh,&lowLabel,&highLabel,&recover})c->setVisible(performanceView);
-    title.setBounds(25,18,500,40);viewButton.setBounds(545,24,140,30);viewButton.setVisible(true);viewButton.setButtonText(performanceView?"Studio controls":"Performance view");
+    title.setBounds(64,18,461,40);viewButton.setBounds(545,24,140,30);viewButton.setVisible(true);viewButton.setButtonText(performanceView?"Studio controls":"Performance view");
     if(performanceView){
         for(auto* c:std::initializer_list<juce::Component*>{&title,&readout,&status,&diagnostics,&setupStatus,&copyDiagnostics,&preview,&test,&panic,&record,&exportMidi,&captureLabel,&bpmLabel,&bpmSlider,&help,&rootSelector,&calibrate})c->setVisible(true);
         readout.setBounds(42,100,w-84,58);readout.setFont(juce::FontOptions(36.0f,juce::Font::bold));status.setBounds(42,164,w-84,45);
