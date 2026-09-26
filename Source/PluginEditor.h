@@ -30,6 +30,7 @@ private:
     unsigned int lastCallbacks=0;
     double lastAudioChange=0;
     float calibrationPeak=0;
+    float meterSmoothed=0.f;
     juce::Slider gateSlider,confidenceSlider,bendSlider,tuneSlider,beatSlider,bpmSlider;
     juce::Label gateLabel,confidenceLabel,bendLabel,tuneLabel,beatLabel,bpmLabel;
     juce::ComboBox rootSelector,expressionSelector,inputSelector,presetSelector,learnTarget,trainTarget;
