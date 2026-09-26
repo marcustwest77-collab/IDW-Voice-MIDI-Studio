@@ -30,6 +30,14 @@ jobs:
       - name: Install CMake
         uses: lukka/get-cmake@latest
 
+      - name: Cache JUCE fetch and build objects
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-build-juce9.0.2-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-build-juce9.0.2-
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
