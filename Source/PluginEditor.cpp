@@ -51,7 +51,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     learn.onClick=[this]{p.learn.arm(p.learn.destinations()[learnTarget.getSelectedId()-1]);status.setText("Move a hardware MIDI controller to map it.",juce::dontSendNotification);};
     clearLearn.onClick=[this]{p.learn.clear();status.setText("MIDI controller mappings cleared.",juce::dontSendNotification);};
     presetSelector.onChange=[this]{loadPreset();};
-    save.onClick=[this]{p.saveExtraState();const auto name="IDW V4 "+juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S");
+    save.onClick=[this]{p.saveExtraState();const auto name="IDW User "+juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S");
         if(p.presets.save(name)){refreshPresets();status.setText("Saved settings, controller mappings and drum profiles.",juce::dontSendNotification);}else status.setText("Could not save preset.",juce::dontSendNotification);};
     copyDiagnostics.onClick=[this]{juce::SystemClipboard::copyTextToClipboard(diagnosticReport());status.setText("Diagnostics copied. Paste them into your support chat.",juce::dontSendNotification);};
     setupStatus.setColour(juce::Label::textColourId,gold);
@@ -296,6 +296,19 @@ FL STUDIO / VST3
 6. Match Bend Range in your synth. IDW sends RPN pitch-bend sensitivity; some instruments ignore it.
 7. Start with Clean Vocal. Calibrate after loading a preset, since presets change the noise gate.
 
+PRO TOOLS INTRO / WINDOWS / AUDIOBOX USB 96
+Pro Tools does not load the included VST3. Run the IDW standalone beside Pro Tools.
+1. Create a virtual MIDI port in loopMIDI, for example IDW Voice MIDI, and keep loopMIDI open.
+2. In IDW Options > Audio/MIDI Settings, choose AudioBox USB 96 input 1, Main Out 1/2,
+   and the IDW Voice MIDI output. Use the same sample rate as the Pro Tools session.
+3. In Pro Tools Setup > MIDI > Input Devices, enable IDW Voice MIDI.
+4. Create a stereo Instrument track, load an instrument, select IDW Voice MIDI channel 1,
+   and record-arm the track. Turn on MIDI Thru if your Pro Tools setup requires it.
+5. In IDW Setup / Help choose Pro Tools Intro / Windows, mute IDW sounds, and Send test note.
+6. Start with a 128- or 256-sample buffer. Raise it if audio crackles; lower it after routing works.
+7. Raise the AudioBox input gain while singing but avoid clipping. Enable 48V only when the
+   connected condenser microphone requires phantom power. Use headphones while monitoring.
+
 STANDALONE MIDI
 Select a MIDI output in the standalone Audio/MIDI settings. For FL Studio on the same computer,
 use an existing virtual MIDI port (such as loopMIDI), enable that port as an input in FL Studio,
@@ -336,8 +349,10 @@ The displayed LOAD is callback time as a percentage of the audio block budget, n
 Lower host buffers reduce device latency; pitch estimation still needs a short window of sound.
 
 LIMITS
-Monophonic voice tracking, 65-1000 Hz. This version does not provide polyphonic transcription,
-AI voice cloning, cloud processing, a full synthesizer, or automatic access to DAW routing.
+Live voice tracking is monophonic, 65-1000 Hz. Audio Lab file transcription is offline and is
+not a live polyphonic performance tracker. Cloud voice conversion is optional and explicit.
+The included Studio Instrument is a compact performance synth, not a sample library or voice clone.
+Pro Tools requires the standalone plus a real or virtual MIDI port because this package has no AAX.
 )HELP";}
 
 void IDWVoiceMIDIStudioAudioProcessorEditor::setValue(const char* id,float value){
@@ -433,4 +448,3 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::openAudioLab(){
     status.setText("The bundled Audio Lab executable requires Windows. Use the companion Python source on other platforms.",juce::dontSendNotification);
 #endif
 }
-

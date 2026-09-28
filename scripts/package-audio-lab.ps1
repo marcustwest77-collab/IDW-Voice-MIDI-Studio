@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-python -m pip install pyinstaller==6.16.0 Pillow==11.3.0 -r Companion/requirements-speech.txt
+python -m pip install pyinstaller==6.16.0 Pillow==11.3.0 -r Companion/requirements-speech.txt -r Companion/requirements-transcription.txt
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller/speech installation failed' }
 python scripts/fetch-speech-model.py
 if ($LASTEXITCODE -ne 0) { throw 'Speech assets download failed' }
@@ -8,7 +8,7 @@ python -m PyInstaller --noconfirm --clean --onedir --windowed --name IDW-Audio-L
 if ($LASTEXITCODE -ne 0) { throw 'Audio Lab packaging failed' }
 $exe = (Resolve-Path 'audio-lab-dist/IDW-Audio-Lab/IDW-Audio-Lab.exe').Path
 $report = Join-Path $PWD 'audio-lab-packaged-test.txt'
-$preview = Join-Path $PWD 'IDW-V6-Take-Editor.png'
+$preview = Join-Path $PWD 'IDW-V9.2-Take-Editor.png'
 $speechTest = Join-Path $PWD 'speech-test.wav'
 $isolated = Join-Path $env:RUNNER_TEMP 'idw-audio-lab-isolated'
 New-Item -ItemType Directory -Force $isolated | Out-Null

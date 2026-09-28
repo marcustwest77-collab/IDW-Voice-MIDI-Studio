@@ -47,6 +47,11 @@ jobs:
       - name: Run regression tests
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Package and self-test Audio Lab on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/package-audio-lab.ps1
+
       - name: Download pluginval on Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -98,10 +103,14 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path release/Windows/VST3 | Out-Null
           New-Item -ItemType Directory -Force -Path release/Windows/Standalone | Out-Null
+          New-Item -ItemType Directory -Force -Path release/Windows/Audio-Lab | Out-Null
           New-Item -ItemType Directory -Force -Path release/Documentation | Out-Null
           Copy-Item -Recurse "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" "release/Windows/VST3/"
           Copy-Item "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.exe" "release/Windows/Standalone/"
-          Copy-Item "docs/USER_MANUAL.md" "release/Documentation/USER_MANUAL.md"
+          Copy-Item -Recurse "audio-lab-dist/IDW-Audio-Lab/*" "release/Windows/Audio-Lab/"
+          Copy-Item "docs/USER_MANUAL.md", "docs/PRO_TOOLS_SETUP.md", "docs/V9.2-UPGRADE.md" "release/Documentation/"
+          Copy-Item "START-HERE.html", "START-HERE.txt" "release/"
+          Copy-Item "IDW-V9.2-Take-Editor.png" "release/Documentation/" -ErrorAction SilentlyContinue
 
       - name: Build Windows installer
         if: runner.os == 'Windows'
@@ -110,10 +119,11 @@ jobs:
           choco install innosetup -y --no-progress
           New-Item -ItemType Directory -Force -Path release/Installer | Out-Null
           $buildRoot = (Resolve-Path "build/IDWVoiceMIDIStudio_artefacts/Release").Path
+          $audioLabRoot = (Resolve-Path "audio-lab-dist/IDW-Audio-Lab").Path
           $outputDir = (Resolve-Path "release/Installer").Path
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "Inno Setup compiler not found" }
-          & $iscc "/DBuildRoot=$buildRoot" "/DOutputDir=$outputDir" "installer/windows/IDWVoiceMIDIStudio.iss"
+          & $iscc "/DBuildRoot=$buildRoot" "/DAudioLabRoot=$audioLabRoot" "/DOutputDir=$outputDir" "installer/windows/IDWVoiceMIDIStudio.iss"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Stage macOS release package

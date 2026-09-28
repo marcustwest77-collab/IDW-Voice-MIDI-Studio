@@ -211,16 +211,17 @@ void testConnectionCheck(){
         if(auto* b=dynamic_cast<juce::ToggleButton*>(child))heard=b;
         if(auto* c=dynamic_cast<juce::ComboBox*>(child))route=c;
     }
-    check(send&&heard&&route,"Setup controls missing");panel.begin(40);
+    check(send&&heard&&route,"Setup controls missing");check(route->getNumItems()==8,"Guided DAW route list incomplete");panel.begin(40);
     panel.update(false,0,0,40,"Stopped",false);check(!send->isEnabled()&&!heard->isEnabled(),"Stopped setup allowed sound confirmation");
     panel.update(true,.2f,.1f,45,"Tracking",false);check(!heard->isEnabled(),"MIDI generation falsely confirmed audibility");
     send->onClick();check(tests==1&&heard->isEnabled(),"Test note action missing");heard->setToggleState(true,juce::dontSendNotification);
     check(panel.report().contains("yes (manual)"),"Manual confirmation missing");
     route->setSelectedId(2,juce::sendNotificationSync);check(!heard->getToggleState()&&!heard->isEnabled(),"Route change retained stale confirmation");
+    check(panel.report().contains("Pro Tools Intro")&&panel.report().contains("loopMIDI")&&panel.report().contains("AudioBox USB 96"),"Pro Tools route report incomplete");
     send->onClick();heard->setToggleState(true,juce::dontSendNotification);panel.update(false,0,0,46,"Stopped",false);
     check(!heard->getToggleState(),"Audio stop retained stale confirmation");
     panel.begin(46);check(panel.report().contains("Test requested this check: no"),"New setup retained old test");
-    std::cout<<"PASS V6.3 connection check / generated versus audible / route and stop reset\n";
+    std::cout<<"PASS V9.2 guided DAW connection check / generated versus audible / route and stop reset\n";
 }
 void renderEditor(){
     auto p=processor(48000,128);std::vector<float> before;for(auto* parameter:p->getParameters())before.push_back(parameter->getValue());std::unique_ptr<juce::AudioProcessorEditor> editor(p->createEditor());for(int i=0;i<p->getParameters().size();++i)check(std::abs(before[(size_t)i]-p->getParameters()[i]->getValue())<1.0e-6f,"Opening editor modifies processor parameters");editor->setVisible(true);
@@ -229,13 +230,13 @@ void renderEditor(){
         for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Visible control outside editor bounds");
         juce::Image image(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(image);editor->paintEntireComponent(graphics,true);}
         check(image.getPixelAt(1,1).getAlpha()>0,"Editor render is empty");juce::MemoryOutputStream output;juce::PNGImageFormat png;check(png.writeImageToStream(image,output),"Cannot render UI preview");
-        const auto file=juce::File::getCurrentWorkingDirectory().getChildFile(size.first==1120?"IDW-V6-Preview.png":"IDW-V6-Minimum.png");check(file.replaceWithData(output.getData(),output.getDataSize()),"Cannot save UI preview");
+        const auto file=juce::File::getCurrentWorkingDirectory().getChildFile(size.first==1120?"IDW-V9.2-Preview.png":"IDW-V9.2-Minimum.png");check(file.replaceWithData(output.getData(),output.getDataSize()),"Cannot save UI preview");
     }
     for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Studio controls"){button->onClick();break;}
     for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Studio control outside editor bounds");
     juce::Image studio(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(studio);editor->paintEntireComponent(graphics,true);}
     juce::MemoryOutputStream stream;juce::PNGImageFormat png;check(png.writeImageToStream(studio,stream),"Cannot render Studio view");
-    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V6-Studio.png").replaceWithData(stream.getData(),stream.getDataSize()),"Cannot save Studio preview");
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V9.2-Studio.png").replaceWithData(stream.getData(),stream.getDataSize()),"Cannot save Studio preview");
     for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Studio instrument"){button->onClick();break;}
     for(auto* child:editor->getChildren())if(auto* panel=dynamic_cast<InstrumentPanel*>(child)){
         check(panel->isVisible(),"Instrument panel not visible");
@@ -243,7 +244,7 @@ void renderEditor(){
     }
     juce::Image instrument(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(instrument);editor->paintEntireComponent(graphics,true);}
     juce::MemoryOutputStream instrumentStream;check(png.writeImageToStream(instrument,instrumentStream),"Cannot render instrument view");
-    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V6-Instrument.png").replaceWithData(instrumentStream.getData(),instrumentStream.getDataSize()),"Cannot save instrument preview");
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V9.2-Instrument.png").replaceWithData(instrumentStream.getData(),instrumentStream.getDataSize()),"Cannot save instrument preview");
     for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Setup / Help"){button->onClick();break;}
     for(auto* child:editor->getChildren())if(auto* panel=dynamic_cast<ConnectionPanel*>(child)){
         check(panel->isVisible(),"Connection panel not visible");
@@ -251,9 +252,8 @@ void renderEditor(){
     }
     juce::Image connection(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(connection);editor->paintEntireComponent(graphics,true);}
     juce::MemoryOutputStream connectionStream;check(png.writeImageToStream(connection,connectionStream),"Cannot render setup view");
-    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V6-Connection.png").replaceWithData(connectionStream.getData(),connectionStream.getDataSize()),"Cannot save setup preview");
-    std::cout<<"PASS V6 performance/default/minimum, Studio and Instrument editor render / bounds\n";
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V9.2-Connection.png").replaceWithData(connectionStream.getData(),connectionStream.getDataSize()),"Cannot save setup preview");
+    std::cout<<"PASS V9.2 performance/default/minimum, Studio, Instrument and Connection Center render / bounds\n";
 }
 }
 int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testStudioInstrument();testRetrospectiveCapture();testSongScenes();testConnectionCheck();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
-

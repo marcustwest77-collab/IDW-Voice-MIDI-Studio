@@ -1,17 +1,25 @@
-IDW VOICE MIDI STUDIO V6.7 — WINDOWS x64
+IDW VOICE MIDI STUDIO V9.2 — WINDOWS x64
 
-Extract the entire ZIP. Double-click Run-IDW.cmd for voice-to-MIDI.
-Double-click Run-Audio-Lab.cmd for lyrics, offline dictation, MIDI editing
-and WAV transcription. No separate Python installation is needed in the
-compiled package. Keep the entire Audio-Lab folder intact.
+INSTALLED VERSION
+Open IDW Voice MIDI Studio from the Start menu or desktop shortcut.
+Open IDW Audio Lab from the Start menu for lyrics, offline dictation,
+MIDI editing and recorded WAV-to-MIDI transcription.
 
-New in V6.7: named checkpoints and Import TXT.
-Also included: optional spoken punctuation/section commands, phrase layout,
-Redo and lyric word/line/section counts. Command help lists recognized commands.
-Also included: Find song, Input 1 / Input 2, microphone
-level meter and History (restore earlier lyrics as a separate song).
-Drafts auto-save in your user folder / IDW Audio Lab / Lyrics.
-Read START-HERE.html and docs/V6.7-UPGRADE.md for setup and limits.
+PORTABLE VERSION
+Extract the complete ZIP into a new folder. Run Run-IDW.cmd for live
+voice-to-MIDI and Run-Audio-Lab.cmd for the companion. Keep the complete
+Audio-Lab folder together; its private runtime and offline models are included.
 
-Pro Tools Intro does not load VST3. Run IDW separately and send MIDI through
-your existing loopMIDI port, or export/import a MIDI file. No AAX is included.
+NEW IN V9.2
+- Modern performance interface and live microphone level meter.
+- Guided DAW Connection Center with exact routing steps.
+- Dedicated Pro Tools Intro / Windows + AudioBox USB 96 setup profile.
+- Copied diagnostics now include the selected route instructions.
+
+PRO TOOLS INTRO
+Pro Tools does not load the included VST3. Run the IDW standalone and send
+MIDI through a virtual port such as loopMIDI. Read docs/PRO_TOOLS_SETUP.md.
+No AAX plugin is included.
+
+Start with headphones, 48 kHz, a 256-sample buffer, Melody on and MPE off.
+Open Setup / Help, select your DAW, and use Send test note before singing.

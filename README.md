@@ -51,6 +51,16 @@ IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and stand
 
 See `docs/USER_MANUAL.md`, `docs/FL_STUDIO_SETUP.md`, or press **HELP / QUICK START** inside the plugin for the full guide. `Integrations/FL-Studio/IDW-Performance/device_IDW_Performance.py` is an optional FL Studio controller script for routing.
 
+## Quick Start in Pro Tools Intro on Windows
+Pro Tools does not load the included VST3, so use the IDW **standalone** application with a virtual MIDI port:
+1. Create an `IDW Voice MIDI` port in loopMIDI.
+2. In IDW **Options > Audio/MIDI Settings**, select the AudioBox USB 96 input and output plus `IDW Voice MIDI` as the MIDI output.
+3. In Pro Tools, enable `IDW Voice MIDI` under **Setup > MIDI > Input Devices**.
+4. Create and record-arm a stereo Instrument track, load an instrument, and select `IDW Voice MIDI` channel 1 as its MIDI input.
+5. Open IDW **Setup / Help**, choose **Pro Tools Intro / Windows**, mute IDW sounds, and press **Send test note**.
+
+See `docs/PRO_TOOLS_SETUP.md` for the complete AudioBox USB 96 checklist and troubleshooting flow.
+
 ## Audio Lab (Python companion)
 `Companion/` is a separate, optional Python 3.10 application — it does not run inside the plugin and is not required to use the plugin.
 
@@ -59,7 +69,7 @@ See `docs/USER_MANUAL.md`, `docs/FL_STUDIO_SETUP.md`, or press **HELP / QUICK ST
 - Local, offline WAV-to-MIDI transcription (via Basic Pitch) for a recorded vocal take — not a live streaming feature
 - Optional cloud voice conversion via an existing Kits.ai account and voice model
 
-Run it with `Companion/Run-Audio-Lab.cmd` (Windows) after installing Python 3.10. Run `Companion/Setup-Transcription.cmd` once, with internet access, to add the optional local transcription model.
+The V9.2 Windows installer includes a self-contained **IDW Audio Lab** Start-menu shortcut with its offline models. Source users can instead run `Companion/Run-Audio-Lab.cmd` after installing Python 3.10, then run `Companion/Setup-Transcription.cmd` once to add the optional local transcription model.
 
 Run the companion's own test suite (no plugin build required):
 

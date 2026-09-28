@@ -80,6 +80,10 @@ Save and recall calibration/voice-range settings per singer, isolated from the m
 
 Open **Setup / Help** for a live diagnostics view: whether audio is processing, current microphone level, MIDI generated since the panel opened, and which sound path (instrument, monitor, or DAW-only) is currently enabled. It also has **Send test note** (MIDI note 60, channel 1, only available while audio is running) and a **Copy setup report** button useful when asking for support — the report contains signal levels and settings, never microphone recordings or account credentials.
 
+## DAW Connection Center
+
+Open **Setup / Help** and choose your host. V9.2 includes guided profiles for the built-in instrument, Pro Tools Intro on Windows, FL Studio, Ableton Live, REAPER, Logic Pro, other VST3/AU hosts, and standalone MIDI. **Copy setup report** now includes the selected profile's exact routing steps along with signal readings.
+
 ## FL Studio and other DAWs
 
 1. Put IDW on the mixer insert receiving your microphone.
@@ -87,7 +91,7 @@ Open **Setup / Help** for a live diagnostics view: whether audio is processing, 
 3. Set your destination instrument's MIDI Input Port to the same number.
 4. Calibrate noise while the room is quiet, load a preset such as Clean Vocal, and sing.
 
-Full DAW-specific routing steps (including Pro Tools via loopMIDI) are in `docs/FL_STUDIO_SETUP.md`. `Integrations/FL-Studio/IDW-Performance/device_IDW_Performance.py` is an optional FL Studio controller script for routing.
+Full DAW-specific routing steps are in `docs/FL_STUDIO_SETUP.md` and `docs/PRO_TOOLS_SETUP.md`. `Integrations/FL-Studio/IDW-Performance/device_IDW_Performance.py` is an optional FL Studio controller script for routing.
 
 ## Audio Lab companion
 

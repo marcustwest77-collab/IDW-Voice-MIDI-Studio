@@ -19,7 +19,8 @@ public:
         if(type==0x80 || (type==0x90 && b==0)) { for(auto& v:voices)if(v.on&&v.ch==ch&&v.note==a){v.key=false;if(!sustain[ch]&&ch!=9)release(v);}return; }
         if(type==0xe0){bends[ch]=(a+128*b-8192)/8192.0;retune(ch);return;}
         if(type!=0xb0)return;
-        if(a==101)rpnMSB[ch]=b; if(a==100)rpnLSB[ch]=b;
+        if(a==101)rpnMSB[ch]=b;
+        if(a==100)rpnLSB[ch]=b;
         if(a==6&&rpnMSB[ch]==0&&rpnLSB[ch]==0){ranges[ch]=b;retune(ch);}
         if(a==64){sustain[ch]=b>=64;if(!sustain[ch])for(auto& v:voices)if(v.on&&v.ch==ch&&!v.key)release(v);}
         if(a==123)for(auto& v:voices)if(v.on&&v.ch==ch){v.key=false;release(v);}
