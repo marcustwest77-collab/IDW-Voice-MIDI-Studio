@@ -2,7 +2,7 @@ name: Build, Validate and Package IDW Voice MIDI Studio
 
 on:
   push:
-    branches: [main]
+    branches: [main, v9.2-guided-routing]
   pull_request:
     branches: [main]
   workflow_dispatch:
