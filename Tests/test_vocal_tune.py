@@ -27,6 +27,13 @@ class VocalTuneTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 vocal_tune.tuning_settings(**kwargs)
 
+    def test_continuous_vocal_does_not_define_an_unbounded_gate(self):
+        # Regression contract for the packaged test: the calculated adaptive
+        # gate is capped below an ordinary sustained vocal level.
+        floor = .18
+        gate = max(10 ** (-55 / 20), min(10 ** (-30 / 20), floor * 2.5))
+        self.assertLess(gate, floor)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -122,7 +122,10 @@ def tune_wav(source, destination, root='C', scale='Chromatic', amount=85,
     hop = 256
     f0 = librosa.yin(mono, fmin=65, fmax=1000, sr=rate, frame_length=2048, hop_length=hop)
     rms = librosa.feature.rms(y=mono, frame_length=2048, hop_length=hop)[0]
-    gate = max(10 ** (-55 / 20), float(np.percentile(rms, 10)) * 2.5)
+    # A file may begin immediately with a sustained vocal, so its lowest RMS
+    # frames are not necessarily room noise. Cap the inferred floor at -30 dBFS
+    # instead of allowing a continuous note to gate itself out.
+    gate = max(10 ** (-55 / 20), min(10 ** (-30 / 20), float(np.percentile(rms, 10)) * 2.5))
     corrections = np.zeros_like(f0, dtype=np.float64)
     valid = np.isfinite(f0) & (rms[:len(f0)] >= gate)
     for index in np.flatnonzero(valid):
