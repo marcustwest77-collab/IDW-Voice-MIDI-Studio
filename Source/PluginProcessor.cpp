@@ -215,7 +215,7 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
     const bool tuneEnabled=value("vocalTuneEnabled")>0.5f;
     const bool monitor=value("monitorMic")>0.5f,preview=value("previewAudio")>0.5f && value("synthEnabled")<0.5f;
     const float tuneMix=value("vocalTuneMix"),tuneGain=juce::Decibels::decibelsToGain(value("vocalTuneOutput"));
-    const double tuneSeconds=juce::jmax(.001,value("vocalTuneSpeed")/1000.0f);
+    const double tuneSeconds=std::max(0.001,static_cast<double>(value("vocalTuneSpeed"))/1000.0);
     const float tuneSmoothing=(float)(1.0-std::exp(-1.0/(sampleRateHz*tuneSeconds)));
     const int inputMode=(int)value("inputMode"),inputs=juce::jmin(getTotalNumInputChannels(),channels);
     for(int i=0;i<count;++i){
