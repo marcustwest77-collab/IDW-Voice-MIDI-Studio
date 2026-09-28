@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "InstrumentPanel.h"
 #include "ConnectionPanel.h"
+#include "VocalFXPanel.h"
 #include "SongScenes.h"
 #include "MidiExport.h"
 #include "VoiceProfiles.h"
@@ -107,6 +108,27 @@ void testPreviewAndStereo(){
     for(int base=0;base<9600;base+=128){juce::AudioBuffer<float> audio(2,128);audio.clear();juce::MidiBuffer events;for(int i=0;i<128;++i)audio.setSample(1,i,0.1f*(float)std::sin(juce::MathConstants<double>::twoPi*220*(base+i)/48000));p->processBlock(audio,events);check(audio.getRMSLevel(0,0,128)==0&&audio.getRMSLevel(1,0,128)==0,"Microphone monitoring not muted by default");for(auto e:events)if(e.getMessage().isNoteOn())played=true;}
     check(played,"Right-channel microphone not tracked");std::cout<<"PASS audible preview / right-channel input / default monitor mute\n";
 }
+void testVocalTune(){
+    auto p=processor(48000,128);
+    check(p->apvts.getRawParameterValue("vocalTuneEnabled")!=nullptr,"V10 tune parameter missing");
+    check(p->apvts.getRawParameterValue("vocalTuneEnabled")->load()==0,"Vocal Tune must default off");
+    parameter(*p,"vocalTuneEnabled",1);parameter(*p,"vocalTuneAmount",1);parameter(*p,"vocalTuneHumanize",0);
+    parameter(*p,"vocalTuneSpeed",5);parameter(*p,"vocalTuneMix",1);
+    double energy=0;int samples=0;
+    for(int base=0;base<19200;base+=128){
+        juce::AudioBuffer<float> audio(2,128);audio.clear();juce::MidiBuffer events;
+        for(int i=0;i<128;++i)audio.setSample(0,i,.1f*(float)std::sin(juce::MathConstants<double>::twoPi*430*(base+i)/48000));
+        p->processBlock(audio,events);
+        if(base>4800)for(int i=0;i<128;++i){const auto value=audio.getSample(0,i);energy+=value*value;++samples;}
+    }
+    check(std::sqrt(energy/samples)>.015,"Enabled Vocal Tune produced no audio");
+    check(p->tuneTarget()==69,"Chromatic Vocal Tune chose wrong target");
+    check(p->tuneCorrection()>.20f&&p->tuneCorrection()<.60f,"Vocal Tune correction amount incorrect");
+    check(p->tuneLatencySamples()>0,"Vocal Tune latency display missing");
+    juce::MemoryBlock saved;p->getStateInformation(saved);auto restored=processor(48000,128);restored->setStateInformation(saved.getData(),(int)saved.getSize());
+    check(restored->apvts.getRawParameterValue("vocalTuneEnabled")->load()==1,"Vocal Tune session state failed to restore");
+    std::cout<<"PASS V10 Vocal Tune audio / target / correction / latency / state persistence\n";
+}
 void testArrangement(){
     auto p=processor(48000,128);parameter(*p,"harmonyMode",1);parameter(*p,"harmonyBass",1);
     auto e=run(*p,48000,128,0.2,220);int lead=0,chords=0,bass=0;
@@ -128,12 +150,13 @@ void testArrangement(){
 }
 void testLegacyState(){
     auto p=processor(48000,128);auto legacy=p->apvts.copyState();
-    for(const char* id:{"harmonyMode","harmonyVoicing","harmonyBass","voiceLow","voiceHigh"})legacy.removeChild(legacy.getChildWithProperty("id",id),nullptr);
+    for(const char* id:{"harmonyMode","harmonyVoicing","harmonyBass","voiceLow","voiceHigh","vocalTuneEnabled","vocalTuneMode","vocalTuneSpeed","vocalTuneAmount","vocalTuneHumanize","vocalTuneMix","vocalTuneOutput"})legacy.removeChild(legacy.getChildWithProperty("id",id),nullptr);
     parameter(*p,"harmonyMode",2);parameter(*p,"harmonyBass",1);parameter(*p,"voiceLow",70);
     auto xml=legacy.createXml();juce::MemoryBlock data;juce::AudioProcessor::copyXmlToBinary(*xml,data);p->setStateInformation(data.getData(),(int)data.getSize());
     check(p->apvts.getRawParameterValue("harmonyMode")->load()==0,"Legacy state left harmony enabled");
     check(p->apvts.getRawParameterValue("voiceLow")->load()==0&&p->apvts.getRawParameterValue("voiceHigh")->load()==127,"Legacy state retained restrictive voice profile");
-    std::cout<<"PASS V4 state migration defaults V5-only controls\n";
+    check(p->apvts.getRawParameterValue("vocalTuneEnabled")->load()==0,"Legacy state enabled Vocal Tune");
+    std::cout<<"PASS legacy state migration defaults V5-V10 controls\n";
 }
 void testVoiceProfiles(){
     auto p=processor(48000,128);const auto name="Regression-"+juce::Uuid().toString();
@@ -230,13 +253,13 @@ void renderEditor(){
         for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Visible control outside editor bounds");
         juce::Image image(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(image);editor->paintEntireComponent(graphics,true);}
         check(image.getPixelAt(1,1).getAlpha()>0,"Editor render is empty");juce::MemoryOutputStream output;juce::PNGImageFormat png;check(png.writeImageToStream(image,output),"Cannot render UI preview");
-        const auto file=juce::File::getCurrentWorkingDirectory().getChildFile(size.first==1120?"IDW-V9.2-Preview.png":"IDW-V9.2-Minimum.png");check(file.replaceWithData(output.getData(),output.getDataSize()),"Cannot save UI preview");
+        const auto file=juce::File::getCurrentWorkingDirectory().getChildFile(size.first==1120?"IDW-V10-Preview.png":"IDW-V10-Minimum.png");check(file.replaceWithData(output.getData(),output.getDataSize()),"Cannot save UI preview");
     }
     for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Studio controls"){button->onClick();break;}
     for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Studio control outside editor bounds");
     juce::Image studio(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(studio);editor->paintEntireComponent(graphics,true);}
     juce::MemoryOutputStream stream;juce::PNGImageFormat png;check(png.writeImageToStream(studio,stream),"Cannot render Studio view");
-    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V9.2-Studio.png").replaceWithData(stream.getData(),stream.getDataSize()),"Cannot save Studio preview");
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V10-Studio.png").replaceWithData(stream.getData(),stream.getDataSize()),"Cannot save Studio preview");
     for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Studio instrument"){button->onClick();break;}
     for(auto* child:editor->getChildren())if(auto* panel=dynamic_cast<InstrumentPanel*>(child)){
         check(panel->isVisible(),"Instrument panel not visible");
@@ -244,7 +267,15 @@ void renderEditor(){
     }
     juce::Image instrument(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(instrument);editor->paintEntireComponent(graphics,true);}
     juce::MemoryOutputStream instrumentStream;check(png.writeImageToStream(instrument,instrumentStream),"Cannot render instrument view");
-    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V9.2-Instrument.png").replaceWithData(instrumentStream.getData(),instrumentStream.getDataSize()),"Cannot save instrument preview");
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V10-Instrument.png").replaceWithData(instrumentStream.getData(),instrumentStream.getDataSize()),"Cannot save instrument preview");
+    for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Vocal FX"){button->onClick();break;}
+    for(auto* child:editor->getChildren())if(auto* panel=dynamic_cast<VocalFXPanel*>(child)){
+        check(panel->isVisible(),"Vocal FX panel not visible");
+        for(auto* control:panel->getChildren())check(panel->getLocalBounds().contains(control->getBounds()),"Vocal FX control outside panel");
+    }
+    juce::Image vocalFx(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(vocalFx);editor->paintEntireComponent(graphics,true);}
+    juce::MemoryOutputStream vocalFxStream;check(png.writeImageToStream(vocalFx,vocalFxStream),"Cannot render Vocal FX view");
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V10-Vocal-FX.png").replaceWithData(vocalFxStream.getData(),vocalFxStream.getDataSize()),"Cannot save Vocal FX preview");
     for(auto* child:editor->getChildren())if(auto* button=dynamic_cast<juce::TextButton*>(child))if(button->getButtonText()=="Setup / Help"){button->onClick();break;}
     for(auto* child:editor->getChildren())if(auto* panel=dynamic_cast<ConnectionPanel*>(child)){
         check(panel->isVisible(),"Connection panel not visible");
@@ -252,8 +283,8 @@ void renderEditor(){
     }
     juce::Image connection(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(connection);editor->paintEntireComponent(graphics,true);}
     juce::MemoryOutputStream connectionStream;check(png.writeImageToStream(connection,connectionStream),"Cannot render setup view");
-    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V9.2-Connection.png").replaceWithData(connectionStream.getData(),connectionStream.getDataSize()),"Cannot save setup preview");
-    std::cout<<"PASS V9.2 performance/default/minimum, Studio, Instrument and Connection Center render / bounds\n";
+    check(juce::File::getCurrentWorkingDirectory().getChildFile("IDW-V10-Connection.png").replaceWithData(connectionStream.getData(),connectionStream.getDataSize()),"Cannot save setup preview");
+    std::cout<<"PASS V10 performance/default/minimum, Studio, Instrument, Vocal FX and Connection Center render / bounds\n";
 }
 }
-int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testStudioInstrument();testRetrospectiveCapture();testSongScenes();testConnectionCheck();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
+int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testVocalTune();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testStudioInstrument();testRetrospectiveCapture();testSongScenes();testConnectionCheck();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}

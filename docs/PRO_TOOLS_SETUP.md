@@ -1,6 +1,6 @@
-# Pro Tools Intro + IDW V9.2 on Windows
+# Pro Tools Intro + IDW V10 on Windows
 
-IDW connects to Pro Tools Intro through the standalone application and a virtual MIDI cable. The included plugin is VST3; Pro Tools uses AAX and therefore will not list the IDW VST3. V9.2 does not include an AAX build.
+IDW connects to Pro Tools Intro through the standalone application and a virtual MIDI cable. The included plugin is VST3; Pro Tools uses AAX and therefore will not list the IDW VST3. V10 does not include an AAX build. For corrected vocal audio, use Audio Lab Tune Studio.
 
 ## Signal path
 
@@ -15,7 +15,7 @@ IDW connects to Pro Tools Intro through the standalone application and a virtual
 
 ## IDW standalone settings
 
-1. Start **IDW Voice MIDI Studio V9.2**.
+1. Start **IDW Voice MIDI Studio V10**.
 2. Open **Options > Audio/MIDI Settings**.
 3. Select the AudioBox USB 96 ASIO device.
 4. Enable the microphone socket you used, normally **Input 1**. Select **Main Out 1/2** for output.
@@ -44,6 +44,18 @@ IDW connects to Pro Tools Intro through the standalone application and a virtual
 | Beatbox drums | 10 |
 
 For a first test, use one Instrument track on channel 1, Harmony off and MPE off. Add separate receiving tracks for channels 2, 3 and 10 only after the lead route works.
+
+## Correct a vocal with Tune Studio
+
+Because Pro Tools Intro cannot load the IDW VST3, use this file workflow for Vocal FX:
+
+1. Record a dry lead vocal through the AudioBox. Avoid printing reverb, chorus or delay.
+2. Consolidate the vocal from the exact song start, then export it as 16-bit PCM WAV at the same sample rate as the session.
+3. Open **IDW Audio Lab**, choose the WAV, and select **Tune Studio**.
+4. Start with Natural or Smooth R&B. Choose the song root and scale for scale-safe tuning.
+5. Click **Create corrected WAV copy**. The source is never overwritten and local tuning does not upload it.
+6. Import the `-IDW-Tuned.wav` file onto a new Pro Tools audio track at the same session start.
+7. Mute the dry track to compare. Keep it in the session as the editable original.
 
 ## Fast fault isolation
 

@@ -1,15 +1,15 @@
-# Release status (current main)
+# V10 release status (local candidate)
 
-- [x] Windows Release standalone and VST3 compile
-- [x] macOS Release standalone, VST3 and AU compile
-- [x] Automated C++ processor regressions pass (IDWProcessorRegression, IDWSetupDiagnostics, IDWHarmony, IDWStudioSynth, IDWRetrospective)
-- [x] Automated Audio Lab companion regressions pass (47 Python tests, wired into CI on every push/PR to `main`)
-- [x] pluginval strictness 5 passes on Windows and macOS
-- [x] Audio Unit validated with `auval` on macOS
-- [x] Portable Windows and macOS packages produced as CI artifacts (installer + DMG on macOS, installer on Windows)
+- [x] Previous V9.2 baseline compiled on Windows and macOS
+- [ ] Windows/macOS V10 CI build and processor regressions pass (requires approved branch push)
+- [x] Automated Audio Lab contract regressions pass locally (51 Python tests)
+- [ ] Packaged Audio Lab real-model gate passes Tune Studio DSP and Basic Pitch (requires Windows CI)
+- [ ] V10 pluginval strictness 5 and macOS `auval` pass (requires CI)
+- [ ] V10 portable Windows/macOS packages and installers produced (requires CI)
 - [ ] Code signing / notarization — CI packages are explicitly unsigned (see `installer/macos/package.sh`); no Developer ID certificate or notarization credentials are configured yet. Required before public distribution outside direct download.
 - [ ] Hands-on microphone and FL Studio listening test — CI validates that the plugin builds and loads, not that it sounds correct with a real voice/mic; still needs a manual pass per release.
 - [ ] Broader real-voice drum recognition corpus — beatbox-to-drum detection is only covered by synthetic/unit-level tests, not a varied real-voice corpus.
-- [x] `docs/USER_MANUAL.md` reflects the current Studio Instrument, Audio Lab, retrospective capture, scenes and V9.2 DAW Connection Center.
-- [x] Automated editor render/bounds coverage produces Performance, minimum-size, Studio, Instrument and Connection Center previews during the C++ regression suite.
+- [x] `docs/USER_MANUAL.md` reflects Vocal FX, Tune Studio, Pro Tools, routing, lyrics, synth and take features.
+- [ ] Automated editor render/bounds coverage produces V10 Performance, Studio, Instrument, Vocal FX and Connection Center previews (requires CI compile).
+- [ ] Real voice listening test for Natural/Tight/Hard presets and Pro Tools import alignment.
 - [ ] Human screenshot inspection and Windows display-scaling pass — automation catches empty/out-of-bounds controls, not poor visual hierarchy at every DPI.

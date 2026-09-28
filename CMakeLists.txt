@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(IDWVoiceMIDIStudio VERSION 9.2.0)
+project(IDWVoiceMIDIStudio VERSION 10.0.0)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
@@ -50,7 +50,7 @@ juce_generate_juce_header(IDWVoiceMIDIStudio)
 
 target_sources(IDWVoiceMIDIStudio PRIVATE
     Source/PluginProcessor.cpp Source/PluginProcessor.h
-    Source/PluginEditor.cpp Source/PluginEditor.h
+    Source/PluginEditor.cpp Source/PluginEditor.h Source/VocalFXPanel.h Source/VocalTuner.h
     Source/YinPitchDetector.cpp Source/YinPitchDetector.h
     Source/BeatboxClassifier.cpp Source/BeatboxClassifier.h
     Source/MidiLearnManager.cpp Source/MidiLearnManager.h
@@ -86,6 +86,9 @@ if(BUILD_TESTING)
     add_executable(IDWDawGuideTests Tests/DawGuidesTests.cpp)
     target_include_directories(IDWDawGuideTests PRIVATE Source)
     add_test(NAME IDWDawGuides COMMAND IDWDawGuideTests)
+    add_executable(IDWVocalTunerTests Tests/VocalTunerTests.cpp)
+    target_include_directories(IDWVocalTunerTests PRIVATE Source)
+    add_test(NAME IDWVocalTuner COMMAND IDWVocalTunerTests)
     add_executable(IDWHarmonyTests Tests/HarmonyTests.cpp)
     target_include_directories(IDWHarmonyTests PRIVATE Source)
     add_test(NAME IDWHarmony COMMAND IDWHarmonyTests)

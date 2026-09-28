@@ -44,7 +44,13 @@ juce::StringArray PresetManager::factoryPresetNames() const
         "Wide Bend Performance",
         "Beatbox Drums",
         "Expressive MPE",
-        "Live Responsive"
+        "Live Responsive",
+        "Natural Vocal Tune",
+        "Smooth R&B Tune",
+        "Tight Vocal Tune",
+        "Memphis Hard Tune",
+        "Singing Rap",
+        "Robot Voice"
     };
 }
 
@@ -84,6 +90,13 @@ bool PresetManager::applyFactoryPreset(const juce::String& name)
     setParameter("melody", 1.0f);
     setParameter("harmonyMode", 0.0f);
     setParameter("harmonyBass", 0.0f);
+    setParameter("vocalTuneEnabled", 0.0f);
+    setParameter("vocalTuneMode", 0.0f);
+    setParameter("vocalTuneSpeed", 45.0f);
+    setParameter("vocalTuneAmount", .85f);
+    setParameter("vocalTuneHumanize", .40f);
+    setParameter("vocalTuneMix", 1.0f);
+    setParameter("vocalTuneOutput", 0.0f);
 
     if (name == "Clean Vocal")
     {
@@ -155,6 +168,43 @@ bool PresetManager::applyFactoryPreset(const juce::String& name)
         setParameter("confidence", .72f);
         setParameter("bend", 2.0f);
         setParameter("gestureCC", 0.0f);
+        return true;
+    }
+
+    if (name == "Natural Vocal Tune")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneSpeed",85.0f);
+        setParameter("vocalTuneAmount",.60f);setParameter("vocalTuneHumanize",.75f);
+        return true;
+    }
+    if (name == "Smooth R&B Tune")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneSpeed",48.0f);
+        setParameter("vocalTuneAmount",.82f);setParameter("vocalTuneHumanize",.48f);
+        return true;
+    }
+    if (name == "Tight Vocal Tune")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneSpeed",20.0f);
+        setParameter("vocalTuneAmount",.96f);setParameter("vocalTuneHumanize",.18f);
+        return true;
+    }
+    if (name == "Memphis Hard Tune")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneMode",1.0f);
+        setParameter("vocalTuneSpeed",5.0f);setParameter("vocalTuneAmount",1.0f);setParameter("vocalTuneHumanize",0.0f);
+        return true;
+    }
+    if (name == "Singing Rap")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneSpeed",12.0f);
+        setParameter("vocalTuneAmount",.95f);setParameter("vocalTuneHumanize",.12f);
+        return true;
+    }
+    if (name == "Robot Voice")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneSpeed",5.0f);
+        setParameter("vocalTuneAmount",1.0f);setParameter("vocalTuneHumanize",0.0f);setParameter("vocalTuneMix",1.0f);
         return true;
     }
 

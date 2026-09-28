@@ -21,6 +21,18 @@ IDW Voice MIDI Studio turns a live singing or beatboxing voice into MIDI in real
 - **Scale Expression** — when Scale Lock is on: **Off** clips hard to the locked note; **Natural** keeps up to ~45 cents of your original pitch deviation around it, for a more human, less quantized feel.
 - **Melody Tracking** — the master on/off for monophonic voice-to-MIDI note generation.
 
+## Vocal FX pitch correction
+
+Open **Vocal FX** from the top bar and enable **Vocal Tune**. Use headphones: when Vocal Tune is enabled, the corrected microphone is sent to the audio output even if Hear microphone is off.
+
+- **Chromatic** targets the nearest semitone. **Song scale** targets only notes enabled by the selected root and scale strip.
+- **Retune Speed** sets how quickly correction changes. Around 60–120 ms is natural; 5–20 ms creates an intentional hard-tune effect.
+- **Tune Amount** controls correction strength. **Humanize** preserves small natural pitch movement.
+- **Wet Mix** blends dry and corrected audio. **Output** trims the processed vocal.
+- Natural, Smooth R&B, Tight, Memphis Hard, Singing Rap and Robot provide starting settings.
+
+The tuner is monophonic and works best with one dry vocal, limited room noise and no printed reverb. It is local and does not clone or upload the voice.
+
 ## Harmony
 
 Enable harmony to generate extra MIDI notes that turn your lead line into a chord:
@@ -82,7 +94,7 @@ Open **Setup / Help** for a live diagnostics view: whether audio is processing, 
 
 ## DAW Connection Center
 
-Open **Setup / Help** and choose your host. V9.2 includes guided profiles for the built-in instrument, Pro Tools Intro on Windows, FL Studio, Ableton Live, REAPER, Logic Pro, other VST3/AU hosts, and standalone MIDI. **Copy setup report** now includes the selected profile's exact routing steps along with signal readings.
+Open **Setup / Help** and choose your host. V10 includes guided profiles for the built-in instrument, Pro Tools Intro on Windows, FL Studio, Ableton Live, REAPER, Logic Pro, other VST3/AU hosts, and standalone MIDI. **Copy setup report** includes the selected profile's exact routing steps along with signal readings and Vocal FX settings.
 
 ## FL Studio and other DAWs
 
@@ -112,6 +124,11 @@ Full DAW-specific routing steps are in `docs/FL_STUDIO_SETUP.md` and `docs/PRO_T
 
 **Offline transcription**
 - Convert a recorded 16-bit PCM WAV (mono/stereo, 8–96 kHz, up to 10 minutes/25 MiB) into MIDI locally using Basic Pitch, with adjustable onset/sustain thresholds and minimum note length. This processes a recorded file, not a live microphone stream, and works best with a single instrument or isolated stems.
+
+**Tune Studio**
+- Choose a dry 16-bit PCM vocal WAV, select root/scale and a tuning preset, then create a new corrected WAV copy locally.
+- The source file cannot be selected as the destination and is never overwritten.
+- For Pro Tools Intro, consolidate/export the dry vocal from the song start, process it in Tune Studio, and import the corrected copy at the same timeline start.
 
 **Optional cloud voice conversion**
 - Available if you already have a Kits.ai account and voice model; this is the one Audio Lab feature that leaves your machine, and it's entirely opt-in.

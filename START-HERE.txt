@@ -1,4 +1,4 @@
-IDW VOICE MIDI STUDIO V9.2 — WINDOWS x64
+IDW VOICE MIDI STUDIO V10 — VOCAL FX EDITION — WINDOWS x64
 
 INSTALLED VERSION
 Open IDW Voice MIDI Studio from the Start menu or desktop shortcut.
@@ -10,16 +10,22 @@ Extract the complete ZIP into a new folder. Run Run-IDW.cmd for live
 voice-to-MIDI and Run-Audio-Lab.cmd for the companion. Keep the complete
 Audio-Lab folder together; its private runtime and offline models are included.
 
-NEW IN V9.2
-- Modern performance interface and live microphone level meter.
-- Guided DAW Connection Center with exact routing steps.
-- Dedicated Pro Tools Intro / Windows + AudioBox USB 96 setup profile.
-- Copied diagnostics now include the selected route instructions.
+NEW IN V10
+- Real-time monophonic Vocal Tune with six starting presets.
+- Chromatic or song-scale correction, speed, amount, humanize, mix and output controls.
+- Audio Lab Tune Studio creates a corrected WAV copy for Pro Tools Intro.
+- Existing V9.2 routing, MIDI, synth, lyric and take features remain available.
 
 PRO TOOLS INTRO
 Pro Tools does not load the included VST3. Run the IDW standalone and send
 MIDI through a virtual port such as loopMIDI. Read docs/PRO_TOOLS_SETUP.md.
 No AAX plugin is included.
+
+VOCAL TUNING IN PRO TOOLS INTRO
+Export/consolidate a dry vocal as 16-bit PCM WAV at the session sample rate.
+Open Audio Lab > Tune Studio, process a corrected copy, then import that copy
+onto a new Pro Tools audio track at the exact same timeline start. Keep the dry
+track muted for backup and comparison. Tune Studio works locally; it does not upload.
 
 Start with headphones, 48 kHz, a 256-sample buffer, Melody on and MPE off.
 Open Setup / Help, select your DAW, and use Send test note before singing.

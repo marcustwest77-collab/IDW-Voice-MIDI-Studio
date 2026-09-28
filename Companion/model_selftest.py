@@ -9,6 +9,7 @@ import pretty_midi
 
 def run():
     from audio_lab import transcribe
+    from vocal_tune import tune_wav
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp); path = root / 'triad.wav'; sr = 22050
         values = array.array('h')
@@ -29,4 +30,16 @@ def run():
         take = Take.load(result/'transcription.mid')
         take.export_copy(root/'model-edited-copy.mid')
         assert len(Take.load(root/'model-edited-copy.mid').notes)==len(take.notes)
-        return ('PASS real Basic Pitch inference: readable MIDI with overlapping pitches on synthetic triad; not a music-quality benchmark')
+        vocal = root/'vocal.wav'; tuned = root/'vocal-IDW-Tuned.wav'; tone = array.array('h')
+        for i in range(sr * 2):
+            value = .25 * math.sin(2*math.pi*430*i/sr)
+            tone.append(int(value * 32767))
+        if sys.byteorder != 'little': tone.byteswap()
+        with wave.open(str(vocal), 'wb') as w:
+            w.setparams((1,2,sr,0,'NONE','not compressed'));w.writeframes(tone.tobytes())
+        report = tune_wav(vocal, tuned, amount=100, humanize=0, speed_ms=5)
+        assert tuned.is_file() and tuned.stat().st_size > 1000, 'Tune Studio wrote no WAV'
+        assert report['tracked_frames'] > 10, 'Tune Studio tracked no vocal pitch'
+        assert tuned.read_bytes() != vocal.read_bytes(), 'Tune Studio output did not change'
+        return ('PASS real Basic Pitch inference: readable polyphonic MIDI\n'
+                'PASS Tune Studio: local pitch analysis and non-destructive corrected WAV output')

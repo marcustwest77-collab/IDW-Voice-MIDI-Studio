@@ -1,6 +1,6 @@
 # IDW Voice MIDI Studio
 
-IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and standalone application from In Da Wind Entertainment, paired with an optional Python companion for lyrics and take management.
+IDW Voice MIDI Studio V10 is a clean-room voice-to-MIDI and vocal-performance application from In Da Wind Entertainment, paired with Audio Lab for offline vocal tuning, lyrics and take management.
 
 ## Formats
 - Windows: Standalone + VST3
@@ -23,6 +23,8 @@ IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and stand
 - Saved song scenes (recall sounds, harmony, scale and drum-note settings per song section)
 - Voice profiles for multiple singers/ranges
 - Built-in Studio Instrument: a 32-voice synth (Lead/Chords/Bass patches, synthesized drums on channel 10) that can play directly from the plugin's own MIDI output, so you can perform without loading a separate instrument
+- Real-time monophonic vocal pitch correction with chromatic/song-scale targets, retune speed, correction amount, humanize, wet mix and output controls
+- Local, non-destructive Tune Studio for creating corrected WAV copies that can be imported into Pro Tools Intro
 
 ### Factory Presets
 - Clean Vocal
@@ -33,6 +35,12 @@ IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and stand
 - Beatbox Drums
 - Expressive MPE
 - Live Responsive
+- Natural Vocal Tune
+- Smooth R&B Tune
+- Tight Vocal Tune
+- Memphis Hard Tune
+- Singing Rap
+- Robot Voice
 
 ## User Experience
 - Built-in **HELP / QUICK START** manual
@@ -61,15 +69,26 @@ Pro Tools does not load the included VST3, so use the IDW **standalone** applica
 
 See `docs/PRO_TOOLS_SETUP.md` for the complete AudioBox USB 96 checklist and troubleshooting flow.
 
+### Correct vocals for Pro Tools Intro
+
+Pro Tools Intro cannot load the included VST3. For vocal audio, use **Audio Lab > Tune Studio**:
+
+1. In Pro Tools, consolidate the dry mono vocal from the song start and export it as 16-bit PCM WAV at the session sample rate.
+2. Open IDW Audio Lab, choose the WAV, and select **Tune Studio**.
+3. Start with **Natural** or **Smooth R&B**. Select the song root/scale when you want scale-safe correction.
+4. Create a corrected WAV copy. The source file is never overwritten and local tuning does not upload audio.
+5. Drag the `-IDW-Tuned.wav` copy onto a new Pro Tools audio track at the same song start. Mute the dry track to compare; keep it for backup.
+
 ## Audio Lab (Python companion)
 `Companion/` is a separate, optional Python 3.10 application — it does not run inside the plugin and is not required to use the plugin.
 
 - Offline lyric dictation and a distraction-free lyrics editor with autosave, previous-version recovery, named checkpoints (up to 100 per song) and plain-text import/export
 - Non-destructive MIDI take editor with a piano-roll view, undo/redo, and take recovery/archiving
 - Local, offline WAV-to-MIDI transcription (via Basic Pitch) for a recorded vocal take — not a live streaming feature
+- Local Tune Studio for monophonic pitch correction and Pro Tools-compatible WAV export
 - Optional cloud voice conversion via an existing Kits.ai account and voice model
 
-The V9.2 Windows installer includes a self-contained **IDW Audio Lab** Start-menu shortcut with its offline models. Source users can instead run `Companion/Run-Audio-Lab.cmd` after installing Python 3.10, then run `Companion/Setup-Transcription.cmd` once to add the optional local transcription model.
+The V10 Windows installer includes a self-contained **IDW Audio Lab** Start-menu shortcut with its offline models. Source users can instead run `Companion/Run-Audio-Lab.cmd` after installing Python 3.10, then run `Companion/Setup-Transcription.cmd` once to add the optional local transcription model.
 
 Run the companion's own test suite (no plugin build required):
 

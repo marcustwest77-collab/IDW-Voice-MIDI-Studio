@@ -8,7 +8,7 @@ python -m PyInstaller --noconfirm --clean --onedir --windowed --name IDW-Audio-L
 if ($LASTEXITCODE -ne 0) { throw 'Audio Lab packaging failed' }
 $exe = (Resolve-Path 'audio-lab-dist/IDW-Audio-Lab/IDW-Audio-Lab.exe').Path
 $report = Join-Path $PWD 'audio-lab-packaged-test.txt'
-$preview = Join-Path $PWD 'IDW-V9.2-Take-Editor.png'
+$preview = Join-Path $PWD 'IDW-V10-Take-Editor.png'
 $speechTest = Join-Path $PWD 'speech-test.wav'
 $isolated = Join-Path $env:RUNNER_TEMP 'idw-audio-lab-isolated'
 New-Item -ItemType Directory -Force $isolated | Out-Null

@@ -1,4 +1,4 @@
-param([string]$JucePath = "", [string]$BuildDirectory = "build-win-92", [switch]$SkipAudioLab)
+param([string]$JucePath = "", [string]$BuildDirectory = "build-win-10", [switch]$SkipAudioLab)
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $cmake = Get-Command cmake -ErrorAction SilentlyContinue
@@ -25,13 +25,13 @@ $artefacts = Join-Path $BuildDirectory 'IDWVoiceMIDIStudio_artefacts\Release'
 $exe = Join-Path $artefacts 'Standalone\IDW Voice MIDI Studio.exe'
 $vst = Join-Path $artefacts 'VST3\IDW Voice MIDI Studio.vst3'
 if (-not (Test-Path $exe) -or -not (Test-Path $vst)) { throw 'Build outputs missing.' }
-$release = Join-Path (Get-Location) ('IDW-V9.2-Windows-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$release = Join-Path (Get-Location) ('IDW-V10-Windows-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path "$release\Windows\Standalone", "$release\Windows\VST3" | Out-Null
 Copy-Item $exe "$release\Windows\Standalone"
 Copy-Item $vst "$release\Windows\VST3" -Recurse
 if (-not $SkipAudioLab) {
     & "$PSScriptRoot\package-audio-lab.ps1"
-    if ($LASTEXITCODE -ne 0) { throw 'Audio Lab packaging failed; no complete V9.2 package created.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Audio Lab packaging failed; no complete V10 package created.' }
     New-Item -ItemType Directory -Path "$release\Audio-Lab" | Out-Null
     Copy-Item 'audio-lab-dist\IDW-Audio-Lab\*' "$release\Audio-Lab" -Recurse
     '@echo off', 'start "IDW Audio Lab" "%~dp0Audio-Lab\IDW-Audio-Lab.exe"' | Set-Content "$release\Run-Audio-Lab.cmd"
@@ -42,13 +42,13 @@ Copy-Item 'docs' "$release\docs" -Recurse
 Copy-Item 'START-HERE.html' $release
 Copy-Item 'START-HERE.txt' $release
 New-Item -ItemType Directory -Path "$release\Previews" | Out-Null
-Get-ChildItem "$BuildDirectory\IDW-V9.2-*.png" | Copy-Item -Destination "$release\Previews"
-if (Test-Path 'IDW-V9.2-Take-Editor.png') { Copy-Item 'IDW-V9.2-Take-Editor.png' "$release\Previews" }
+Get-ChildItem "$BuildDirectory\IDW-V10-*.png" | Copy-Item -Destination "$release\Previews"
+if (Test-Path 'IDW-V10-Take-Editor.png') { Copy-Item 'IDW-V10-Take-Editor.png' "$release\Previews" }
 New-Item -ItemType Directory -Path "$release\ThirdPartyNotices" | Out-Null
 $juceLicense = if ($JucePath) { Join-Path $JucePath 'LICENSE.md' } elseif (Test-Path 'ThirdParty/JUCE/LICENSE.md') { 'ThirdParty/JUCE/LICENSE.md' } else { Join-Path $BuildDirectory '_deps/juce-src/LICENSE.md' }
 Copy-Item $juceLicense "$release\ThirdPartyNotices\JUCE-LICENSE.md"
 Copy-Item "$BuildDirectory\Testing\Temporary\LastTest.log" "$release\Build-Tests.log"
-'@echo off', 'start "IDW V9.2" "%~dp0Windows\Standalone\IDW Voice MIDI Studio.exe"' | Set-Content "$release\Run-IDW.cmd"
+'@echo off', 'start "IDW V10" "%~dp0Windows\Standalone\IDW Voice MIDI Studio.exe"' | Set-Content "$release\Run-IDW.cmd"
 Compress-Archive -Path $release -DestinationPath "$release.zip"
 Write-Host "SUCCESS: $release.zip"
 Write-Host "Run: $release\Run-IDW.cmd"

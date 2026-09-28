@@ -153,14 +153,14 @@ def main(gui_smoke=False, preview_path=None):
     import threading
     import webbrowser
     root = tk.Tk()
-    root.title('IDW Audio Lab — V6.7')
+    root.title('IDW Audio Lab — V10 Vocal FX')
     start_height=max(640,min(900,root.winfo_screenheight()-100))
     root.geometry(f'{max(800,min(1020,root.winfo_screenwidth()-40))}x{start_height}+10+10')
     root.minsize(800, 640)
     panel = ttk.Frame(root, padding=12)
     panel.pack(fill='both', expand=True)
     ttk.Label(panel, text='IDW / AUDIO LAB', font=('Segoe UI', 20, 'bold')).pack(anchor='w')
-    ttk.Label(panel, text='Local transcription • MIDI editing • lyrics and offline dictation • optional cloud voices').pack(anchor='w', pady=(0, 12))
+    ttk.Label(panel, text='Local vocal tuning • transcription • MIDI editing • lyrics and offline dictation • optional cloud voices').pack(anchor='w', pady=(0, 12))
     chosen = tk.StringVar()
     file_row = ttk.Frame(panel); file_row.pack(fill='x')
     ttk.Entry(file_row, textvariable=chosen).pack(side='left', fill='x', expand=True)
@@ -171,8 +171,8 @@ def main(gui_smoke=False, preview_path=None):
     ttk.Button(file_row, text='Choose WAV', command=choose).pack(side='left', padx=8)
     wav_hint=ttk.Label(panel, text='16-bit PCM WAV • mono/stereo • up to 10 minutes and 25 MiB');wav_hint.pack(anchor='w')
     notebook = ttk.Notebook(panel); notebook.pack(fill='both', expand=True, pady=12)
-    local = ttk.Frame(notebook, padding=14); cloud = ttk.Frame(notebook, padding=14)
-    notebook.add(local, text='Local recording tools'); notebook.add(cloud, text='Cloud / trained voices')
+    local = ttk.Frame(notebook, padding=14); tune = ttk.Frame(notebook, padding=14); cloud = ttk.Frame(notebook, padding=14)
+    notebook.add(tune, text='Tune Studio'); notebook.add(local, text='Local recording tools'); notebook.add(cloud, text='Cloud / trained voices')
     ttk.Label(local, text='Transcribe chords or a single instrument into MIDI. Full mixes may need isolated stems first.\nThe Windows portable edition includes the local model; this is file processing, not live polyphonic tracking.').pack(anchor='w')
     settings_row = ttk.Frame(local); settings_row.pack(fill='x', pady=10)
     settings_vars = {}
@@ -221,6 +221,44 @@ def main(gui_smoke=False, preview_path=None):
         except ValueError as error: messagebox.showerror('Check transcription settings', str(error)); return
         destination = filedialog.askdirectory(title='Folder for the new MIDI take')
         if destination: run(lambda: ('transcription', str(transcribe(path, destination, **settings))))
+    from vocal_tune import NOTE_NAMES, SCALE_MASKS, tune_wav, tuning_settings
+    ttk.Label(tune, text='Create a corrected copy of a vocal WAV without uploading or changing the original.',
+              font=('Segoe UI', 11, 'bold')).pack(anchor='w')
+    ttk.Label(tune, text='For Pro Tools Intro: consolidate/export the dry vocal as 16-bit PCM WAV, process it here,\nthen drag the new IDW-Tuned WAV onto a new audio track and align it to the same start.').pack(anchor='w', pady=(3, 10))
+    tune_grid = ttk.Frame(tune); tune_grid.pack(fill='x')
+    tune_vars = {
+        'root': tk.StringVar(value='C'), 'scale': tk.StringVar(value='Chromatic'),
+        'amount': tk.StringVar(value='85'), 'humanize': tk.StringVar(value='40'),
+        'speed_ms': tk.StringVar(value='45'), 'mix': tk.StringVar(value='100'),
+        'output_db': tk.StringVar(value='0')}
+    fields = [('root', 'Root'), ('scale', 'Scale'), ('speed_ms', 'Retune ms'),
+              ('amount', 'Amount %'), ('humanize', 'Humanize %'), ('mix', 'Wet mix %'),
+              ('output_db', 'Output dB')]
+    for column, (name, label) in enumerate(fields):
+        ttk.Label(tune_grid, text=label).grid(row=0, column=column, padx=4, sticky='w')
+        if name == 'root': widget = ttk.Combobox(tune_grid, textvariable=tune_vars[name], values=NOTE_NAMES, state='readonly', width=8)
+        elif name == 'scale': widget = ttk.Combobox(tune_grid, textvariable=tune_vars[name], values=tuple(SCALE_MASKS), state='readonly', width=16)
+        else: widget = ttk.Entry(tune_grid, textvariable=tune_vars[name], width=10)
+        widget.grid(row=1, column=column, padx=4, sticky='w')
+    ttk.Label(tune, text='Starting points: Natural 95 ms / 72% / 72% humanize  •  Tight 25 ms / 95% / 22%  •  Hard Tune 8 ms / 100% / 3%').pack(anchor='w', pady=(12, 4))
+    tune_presets = ttk.Frame(tune); tune_presets.pack(anchor='w')
+    def apply_tune_preset(speed, amount, humanize):
+        tune_vars['speed_ms'].set(str(speed)); tune_vars['amount'].set(str(amount)); tune_vars['humanize'].set(str(humanize))
+    for label, values in [('Natural', (95, 72, 72)), ('Smooth R&B', (70, 82, 62)),
+                          ('Tight', (25, 95, 22)), ('Memphis Hard', (8, 100, 3)),
+                          ('Singing Rap', (18, 96, 15)), ('Robot', (5, 100, 0))]:
+        ttk.Button(tune_presets, text=label, command=lambda v=values: apply_tune_preset(*v)).pack(side='left', padx=(0, 6))
+    def process_tuned_vocal():
+        path = chosen.get()
+        try: settings = tuning_settings(**{key: value.get() for key, value in tune_vars.items()})
+        except ValueError as error: messagebox.showerror('Check Tune Studio settings', str(error)); return
+        default = str(Path(path).with_name(Path(path).stem + '-IDW-Tuned.wav')) if path else 'IDW-Tuned.wav'
+        destination = filedialog.asksaveasfilename(title='Save corrected vocal copy', defaultextension='.wav',
+                                                   initialfile=Path(default).name, filetypes=[('PCM WAV', '*.wav')])
+        if destination: run(lambda: 'Corrected vocal saved:\n' + json.dumps(tune_wav(path, destination, **settings), indent=2))
+    add_button(tune, 'Create corrected WAV copy…', process_tuned_vocal)
+    ttk.Label(tune, text='Best with one dry vocal and no reverb. Monophonic: one sung note at a time. Use the same session sample rate.',
+              foreground='#805f00').pack(anchor='w', pady=(10, 0))
     from take_editor_ui import TakeEditor
     review = TakeEditor(notebook, write); notebook.add(review, text='MIDI take editor')
     from lyrics_ui import LyricsWorkspace
@@ -280,7 +318,7 @@ def main(gui_smoke=False, preview_path=None):
             key.set(''); root.destroy()
         lyrics.close_when_ready(finish)
     root.protocol('WM_DELETE_WINDOW', close)
-    write('Local tools do not upload audio. Choose WAV, inspect the levels, then transcribe. Cloud conversion requires your Kits account.')
+    write('Local tuning and transcription do not upload audio. Choose a dry vocal WAV, then use Tune Studio. Cloud conversion requires your Kits account.')
     poll()
     if gui_smoke:
         import tempfile
@@ -344,7 +382,7 @@ def main(gui_smoke=False, preview_path=None):
 
 def cli():
     import argparse
-    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.7')
+    parser = argparse.ArgumentParser(description='IDW Audio Lab 10 Vocal FX')
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--gui-smoke', action='store_true')
     parser.add_argument('--test-report', type=Path)
@@ -381,4 +419,3 @@ def cli():
 
 if __name__ == '__main__':
     sys.exit(cli())
-

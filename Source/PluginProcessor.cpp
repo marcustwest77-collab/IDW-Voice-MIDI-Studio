@@ -58,6 +58,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout IDWVoiceMIDIStudioAudioProce
     p.add(std::make_unique<F>("synthRelease", "Instrument Release", .01f, 2.f, .25f));
     p.add(std::make_unique<F>("synthDelay", "Instrument Echo", 0.f, .6f, .12f));
     p.add(std::make_unique<B>("retroEnabled", "Remember Voice MIDI", true));
+    p.add(std::make_unique<B>("vocalTuneEnabled", "Vocal Tune", false));
+    p.add(std::make_unique<I>("vocalTuneMode", "Vocal Tune Mode", 0, 1, 0));
+    p.add(std::make_unique<F>("vocalTuneSpeed", "Retune Speed", juce::NormalisableRange<float>(5.0f,200.0f,1.0f,0.45f),45.0f));
+    p.add(std::make_unique<F>("vocalTuneAmount", "Correction Amount", 0.0f,1.0f,.85f));
+    p.add(std::make_unique<F>("vocalTuneHumanize", "Humanize", 0.0f,1.0f,.40f));
+    p.add(std::make_unique<F>("vocalTuneMix", "Vocal Tune Mix", 0.0f,1.0f,1.0f));
+    p.add(std::make_unique<F>("vocalTuneOutput", "Vocal Tune Output", -12.0f,6.0f,0.0f));
     return p;
 }
 
@@ -68,11 +75,12 @@ void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
     heldHarmony={};
     inputPeak.store(0);observedRate.store(sr);observedBlock.store(block);
     sampleRateHz=sr;hopSize=juce::jmax(1,(int)std::lround(sr*0.005));hop.assign((size_t)hopSize,0);hopFill=0;
-    pitch.prepare(sr,block);beats.prepare(sr);mpe.reset();learn.prepare(apvts);capture.resetAudio();
+    pitch.prepare(sr,block);beats.prepare(sr);mpe.reset();learn.prepare(apvts);capture.resetAudio();vocalShifter.prepare(sr);
     active=candidate=-1;activeChannel=1;candidateSamples=silentSamples=ccSamples=0;lastCC=lastWheel=-1;
     lastHz=0;smoothNote=-1;negotiatedRanges.fill(-1);drumRemaining.fill(-1);testRemaining=inhibitSamples=0;
     freq.store(0);confidence.store(0);inputRms.store(0);midi.store(-1);displayedBend.store(0);drumDisplay.store(-1);
-    previousMpe=value("mpe")>0.5f;previousFirst=(int)value("mpeFirst");previousLast=(int)value("mpeLast");phase=0;previewGain=0;
+    previousMpe=value("mpe")>0.5f;previousFirst=(int)value("mpeFirst");previousLast=(int)value("mpeLast");phase=0;previewGain=0;vocalTuneTargetRatio=vocalTuneRatio=1.0f;
+    displayedTuneCorrection.store(0);displayedTuneTarget.store(-1);
     setLatencySamples(0); // Live tracking is causal; no artificial delay is added.
 }
 void IDWVoiceMIDIStudioAudioProcessor::releaseResources(){pitch.reset();capture.resetAudio();}
@@ -115,6 +123,9 @@ void IDWVoiceMIDIStudioAudioProcessor::negotiateBend(juce::MidiBuffer& out,int a
 void IDWVoiceMIDIStudioAudioProcessor::analyse(juce::MidiBuffer& out,int at){
     const float detected=pitch.process(hop.data(),hopSize),rms=pitch.rms(),quality=pitch.confidence();
     freq.store(detected);confidence.store(quality);inputRms.store(rms);
+    const auto tune=idw::tuningDecision(detected,rms,quality,value("gate"),value("confidence"),value("tuneCents"),
+        value("vocalTuneMode")>0.5f,(int)value("root"),(std::uint16_t)value("scaleMask"),value("vocalTuneAmount"),value("vocalTuneHumanize"));
+    vocalTuneTargetRatio=tune.ratio;displayedTuneCorrection.store(tune.correctionSemitones);displayedTuneTarget.store(tune.targetMidi);
     const bool mpeOn=value("mpe")>0.5f;
     const int first=(int)value("mpeFirst"),last=(int)value("mpeLast");
     if(mpeOn!=previousMpe||first!=previousFirst||last!=previousLast){endVoice(out,at);mpe.reset();negotiatedRanges.fill(-1);previousMpe=mpeOn;previousFirst=first;previousLast=last;}
@@ -201,7 +212,11 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
             if(heldHarmony.bass>=0)studioSynth.message(0x92,heldHarmony.bass,90);
         }
     }
+    const bool tuneEnabled=value("vocalTuneEnabled")>0.5f;
     const bool monitor=value("monitorMic")>0.5f,preview=value("previewAudio")>0.5f && value("synthEnabled")<0.5f;
+    const float tuneMix=value("vocalTuneMix"),tuneGain=juce::Decibels::decibelsToGain(value("vocalTuneOutput"));
+    const double tuneSeconds=juce::jmax(.001,value("vocalTuneSpeed")/1000.0f);
+    const float tuneSmoothing=(float)(1.0-std::exp(-1.0/(sampleRateHz*tuneSeconds)));
     const int inputMode=(int)value("inputMode"),inputs=juce::jmin(getTotalNumInputChannels(),channels);
     for(int i=0;i<count;++i){
         if(inhibitSamples>0)--inhibitSamples;
@@ -212,13 +227,16 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
         blockPeak=juce::jmax(blockPeak,std::abs(selected));
         hop[(size_t)hopFill++]=selected;
         if(hopFill==hopSize){analyse(out,i);hopFill=0;}
+        vocalTuneRatio+=tuneSmoothing*(vocalTuneTargetRatio-vocalTuneRatio);
+        const float shifted=vocalShifter.process(selected,vocalTuneRatio,tuneEnabled?tuneMix:0.0f);
+        const float vocal=tuneEnabled?juce::jlimit(-1.0f,1.0f,shifted*tuneGain):selected;
         const int previewNote=testRemaining>0?60:active;
         const float target=preview&&previewNote>=0?0.12f:0.0f;
         previewGain+=(target-previewGain)*(float)(1.0-std::exp(-1.0/(sampleRateHz*0.005)));
         const double noteHz=previewNote>=0?440.0*std::pow(2.0,(previewNote+(testRemaining>0?0.0f:displayedBend.load())-69.0)/12.0):440.0;
         phase+=juce::MathConstants<double>::twoPi*noteHz/sampleRateHz;if(phase>=juce::MathConstants<double>::twoPi)phase-=juce::MathConstants<double>::twoPi;
         const float tone=previewGain*(float)std::sin(phase);
-        for(int ch=0;ch<channels;++ch)buffer.setSample(ch,i,(monitor?(ch<inputs?buffer.getSample(ch,i):left):0.0f)+tone);
+        for(int ch=0;ch<channels;++ch)buffer.setSample(ch,i,(tuneEnabled?vocal:(monitor?(ch<inputs?buffer.getSample(ch,i):left):0.0f))+tone);
     }
     if(synthEnabled){
         auto input=incomingMidi.begin(),generated=out.begin();

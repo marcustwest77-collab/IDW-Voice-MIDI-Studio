@@ -11,6 +11,7 @@
 #include "TakeArchive.h"
 #include "StudioSynth.h"
 #include "RetrospectiveCapture.h"
+#include "VocalTuner.h"
 class IDWVoiceMIDIStudioAudioProcessor : public juce::AudioProcessor {
 public:
     IDWVoiceMIDIStudioAudioProcessor();
@@ -58,6 +59,9 @@ public:
     int noteCount() const{return emittedNotes.load();}
     int eventCount() const{return emittedEvents.load();}
     double callbackLoad() const{return cpuLoad.load();}
+    float tuneCorrection() const{return displayedTuneCorrection.load();}
+    int tuneTarget() const{return displayedTuneTarget.load();}
+    int tuneLatencySamples() const{return vocalShifter.latencySamples();}
 private:
     float value(const char* id) const{return apvts.getRawParameterValue(id)->load();}
     void analyse(juce::MidiBuffer&,int);
@@ -68,6 +72,7 @@ private:
     void allOff(juce::MidiBuffer&,int);
     void negotiateBend(juce::MidiBuffer&,int,int,int);
     idw::StudioSynth studioSynth;
+    idw::GranularPitchShifter vocalShifter;
     juce::MidiBuffer incomingMidi;
     bool synthWasEnabled=false;
     YinPitchDetector pitch;
@@ -84,6 +89,7 @@ private:
     std::array<int,128> drumRemaining{};
     int testRemaining=0,inhibitSamples=0;
     double phase=0;float previewGain=0;
+    float vocalTuneTargetRatio=1.0f,vocalTuneRatio=1.0f;
     std::atomic<bool> panicRequested{false},testRequested{false};
     std::atomic<float> freq{0},confidence{0},inputRms{0},displayedBend{0};
     std::atomic<int> midi{-1},drumDisplay{-1},drumEvents{0},emittedNotes{0},emittedEvents{0};
@@ -91,6 +97,8 @@ private:
     std::atomic<unsigned int> callbacks{0};
     std::atomic<int> observedBlock{0};
     std::atomic<float> inputPeak{0};
+    std::atomic<float> displayedTuneCorrection{0};
+    std::atomic<int> displayedTuneTarget{-1};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IDWVoiceMIDIStudioAudioProcessor)
 };
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
