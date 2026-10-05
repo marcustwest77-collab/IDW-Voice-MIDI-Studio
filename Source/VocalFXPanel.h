@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 #include "AutoKeyDetector.h"
+#include "SkinTheme.h"
 
 class VocalFXPanel : public juce::Component {
 public:
@@ -120,12 +121,25 @@ public:
                      juce::dontSendNotification);
     }
 
+    void applySkin(const idw::SkinPalette& next) {
+        skin=&next;
+        title.setColour(juce::Label::textColourId,juce::Colour(skin->accent));
+        subtitle.setColour(juce::Label::textColourId,juce::Colour(skin->muted));
+        safety.setColour(juce::Label::textColourId,juce::Colour(skin->safety));
+        live.setColour(juce::Label::textColourId,juce::Colour(skin->highlight));
+        keyLabel.setColour(juce::Label::textColourId,juce::Colour(skin->highlight));
+        for(auto* label:{&speedLabel,&amountLabel,&humanizeLabel,&vibratoLabel,&harmonyMixLabel,&harmonyConfidenceLabel,&mixLabel,&outputLabel,&fxMixLabel})
+            label->setColour(juce::Label::textColourId,juce::Colour(skin->muted));
+        for(auto& label:moduleLabels)label.setColour(juce::Label::textColourId,juce::Colour(skin->muted));
+        repaint();
+    }
+
     void paint(juce::Graphics& g) override {
-        g.fillAll(juce::Colour(0xff0b0e14));
+        g.fillAll(juce::Colour(skin->background));
         const auto panel = getLocalBounds().toFloat().reduced(1.0f);
-        g.setColour(juce::Colour(0xff141a24)); g.fillRoundedRectangle(panel, 12.0f);
-        g.setColour(juce::Colour(0xffeac36c).withAlpha(0.4f)); g.drawRoundedRectangle(panel, 12.0f, 1.0f);
-        g.setColour(juce::Colour(0xff9aabc2)); g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        g.setColour(juce::Colour(skin->card)); g.fillRoundedRectangle(panel, 12.0f);
+        g.setColour(juce::Colour(skin->accent).withAlpha(0.4f)); g.drawRoundedRectangle(panel, 12.0f, 1.0f);
+        g.setColour(juce::Colour(skin->muted)); g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
         g.drawText("VOCAL CHARACTER PRESETS", 26, 226, getWidth() - 52, 22, juce::Justification::centredLeft);
         g.drawText("MANUAL CONTROLS", 26, 325, getWidth() - 52, 22, juce::Justification::centredLeft);
         g.drawText("VOCAL PRODUCTION RACK", 26, 536, getWidth() - 52, 22, juce::Justification::centredLeft);
@@ -249,4 +263,5 @@ private:
     std::vector<std::unique_ptr<SliderAttachment>> sliderAttachments;
     std::vector<std::unique_ptr<ButtonAttachment>> moduleAttachments;
     Snapshot snapshotA,snapshotB;
+    const idw::SkinPalette* skin=&idw::skins.front();
 };

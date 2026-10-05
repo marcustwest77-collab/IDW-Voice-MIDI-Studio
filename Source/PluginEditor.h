@@ -4,6 +4,7 @@
 #include "InstrumentPanel.h"
 #include "ConnectionPanel.h"
 #include "VocalFXPanel.h"
+#include "SkinTheme.h"
 class IDWVoiceMIDIStudioAudioProcessorEditor : public juce::AudioProcessorEditor,private juce::Timer {
 public:
     explicit IDWVoiceMIDIStudioAudioProcessorEditor(IDWVoiceMIDIStudioAudioProcessor&);
@@ -18,6 +19,7 @@ private:
     juce::String diagnosticReport() const;
     bool audioRunning() const;
     void configureSlider(juce::Slider&,juce::Label&,const juce::String&,const juce::String&);
+    void applySkin(int);
     void setupV5();void layoutV5();void refreshProfiles();void recoverTake();
     void setValue(const char*,float);
     void refreshPresets();void loadPreset();void syncScale();void showHelp(bool);
@@ -35,7 +37,7 @@ private:
     float meterSmoothed=0.f;
     juce::Slider gateSlider,confidenceSlider,bendSlider,tuneSlider,beatSlider,bpmSlider;
     juce::Label gateLabel,confidenceLabel,bendLabel,tuneLabel,beatLabel,bpmLabel;
-    juce::ComboBox rootSelector,expressionSelector,inputSelector,presetSelector,learnTarget,trainTarget;
+    juce::ComboBox rootSelector,expressionSelector,inputSelector,presetSelector,learnTarget,trainTarget,skinSelector;
     juce::ToggleButton scaleLock{"Scale lock"},beatbox{"Beatbox"},melody{"Melody"},preview{"Preview sound"},monitor{"Hear microphone"},mpeToggle{"MPE"};
     juce::TextButton scaleButtons[12];
     juce::TextButton calibrate{"Calibrate noise"},panic{"PANIC"},test{"Test note"},help{"Setup / Help"},closeHelp{"Close"};
@@ -81,5 +83,7 @@ private:
     juce::Label arrangementTitle,arrangementStatus,profileTitle,lowLabel,highLabel;
     juce::StringArray profileNames;
     juce::TooltipWindow tooltips{this,500};
+    const idw::SkinPalette* skin=&idw::skins.front();
+    int activeSkin=-1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IDWVoiceMIDIStudioAudioProcessorEditor)
 };

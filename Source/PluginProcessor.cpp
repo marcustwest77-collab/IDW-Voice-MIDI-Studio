@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "StateCompatibility.h"
+#include "SkinTheme.h"
 #include <cmath>
 IDWVoiceMIDIStudioAudioProcessor::IDWVoiceMIDIStudioAudioProcessor()
  : AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::mono(),true)
@@ -75,6 +76,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout IDWVoiceMIDIStudioAudioProce
     p.add(std::make_unique<I>("vocalQuality", "Vocal Processing Quality", 0,2,1));
     p.add(std::make_unique<B>("safeTracking", "Safe Tracking", false));
     p.add(std::make_unique<B>("outputGuard", "Clip Guard", true));
+    p.add(std::make_unique<I>("uiSkin", "Interface Skin", 0, idw::skinCount()-1, 0));
     p.add(std::make_unique<B>("vocalFxEnabled", "Vocal FX Rack", false));
     p.add(std::make_unique<B>("deEsserEnabled", "De-Esser", false));
     p.add(std::make_unique<B>("compressorEnabled", "Compressor", false));

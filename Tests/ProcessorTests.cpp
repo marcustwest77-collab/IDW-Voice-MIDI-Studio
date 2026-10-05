@@ -202,8 +202,8 @@ void testArrangement(){
 }
 void testLegacyState(){
     auto p=processor(48000,128);auto legacy=p->apvts.copyState();
-    for(const char* id:{"harmonyMode","harmonyVoicing","harmonyBass","voiceLow","voiceHigh","vocalTuneEnabled","vocalTuneMode","vocalTuneSpeed","vocalTuneAmount","vocalTuneHumanize","vocalTuneMix","vocalTuneOutput","vocalTuneAdaptive","vocalTuneVibrato","vocalFormantPreserve","vocalAudioHarmony","vocalHarmonyStyle","vocalHarmonyMix","vocalHarmonyConfidence","vocalQuality","safeTracking","outputGuard","vocalFxEnabled","deEsserEnabled","compressorEnabled","saturationEnabled","doublerEnabled","reverbEnabled","delayEnabled","deEsserAmount","compressorAmount","saturationAmount","doublerAmount","reverbAmount","delayAmount","vocalFxMix","vocalFxAutoGain","delayDivision"})legacy.removeChild(legacy.getChildWithProperty("id",id),nullptr);
-    parameter(*p,"harmonyMode",2);parameter(*p,"harmonyBass",1);parameter(*p,"voiceLow",70);
+    for(const char* id:{"harmonyMode","harmonyVoicing","harmonyBass","voiceLow","voiceHigh","vocalTuneEnabled","vocalTuneMode","vocalTuneSpeed","vocalTuneAmount","vocalTuneHumanize","vocalTuneMix","vocalTuneOutput","vocalTuneAdaptive","vocalTuneVibrato","vocalFormantPreserve","vocalAudioHarmony","vocalHarmonyStyle","vocalHarmonyMix","vocalHarmonyConfidence","vocalQuality","safeTracking","outputGuard","uiSkin","vocalFxEnabled","deEsserEnabled","compressorEnabled","saturationEnabled","doublerEnabled","reverbEnabled","delayEnabled","deEsserAmount","compressorAmount","saturationAmount","doublerAmount","reverbAmount","delayAmount","vocalFxMix","vocalFxAutoGain","delayDivision"})legacy.removeChild(legacy.getChildWithProperty("id",id),nullptr);
+    parameter(*p,"harmonyMode",2);parameter(*p,"harmonyBass",1);parameter(*p,"voiceLow",70);parameter(*p,"uiSkin",5);
     auto xml=legacy.createXml();juce::MemoryBlock data;juce::AudioProcessor::copyXmlToBinary(*xml,data);p->setStateInformation(data.getData(),(int)data.getSize());
     check(p->apvts.getRawParameterValue("harmonyMode")->load()==0,"Legacy state left harmony enabled");
     check(p->apvts.getRawParameterValue("voiceLow")->load()==0&&p->apvts.getRawParameterValue("voiceHigh")->load()==127,"Legacy state retained restrictive voice profile");
@@ -213,10 +213,11 @@ void testLegacyState(){
     check(p->apvts.getRawParameterValue("vocalAudioHarmony")->load()==0,"Legacy state enabled Audio Harmony");
     check(p->apvts.getRawParameterValue("safeTracking")->load()==0&&p->apvts.getRawParameterValue("vocalQuality")->load()==1,"Legacy state did not receive V10.5 quality defaults");
     check(p->apvts.getRawParameterValue("outputGuard")->load()==1,"Legacy state did not enable Clip Guard safety default");
+    check(p->apvts.getRawParameterValue("uiSkin")->load()==0,"Legacy state did not select the default IDW Gold skin");
     check(p->apvts.getRawParameterValue("vocalFxEnabled")->load()==0,"Legacy state enabled Vocal FX rack");
     check(p->apvts.getRawParameterValue("vocalFxAutoGain")->load()==0,"Legacy state enabled Level Match");
     check(p->apvts.getRawParameterValue("delayEnabled")->load()==0,"Legacy state enabled a Vocal FX module");
-    std::cout<<"PASS legacy state migration defaults V5-V10.5 controls\n";
+    std::cout<<"PASS legacy state migration defaults V5-V10.6 controls\n";
 }
 void testVoiceProfiles(){
     auto p=processor(48000,128);const auto name="Regression-"+juce::Uuid().toString();

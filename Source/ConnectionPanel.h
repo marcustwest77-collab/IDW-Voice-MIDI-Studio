@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "DAWGuides.h"
+#include "SkinTheme.h"
 // Signals are observed locally; audible output is confirmed only by the user.
 class ConnectionPanel final : public juce::Component {
 public:
@@ -27,6 +28,13 @@ public:
         hint.setText("Start with headphones. Test note bypasses microphone tracking and sends C4 / MIDI 60 on channel 1.\nA generated event is not proof your DAW received it. Confirm only after hearing the selected instrument.\nChanging the route or sending another test clears the confirmation. It is never saved as a compatibility claim.",juce::dontSendNotification);
     }
     void begin(int events){baseline=events;resetConfirmation();}
+    void applySkin(const idw::SkinPalette& next) {
+        skin=&next;
+        title.setColour(juce::Label::textColourId,juce::Colour(skin->accent));
+        signals.setColour(juce::Label::textColourId,juce::Colour(skin->highlight));
+        for(auto* label:{&instructions,&hint})label->setColour(juce::Label::textColourId,juce::Colour(skin->muted));
+        repaint();
+    }
     void update(bool active,float peak,float rms,int events,const juce::String& guidance,bool internal) {
         if(running && !active)resetConfirmation();
         running=active;
@@ -43,7 +51,7 @@ public:
           +"\nUser confirmed audible note: "+(heard.getToggleState()?"yes (manual)":"no / unverified")
           +"\n\nSelected route instructions:\n"+juce::String(idw::dawGuide(route.getSelectedId()).instructions)+"\n";
     }
-    void paint(juce::Graphics& g) override {g.fillAll(juce::Colour(0xff141a24));g.setColour(juce::Colour(0xffeac36c));g.drawRect(getLocalBounds(),2);}
+    void paint(juce::Graphics& g) override {g.fillAll(juce::Colour(skin->card));g.setColour(juce::Colour(skin->accent));g.drawRect(getLocalBounds(),2);}
     void resized() override {
         const int w=getWidth();title.setBounds(24,18,w-240,32);done.setBounds(w-190,18,165,32);
         route.setBounds(24,70,w-48,34);instructions.setBounds(24,122,w-48,190);
@@ -60,4 +68,5 @@ private:
     juce::Label title,instructions,signals,hint;juce::ComboBox route;
     juce::TextButton done,testButton,localButton,externalButton,copyButton,manualButton;
     juce::ToggleButton heard;bool running=false,testSent=false;int baseline=0;
+    const idw::SkinPalette* skin=&idw::skins.front();
 };

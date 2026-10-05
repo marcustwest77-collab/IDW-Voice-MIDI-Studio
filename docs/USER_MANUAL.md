@@ -65,6 +65,10 @@ Auto-Key never uploads audio and never changes the song key without the Apply ke
 
 These are original local DSP features. Formant Preserve is marked Beta until it has been evaluated with a broad collection of real voices; V10.5 does not claim transparent correction for extreme pitch shifts.
 
+### V10.6 Custom Skin Studio
+
+Use the **SKIN** selector in the top toolbar to change the application appearance immediately. IDW Gold, Midnight Studio, Electric Blue, Vocal Heat, Platinum and High Contrast are included. The selection is stored in the plugin/standalone state and returns with the DAW project. Skin changes are visual only and do not restart audio, alter presets or change MIDI routing.
+
 ### V10.5 session safety and comparison
 
 - **Clip Guard** is enabled by default and softly catches final-output peaks above approximately -0.5 dBFS, including the Studio Instrument. The Vocal FX live line shows output level and a GUARD block count when it acts. It is a last safety stage, not a replacement for correct AudioBox gain staging.

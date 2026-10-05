@@ -3,7 +3,7 @@ set -euo pipefail
 
 BUILD_ROOT="${1:-build/IDWVoiceMIDIStudio_artefacts/Release}"
 OUT_DIR="${2:-release/Installer}"
-VERSION="10.5.0"
+VERSION="10.6.0"
 PKG_NAME="IDW-Voice-MIDI-Studio-Setup-macOS-arm64.pkg"
 DMG_NAME="IDW-Voice-MIDI-Studio-macOS-arm64.dmg"
 
@@ -25,6 +25,7 @@ cp docs/V10.2-UPGRADE.md "release/pkgroot/Library/Application Support/IDW Voice 
 cp docs/V10.3-UPGRADE.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V10.3-UPGRADE.md"
 cp docs/V10.4-UPGRADE.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V10.4-UPGRADE.md"
 cp docs/V10.5-UPGRADE.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V10.5-UPGRADE.md"
+cp docs/V10.6-UPGRADE.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V10.6-UPGRADE.md"
 
 pkgbuild \
   --root release/pkgroot \
@@ -40,8 +41,9 @@ cp docs/V10.2-UPGRADE.md release/dmgroot/V10.2-UPGRADE.md
 cp docs/V10.3-UPGRADE.md release/dmgroot/V10.3-UPGRADE.md
 cp docs/V10.4-UPGRADE.md release/dmgroot/V10.4-UPGRADE.md
 cp docs/V10.5-UPGRADE.md release/dmgroot/V10.5-UPGRADE.md
+cp docs/V10.6-UPGRADE.md release/dmgroot/V10.6-UPGRADE.md
 cat > release/dmgroot/README.txt <<'EOF'
-IDW Voice MIDI Studio V10.5
+IDW Voice MIDI Studio V10.6
 
 This installer places:
 - Standalone app in /Applications
