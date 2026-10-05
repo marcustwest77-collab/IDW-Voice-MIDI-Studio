@@ -1,6 +1,8 @@
 # IDW Voice MIDI Studio
 
-IDW Voice MIDI Studio V10 is a clean-room voice-to-MIDI and vocal-performance application from In Da Wind Entertainment, paired with Audio Lab for offline vocal tuning, lyrics and take management.
+IDW Voice MIDI Studio V10.5 is a clean-room voice-to-MIDI and vocal-performance application from In Da Wind Entertainment, paired with Audio Lab for offline vocal tuning, lyrics and take management.
+
+The official IDW Entertainment crown, wings and microphone logo is embedded in the interface, standalone startup screen and platform packaging. Source and deployment variants are kept in `Resources/Brand`.
 
 ## Formats
 - Windows: Standalone + VST3
@@ -24,6 +26,14 @@ IDW Voice MIDI Studio V10 is a clean-room voice-to-MIDI and vocal-performance ap
 - Voice profiles for multiple singers/ranges
 - Built-in Studio Instrument: a 32-voice synth (Lead/Chords/Bass patches, synthesized drums on channel 10) that can play directly from the plugin's own MIDI output, so you can perform without loading a separate instrument
 - Real-time monophonic vocal pitch correction with chromatic/song-scale targets, retune speed, correction amount, humanize, wet mix and output controls
+- Live vocal production rack with individually bypassable de-esser, compressor, saturation, stereo doubler, reverb and delay plus a master wet/dry mix
+- Local Auto-Key Assistant that learns from a sung phrase, suggests root plus major/minor mode with confidence, and applies it to song-scale tuning only after confirmation
+- Adaptive Tune with controllable vibrato preservation: faster note transitions and gentler sustained-note correction
+- Slow Level Match for fairer rack bypass comparisons and BPM-synchronized 1/8, dotted-1/8, 1/4 and 1/2 delay divisions
+- Optional LPC-based Formant Preserve (Beta) path for reducing chipmunk/boomy artifacts during larger correction moves
+- Scale-aware audio harmonies with upper-third, low/high-third, third/fifth and octave-stack voicings
+- V10.5 Clip Guard, confidence-gated harmonies, Eco/Studio/High CPU modes, Safe Tracking and temporary A/B Vocal FX snapshots
+- Atomic user-preset saving with one-copy recovery fallback
 - Local, non-destructive Tune Studio for creating corrected WAV copies that can be imported into Pro Tools Intro
 
 ### Factory Presets
@@ -41,6 +51,10 @@ IDW Voice MIDI Studio V10 is a clean-room voice-to-MIDI and vocal-performance ap
 - Memphis Hard Tune
 - Singing Rap
 - Robot Voice
+- Safe Tracking
+- Wide Pop Harmony
+- Low CPU Live
+- Modern Rap Lead
 
 ## User Experience
 - Built-in **HELP / QUICK START** manual

@@ -9,7 +9,7 @@
 #endif
 
 #define AppName "IDW Voice MIDI Studio"
-#define AppVersion "10.0.0"
+#define AppVersion "10.5.0"
 #define Publisher "In Da Wind Entertainment"
 #define AppExeName "IDW Voice MIDI Studio.exe"
 
@@ -29,7 +29,11 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 WizardStyle=modern
+SetupIconFile=..\..\Resources\Brand\IDWVoiceMIDIStudio.ico
+WizardImageFile=..\..\Resources\Brand\InstallerSidebar.bmp
+WizardSmallImageFile=..\..\Resources\Brand\InstallerSmall.bmp
 UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\{#AppExeName}
 
 [Files]
 Source: "{#BuildRoot}\Standalone\IDW Voice MIDI Studio.exe"; DestDir: "{app}"; Flags: ignoreversion

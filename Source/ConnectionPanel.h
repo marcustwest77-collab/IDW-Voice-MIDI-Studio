@@ -28,7 +28,8 @@ public:
     }
     void begin(int events){baseline=events;resetConfirmation();}
     void update(bool active,float peak,float rms,int events,const juce::String& guidance,bool internal) {
-        if(running && !active)resetConfirmation(); running=active;
+        if(running && !active)resetConfirmation();
+        running=active;
         testButton.setEnabled(active);
         const int count=juce::jmax(0,events-baseline);
         signals.setText(juce::String("1. Audio processing: ")+(active?"RUNNING":"STOPPED")

@@ -74,6 +74,7 @@ public:
     }
     void reset(){std::fill(buffer.begin(),buffer.end(),0.0f);writeIndex=0;filled=0;phase=0;}
     int latencySamples() const{return fixedDelay;}
+    bool isReady() const{return !buffer.empty()&&filled>=buffer.size();}
     float process(float input,float ratio,float mix) {
         if(buffer.empty())return input;
         buffer[writeIndex]=std::isfinite(input)?input:0.0f;

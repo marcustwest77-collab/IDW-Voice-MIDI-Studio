@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(IDWVoiceMIDIStudio VERSION 10.0.0)
+project(IDWVoiceMIDIStudio VERSION 10.5.0)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
@@ -43,6 +43,14 @@ juce_add_plugin(IDWVoiceMIDIStudio
     COPY_PLUGIN_AFTER_BUILD FALSE
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "IDW Voice MIDI Studio needs microphone access for voice-to-MIDI."
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Brand/IDWLogoFull.png"
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Brand/IDWLogoIcon.png"
+)
+
+juce_add_binary_data(IDWBrandAssets
+    SOURCES
+        Resources/Brand/IDWLogoFull.png
+        Resources/Brand/IDWLogoIcon.png
 )
 
 # The source files use <JuceHeader.h>; generate JUCE's compatibility header.
@@ -50,7 +58,7 @@ juce_generate_juce_header(IDWVoiceMIDIStudio)
 
 target_sources(IDWVoiceMIDIStudio PRIVATE
     Source/PluginProcessor.cpp Source/PluginProcessor.h
-    Source/PluginEditor.cpp Source/PluginEditor.h Source/VocalFXPanel.h Source/VocalTuner.h
+    Source/PluginEditor.cpp Source/PluginEditor.h Source/VocalFXPanel.h Source/VocalTuner.h Source/VocalEffects.h Source/AutoKeyDetector.h Source/AdaptiveTune.h Source/FormantPitchShifter.h Source/ScaleAwareHarmony.h Source/ReleaseSafety.h
     Source/YinPitchDetector.cpp Source/YinPitchDetector.h
     Source/BeatboxClassifier.cpp Source/BeatboxClassifier.h
     Source/MidiLearnManager.cpp Source/MidiLearnManager.h
@@ -66,6 +74,7 @@ target_compile_definitions(IDWVoiceMIDIStudio PRIVATE
 )
 
 target_link_libraries(IDWVoiceMIDIStudio PRIVATE
+    IDWBrandAssets
     juce::juce_audio_utils
     juce::juce_audio_processors
     juce::juce_dsp
@@ -89,6 +98,21 @@ if(BUILD_TESTING)
     add_executable(IDWVocalTunerTests Tests/VocalTunerTests.cpp)
     target_include_directories(IDWVocalTunerTests PRIVATE Source)
     add_test(NAME IDWVocalTuner COMMAND IDWVocalTunerTests)
+    add_executable(IDWVocalEffectsTests Tests/VocalEffectsTests.cpp)
+    target_include_directories(IDWVocalEffectsTests PRIVATE Source)
+    add_test(NAME IDWVocalEffects COMMAND IDWVocalEffectsTests)
+    add_executable(IDWAutoKeyTests Tests/AutoKeyTests.cpp)
+    target_include_directories(IDWAutoKeyTests PRIVATE Source)
+    add_test(NAME IDWAutoKey COMMAND IDWAutoKeyTests)
+    add_executable(IDWAdaptiveTuneTests Tests/AdaptiveTuneTests.cpp)
+    target_include_directories(IDWAdaptiveTuneTests PRIVATE Source)
+    add_test(NAME IDWAdaptiveTune COMMAND IDWAdaptiveTuneTests)
+    add_executable(IDWFormantHarmonyTests Tests/FormantHarmonyTests.cpp)
+    target_include_directories(IDWFormantHarmonyTests PRIVATE Source)
+    add_test(NAME IDWFormantHarmony COMMAND IDWFormantHarmonyTests)
+    add_executable(IDWReleaseSafetyTests Tests/ReleaseSafetyTests.cpp)
+    target_include_directories(IDWReleaseSafetyTests PRIVATE Source)
+    add_test(NAME IDWReleaseSafety COMMAND IDWReleaseSafetyTests)
     add_executable(IDWHarmonyTests Tests/HarmonyTests.cpp)
     target_include_directories(IDWHarmonyTests PRIVATE Source)
     add_test(NAME IDWHarmony COMMAND IDWHarmonyTests)
@@ -102,3 +126,4 @@ endif()
 
 target_sources(IDWVoiceMIDIStudio_Standalone PRIVATE Source/StandaloneApp.cpp)
 target_compile_definitions(IDWVoiceMIDIStudio_Standalone PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
+target_link_libraries(IDWVoiceMIDIStudio_Standalone PRIVATE IDWBrandAssets)

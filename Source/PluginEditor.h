@@ -26,6 +26,7 @@ private:
     static juce::String manualText();
     IDWVoiceMIDIStudioAudioProcessor& p;
     juce::LookAndFeel_V4 theme;
+    juce::Image brandLogo;
     juce::Label title,readout,status,diagnostics,traceLabel,drumLabel,captureLabel,setupStatus;
     juce::TextButton copyDiagnostics{"Copy diagnostics"};
     unsigned int lastCallbacks=0;

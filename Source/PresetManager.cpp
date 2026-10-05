@@ -12,14 +12,22 @@ juce::File PresetManager::dir() const
 bool PresetManager::save(const juce::String& name)
 {
     auto xml = state.copyState().createXml();
-    return xml && xml->writeTo(dir().getChildFile(name + ".xml"));
+    if (!xml) return false;
+    const auto target=dir().getChildFile(name + ".xml");
+    const auto previous=dir().getChildFile(name + ".previous.xml");
+    if(target.existsAsFile()){
+        const auto existing=juce::XmlDocument::parse(target);
+        if(existing&&existing->hasTagName(state.state.getType())){previous.deleteFile();if(!target.copyFileTo(previous))return false;}
+    }
+    juce::TemporaryFile temporary(target);
+    return xml->writeTo(temporary.getFile())&&temporary.overwriteTargetFileWithTemporary();
 }
 
 bool PresetManager::load(const juce::String& name)
 {
     auto xml = juce::XmlDocument::parse(dir().getChildFile(name + ".xml"));
-    if (! xml || ! xml->hasTagName(state.state.getType()))
-        return false;
+    if(!xml||!xml->hasTagName(state.state.getType()))xml=juce::XmlDocument::parse(dir().getChildFile(name + ".previous.xml"));
+    if (!xml||!xml->hasTagName(state.state.getType()))return false;
 
     state.replaceState(withV5Defaults(juce::ValueTree::fromXml(*xml),state));
     return true;
@@ -29,7 +37,7 @@ juce::StringArray PresetManager::list() const
 {
     juce::StringArray names;
     for (auto& file : dir().findChildFiles(juce::File::findFiles, false, "*.xml"))
-        names.add(file.getFileNameWithoutExtension());
+        if(!file.getFileNameWithoutExtension().endsWithIgnoreCase(".previous"))names.add(file.getFileNameWithoutExtension());
     names.sort(true);
     return names;
 }
@@ -50,7 +58,11 @@ juce::StringArray PresetManager::factoryPresetNames() const
         "Tight Vocal Tune",
         "Memphis Hard Tune",
         "Singing Rap",
-        "Robot Voice"
+        "Robot Voice",
+        "Safe Tracking",
+        "Wide Pop Harmony",
+        "Low CPU Live",
+        "Modern Rap Lead"
     };
 }
 
@@ -97,6 +109,23 @@ bool PresetManager::applyFactoryPreset(const juce::String& name)
     setParameter("vocalTuneHumanize", .40f);
     setParameter("vocalTuneMix", 1.0f);
     setParameter("vocalTuneOutput", 0.0f);
+    setParameter("vocalTuneAdaptive", 0.0f);
+    setParameter("vocalTuneVibrato", .50f);
+    setParameter("vocalFormantPreserve", 0.0f);
+    setParameter("vocalAudioHarmony", 0.0f);
+    setParameter("vocalHarmonyStyle", 2.0f);
+    setParameter("vocalHarmonyMix", .25f);
+    setParameter("vocalHarmonyConfidence", .72f);
+    setParameter("vocalQuality", 1.0f);
+    setParameter("safeTracking", 0.0f);
+    setParameter("outputGuard", 1.0f);
+    setParameter("vocalFxEnabled", 0.0f);
+    setParameter("vocalFxAutoGain", 0.0f);
+    setParameter("deEsserEnabled", 0.0f);setParameter("compressorEnabled", 0.0f);setParameter("saturationEnabled", 0.0f);
+    setParameter("doublerEnabled", 0.0f);setParameter("reverbEnabled", 0.0f);setParameter("delayEnabled", 0.0f);
+    setParameter("deEsserAmount", .45f);setParameter("compressorAmount", .45f);setParameter("saturationAmount", .20f);
+    setParameter("doublerAmount", .20f);setParameter("reverbAmount", .15f);setParameter("delayAmount", .12f);
+    setParameter("vocalFxMix", 1.0f);setParameter("delayDivision", 1.0f);
 
     if (name == "Clean Vocal")
     {
@@ -206,6 +235,36 @@ bool PresetManager::applyFactoryPreset(const juce::String& name)
         setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneSpeed",5.0f);
         setParameter("vocalTuneAmount",1.0f);setParameter("vocalTuneHumanize",0.0f);setParameter("vocalTuneMix",1.0f);
         return true;
+    }
+
+    if (name == "Safe Tracking")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneAdaptive",1.0f);setParameter("vocalTuneSpeed",32.0f);
+        setParameter("vocalTuneAmount",.88f);setParameter("vocalTuneHumanize",.30f);setParameter("safeTracking",1.0f);
+        setParameter("vocalFxEnabled",1.0f);setParameter("deEsserEnabled",1.0f);setParameter("compressorEnabled",1.0f);
+        setParameter("vocalFxAutoGain",1.0f);return true;
+    }
+    if (name == "Wide Pop Harmony")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneMode",1.0f);setParameter("vocalTuneAdaptive",1.0f);
+        setParameter("vocalTuneSpeed",36.0f);setParameter("vocalTuneAmount",.90f);setParameter("vocalFormantPreserve",1.0f);
+        setParameter("vocalAudioHarmony",1.0f);setParameter("vocalHarmonyStyle",2.0f);setParameter("vocalHarmonyMix",.30f);
+        setParameter("vocalFxEnabled",1.0f);setParameter("compressorEnabled",1.0f);setParameter("doublerEnabled",1.0f);setParameter("reverbEnabled",1.0f);
+        setParameter("vocalFxAutoGain",1.0f);return true;
+    }
+    if (name == "Low CPU Live")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneSpeed",55.0f);setParameter("vocalTuneAmount",.75f);
+        setParameter("vocalQuality",0.0f);setParameter("gestureCC",0.0f);setParameter("vocalFxEnabled",1.0f);
+        setParameter("compressorEnabled",1.0f);setParameter("vocalFxAutoGain",1.0f);return true;
+    }
+    if (name == "Modern Rap Lead")
+    {
+        setParameter("vocalTuneEnabled",1.0f);setParameter("vocalTuneMode",1.0f);setParameter("vocalTuneAdaptive",1.0f);
+        setParameter("vocalTuneSpeed",10.0f);setParameter("vocalTuneAmount",1.0f);setParameter("vocalTuneHumanize",.06f);
+        setParameter("vocalFormantPreserve",1.0f);setParameter("vocalFxEnabled",1.0f);setParameter("deEsserEnabled",1.0f);
+        setParameter("compressorEnabled",1.0f);setParameter("saturationEnabled",1.0f);setParameter("delayEnabled",1.0f);
+        setParameter("delayDivision",1.0f);setParameter("vocalFxAutoGain",1.0f);return true;
     }
 
     return false;

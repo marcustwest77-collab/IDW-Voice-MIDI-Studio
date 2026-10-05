@@ -12,6 +12,12 @@
 #include "StudioSynth.h"
 #include "RetrospectiveCapture.h"
 #include "VocalTuner.h"
+#include "VocalEffects.h"
+#include "AutoKeyDetector.h"
+#include "AdaptiveTune.h"
+#include "FormantPitchShifter.h"
+#include "ScaleAwareHarmony.h"
+#include "ReleaseSafety.h"
 class IDWVoiceMIDIStudioAudioProcessor : public juce::AudioProcessor {
 public:
     IDWVoiceMIDIStudioAudioProcessor();
@@ -53,6 +59,8 @@ public:
     int note() const{return midi.load();}
     float conf() const{return confidence.load();}
     float level() const{return inputRms.load();}
+    float outputLevel() const{return outputPeak.load();}
+    unsigned int clipGuardCount() const{return clipGuardBlocks.load();}
     float bendPosition() const{return displayedBend.load();}
     int drumEventCount() const{return drumEvents.load();}
     int lastDrum() const{return drumDisplay.load();}
@@ -62,6 +70,9 @@ public:
     float tuneCorrection() const{return displayedTuneCorrection.load();}
     int tuneTarget() const{return displayedTuneTarget.load();}
     int tuneLatencySamples() const{return vocalShifter.latencySamples();}
+    void startAutoKeyLearn(){autoKey.start();}
+    void stopAutoKeyLearn(){autoKey.stop();}
+    idw::KeySuggestion autoKeySuggestion() const{return autoKey.suggestion();}
 private:
     float value(const char* id) const{return apvts.getRawParameterValue(id)->load();}
     void analyse(juce::MidiBuffer&,int);
@@ -73,6 +84,11 @@ private:
     void negotiateBend(juce::MidiBuffer&,int,int,int);
     idw::StudioSynth studioSynth;
     idw::GranularPitchShifter vocalShifter;
+    idw::FormantPitchShifter formantShifter;
+    idw::GranularPitchShifter audioHarmonyA,audioHarmonyB;
+    idw::VocalEffects vocalEffects;
+    idw::ConfidenceGate harmonyConfidenceGate;
+    idw::AutoKeyDetector autoKey;
     juce::MidiBuffer incomingMidi;
     bool synthWasEnabled=false;
     YinPitchDetector pitch;
@@ -90,6 +106,10 @@ private:
     int testRemaining=0,inhibitSamples=0;
     double phase=0;float previewGain=0;
     float vocalTuneTargetRatio=1.0f,vocalTuneRatio=1.0f;
+    float audioHarmonyRatioA=1.0f,audioHarmonyRatioB=1.0f;int audioHarmonyVoices=0;
+    bool harmonyGateOpen=false;
+    bool formantWasEnabled=false,audioHarmonyWasEnabled=false;
+    int lastTuneTarget=-1,tuneTransitionSamples=0;
     std::atomic<bool> panicRequested{false},testRequested{false};
     std::atomic<float> freq{0},confidence{0},inputRms{0},displayedBend{0};
     std::atomic<int> midi{-1},drumDisplay{-1},drumEvents{0},emittedNotes{0},emittedEvents{0};
@@ -97,6 +117,8 @@ private:
     std::atomic<unsigned int> callbacks{0};
     std::atomic<int> observedBlock{0};
     std::atomic<float> inputPeak{0};
+    std::atomic<float> outputPeak{0};
+    std::atomic<unsigned int> clipGuardBlocks{0};
     std::atomic<float> displayedTuneCorrection{0};
     std::atomic<int> displayedTuneTarget{-1};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IDWVoiceMIDIStudioAudioProcessor)

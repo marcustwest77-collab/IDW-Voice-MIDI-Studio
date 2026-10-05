@@ -29,9 +29,49 @@ Open **Vocal FX** from the top bar and enable **Vocal Tune**. Use headphones: wh
 - **Retune Speed** sets how quickly correction changes. Around 60–120 ms is natural; 5–20 ms creates an intentional hard-tune effect.
 - **Tune Amount** controls correction strength. **Humanize** preserves small natural pitch movement.
 - **Wet Mix** blends dry and corrected audio. **Output** trims the processed vocal.
+- **Adaptive Tune** accelerates target-note changes but slows small corrections on held notes. **Vibrato** controls how much sustained-note movement it protects. Turn Adaptive Tune off to reproduce the original V10 correction timing.
 - Natural, Smooth R&B, Tight, Memphis Hard, Singing Rap and Robot provide starting settings.
 
+### Vocal production rack
+
+The lower half of **Vocal FX** contains six individually bypassable effects. Turn on **Enable FX Rack**, enable only the modules you need, and use **Rack Mix** to blend the complete chain with the incoming vocal.
+
+- **De-Esser** reduces sharp S and T sounds.
+- **Compressor** evens out loud and quiet phrases.
+- **Saturation** adds controlled warmth and edge.
+- **Doubler** adds short, different left/right delays for stereo width.
+- **Reverb** adds a compact vocal room.
+- **Delay** adds a tempo-synchronized vocal echo.
+- **Delay division** selects 1/8, dotted 1/8, 1/4 or 1/2 using the BPM on the main screen.
+- **Level Match** slowly compensates for rack loudness changes so bypass comparisons are less biased by volume.
+
+The order is De-Esser → Compressor → Saturation → Doubler → Delay/Reverb → Level Match. Start with the Natural preset and add one module at a time. Adaptive Tune, the entire rack and Level Match default off when older sessions are loaded. The live rack sends vocal audio to the output, so use headphones and keep the AudioBox input gain below clipping.
+
 The tuner is monophonic and works best with one dry vocal, limited room noise and no printed reverb. It is local and does not clone or upload the voice.
+
+### Auto-Key Assistant
+
+Open **Vocal FX**, click **Learn key**, and sing a clear verse or hook for roughly 10–20 seconds. Click **Stop learning** to freeze the result. IDW displays the suggested root, major/minor mode and a confidence percentage. Click **Apply key** to set the root, load the matching major/minor note mask and switch Vocal Tune to Song scale mode.
+
+Auto-Key never uploads audio and never changes the song key without the Apply key confirmation. A short phrase, spoken voice, heavy background music or a melody that avoids the tonic can produce an uncertain result; sing more of the song and prefer suggestions with stronger confidence.
+
+### Formant Preserve and audio harmony
+
+- **Formant Preserve (Beta)** uses LPC envelope transfer: it separates a compact estimate of the vocal tone from the pitch excitation, shifts the excitation, then reapplies the source envelope. This can reduce chipmunk or boomy character on larger moves. It is optional because different microphones and voices can expose artifacts; compare it against bypass before recording.
+- **Audio Harmony** adds one or two shifted vocal voices derived from the active root and scale mask. Choose Upper 3rd, Low + High 3rd, 3rd + 5th, or Octaves, then raise Harmony Mix gradually.
+- **Harmony Gate** sets the pitch-confidence threshold required before harmony voices fade in. Raise it if breathy consonants or room noise cause wrong harmony bursts.
+- The harmony engine follows the selected custom scale—not only fixed major/minor semitone offsets—so Apply Key or set the scale strip before enabling it.
+- Both features produce monitored vocal audio automatically. Use headphones with the AudioBox USB 96 and begin with Harmony Mix around 15–25%.
+
+These are original local DSP features. Formant Preserve is marked Beta until it has been evaluated with a broad collection of real voices; V10.5 does not claim transparent correction for extreme pitch shifts.
+
+### V10.5 session safety and comparison
+
+- **Clip Guard** is enabled by default and softly catches final-output peaks above approximately -0.5 dBFS, including the Studio Instrument. The Vocal FX live line shows output level and a GUARD block count when it acts. It is a last safety stage, not a replacement for correct AudioBox gain staging.
+- **CPU: Eco** bypasses LPC formant processing and limits audio harmony to one voice. **Studio** is the balanced default. **High** doubles the LPC envelope-analysis frequency for closer formant tracking at higher CPU cost.
+- **Safe Tracking** temporarily bypasses Formant Preserve, Audio Harmony, Doubler, Reverb and Delay while retaining pitch correction, De-Esser, Compressor and Saturation. Use it while recording if the system crackles or you want a drier headphone cue.
+- **Store/Recall A and B** capture all Vocal FX, quality and safety settings for fast comparisons. These temporary snapshots remain only while the plugin editor window is open; save a named user preset for permanent recall.
+- User presets are now written atomically. When overwriting a preset, IDW retains one `.previous.xml` recovery copy and automatically tries it if the newest preset file is unreadable.
 
 ## Harmony
 
@@ -67,7 +107,7 @@ IDW includes a compact 32-voice synthesizer so you can perform without loading a
 
 ## Presets
 
-- Factory presets: Clean Vocal, Tight Tracking, Smooth Lead, Scale Locked Lead, Wide Bend Performance, Beatbox Drums, Expressive MPE, Live Responsive.
+- Factory presets include Clean Vocal, Tight Tracking, Smooth Lead, Scale Locked Lead, Wide Bend Performance, Beatbox Drums, Expressive MPE, Live Responsive, six vocal-character presets, Safe Tracking, Wide Pop Harmony, Low CPU Live and Modern Rap Lead.
 - Save your own settings as a user preset; it appears in the same browser as the factory presets.
 - Loading any preset is a good moment to recalibrate noise if your room or microphone has changed.
 
