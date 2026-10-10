@@ -5,6 +5,8 @@
 #include "ConnectionPanel.h"
 #include "VocalFXPanel.h"
 #include "SkinTheme.h"
+#include "SkinDesigner.h"
+#include "SongStudioPanel.h"
 class IDWVoiceMIDIStudioAudioProcessorEditor : public juce::AudioProcessorEditor,private juce::Timer {
 public:
     explicit IDWVoiceMIDIStudioAudioProcessorEditor(IDWVoiceMIDIStudioAudioProcessor&);
@@ -84,6 +86,14 @@ private:
     juce::StringArray profileNames;
     juce::TooltipWindow tooltips{this,500};
     const idw::SkinPalette* skin=&idw::skins.front();
+    juce::TextButton songButton{"Song Studio"};
+    std::unique_ptr<SongStudioPanel> songPanel;
+    bool songVisible=false;
     int activeSkin=-1;
+    idw::SkinPalette displayedSkin=idw::skins.front();
+    std::array<std::uint32_t,5> activeColours{};
+    bool activeCustom=false,designerVisible=false;
+    juce::TextButton designSkin{"Design skin"};
+    std::unique_ptr<SkinDesigner> skinDesigner;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IDWVoiceMIDIStudioAudioProcessorEditor)
 };

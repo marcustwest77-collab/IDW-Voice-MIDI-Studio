@@ -3,6 +3,7 @@
 #include "ConnectionPanel.h"
 #include "VocalFXPanel.h"
 #include "SongScenes.h"
+#include "CustomSkin.h"
 #include "MidiExport.h"
 #include "VoiceProfiles.h"
 #include <iostream>
@@ -200,6 +201,23 @@ void testArrangement(){
     e=run(*ranged,48000,128,0.2,220);for(const auto& x:e)check(!x.message.isNoteOn(),"Voice range did not reject low note");
     std::cout<<"PASS V5 arrangement / channel separation / mode release / MPE exclusion / voice range\n";
 }
+void testCustomSkinState(){
+    auto p=processor(48000,128);
+    parameter(*p,"customSkinEnabled",1);parameter(*p,"uiSkin",2);
+    const std::array<int,5> colours{{0,0x123456,0xffffff,0xabcdef,0x345678}};
+    for(size_t i=0;i<colours.size();++i)parameter(*p,idw::skinColourIds[i],(float)colours[i]);
+    juce::MemoryBlock data;p->getStateInformation(data);
+    auto restored=processor(48000,128);restored->setStateInformation(data.getData(),(int)data.getSize());
+    check(restored->apvts.getRawParameterValue("customSkinEnabled")->load()==1,"Custom skin enabled state lost");
+    for(size_t i=0;i<colours.size();++i)check((int)restored->apvts.getRawParameterValue(idw::skinColourIds[i])->load()==colours[i],"Project lost a custom colour");
+    auto legacy=p->apvts.copyState();
+    legacy.removeChild(legacy.getChildWithProperty("id","customSkinEnabled"),nullptr);
+    for(auto id:idw::skinColourIds)legacy.removeChild(legacy.getChildWithProperty("id",id),nullptr);
+    auto xml=legacy.createXml();juce::AudioProcessor::copyXmlToBinary(*xml,data);
+    restored->setStateInformation(data.getData(),(int)data.getSize());
+    check(restored->apvts.getRawParameterValue("customSkinEnabled")->load()==0,"Old project retained custom overrides");
+    std::cout<<"PASS custom skin project round trip / legacy reset\n";
+}
 void testLegacyState(){
     auto p=processor(48000,128);auto legacy=p->apvts.copyState();
     for(const char* id:{"harmonyMode","harmonyVoicing","harmonyBass","voiceLow","voiceHigh","vocalTuneEnabled","vocalTuneMode","vocalTuneSpeed","vocalTuneAmount","vocalTuneHumanize","vocalTuneMix","vocalTuneOutput","vocalTuneAdaptive","vocalTuneVibrato","vocalFormantPreserve","vocalAudioHarmony","vocalHarmonyStyle","vocalHarmonyMix","vocalHarmonyConfidence","vocalQuality","safeTracking","outputGuard","uiSkin","vocalFxEnabled","deEsserEnabled","compressorEnabled","saturationEnabled","doublerEnabled","reverbEnabled","delayEnabled","deEsserAmount","compressorAmount","saturationAmount","doublerAmount","reverbAmount","delayAmount","vocalFxMix","vocalFxAutoGain","delayDivision"})legacy.removeChild(legacy.getChildWithProperty("id",id),nullptr);
@@ -348,4 +366,4 @@ void renderEditor(){
     std::cout<<"PASS V10 performance/default/minimum, Studio, Instrument, Vocal FX and Connection Center render / bounds\n";
 }
 }
-int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testVocalTune();testVocalEffects();testPresetRecovery();testAdvancedVocal();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testStudioInstrument();testRetrospectiveCapture();testSongScenes();testConnectionCheck();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
+int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testVocalTune();testVocalEffects();testPresetRecovery();testAdvancedVocal();testArrangement();testLegacyState();testCustomSkinState();testVoiceProfiles();testTakeRecovery();testStudioInstrument();testRetrospectiveCapture();testSongScenes();testConnectionCheck();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}

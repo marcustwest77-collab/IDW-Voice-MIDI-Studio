@@ -2,7 +2,7 @@ name: Build, Validate and Package IDW Voice MIDI Studio
 
 on:
   push:
-    branches: [main, v9.2-guided-routing, v10-vocal-fx, v10.5-release-candidate, v10.6-skin-studio]
+    branches: [main, v9.2-guided-routing, v10-vocal-fx, v10.5-release-candidate, v10.6-skin-studio, v10.7-custom-skins, v11-song-studio]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -108,7 +108,7 @@ jobs:
           Copy-Item -Recurse "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" "release/Windows/VST3/"
           Copy-Item "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.exe" "release/Windows/Standalone/"
           Copy-Item -Recurse "audio-lab-dist/IDW-Audio-Lab/*" "release/Windows/Audio-Lab/"
-          Copy-Item "docs/USER_MANUAL.md", "docs/PRO_TOOLS_SETUP.md", "docs/V10-UPGRADE.md", "docs/V10.1-UPGRADE.md", "docs/V10.2-UPGRADE.md", "docs/V10.3-UPGRADE.md", "docs/V10.4-UPGRADE.md", "docs/V10.5-UPGRADE.md", "docs/V10.6-UPGRADE.md" "release/Documentation/"
+          Copy-Item "docs/USER_MANUAL.md", "docs/PRO_TOOLS_SETUP.md", "docs/V10-UPGRADE.md", "docs/V10.1-UPGRADE.md", "docs/V10.2-UPGRADE.md", "docs/V10.3-UPGRADE.md", "docs/V10.4-UPGRADE.md", "docs/V10.5-UPGRADE.md", "docs/V10.6-UPGRADE.md", "docs/V10.7-UPGRADE.md", "docs/V11-SONG-STUDIO.md" "release/Documentation/"
           Copy-Item "START-HERE.html", "START-HERE.txt" "release/"
           Copy-Item "IDW-V10-Take-Editor.png" "release/Documentation/" -ErrorAction SilentlyContinue
 
@@ -133,7 +133,7 @@ jobs:
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" release/macOS/VST3/
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/AU/IDW Voice MIDI Studio.component" release/macOS/AU/
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.app" release/macOS/Standalone/
-          cp docs/USER_MANUAL.md docs/PRO_TOOLS_SETUP.md docs/V10-UPGRADE.md docs/V10.1-UPGRADE.md docs/V10.2-UPGRADE.md docs/V10.3-UPGRADE.md docs/V10.4-UPGRADE.md docs/V10.5-UPGRADE.md docs/V10.6-UPGRADE.md release/Documentation/
+          cp docs/USER_MANUAL.md docs/PRO_TOOLS_SETUP.md docs/V10-UPGRADE.md docs/V10.1-UPGRADE.md docs/V10.2-UPGRADE.md docs/V10.3-UPGRADE.md docs/V10.4-UPGRADE.md docs/V10.5-UPGRADE.md docs/V10.6-UPGRADE.md docs/V10.7-UPGRADE.md docs/V11-SONG-STUDIO.md release/Documentation/
 
       - name: Build macOS installer package and DMG
         if: runner.os == 'macOS'

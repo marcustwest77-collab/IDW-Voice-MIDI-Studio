@@ -18,6 +18,7 @@
 #include "FormantPitchShifter.h"
 #include "ScaleAwareHarmony.h"
 #include "ReleaseSafety.h"
+#include "SongStudio.h"
 class IDWVoiceMIDIStudioAudioProcessor : public juce::AudioProcessor {
 public:
     IDWVoiceMIDIStudioAudioProcessor();
@@ -41,6 +42,7 @@ public:
     void setStateInformation(const void*,int) override;
     static juce::AudioProcessorValueTreeState::ParameterLayout layout();
     juce::AudioProcessorValueTreeState apvts;
+    SongStudio songStudio;
     PresetManager presets;
     MidiLearnManager learn;
     BeatboxClassifier beats;

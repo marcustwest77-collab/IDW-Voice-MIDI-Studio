@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(IDWVoiceMIDIStudio VERSION 10.6.0)
+project(IDWVoiceMIDIStudio VERSION 11.0.0)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
@@ -58,7 +58,7 @@ juce_generate_juce_header(IDWVoiceMIDIStudio)
 
 target_sources(IDWVoiceMIDIStudio PRIVATE
     Source/PluginProcessor.cpp Source/PluginProcessor.h
-    Source/PluginEditor.cpp Source/PluginEditor.h Source/VocalFXPanel.h Source/VocalTuner.h Source/VocalEffects.h Source/AutoKeyDetector.h Source/AdaptiveTune.h Source/FormantPitchShifter.h Source/ScaleAwareHarmony.h Source/ReleaseSafety.h Source/SkinTheme.h
+    Source/PluginEditor.cpp Source/PluginEditor.h Source/VocalFXPanel.h Source/VocalTuner.h Source/VocalEffects.h Source/AutoKeyDetector.h Source/AdaptiveTune.h Source/FormantPitchShifter.h Source/ScaleAwareHarmony.h Source/ReleaseSafety.h Source/SkinTheme.h Source/CustomSkin.h Source/SkinDesigner.h Source/SongPattern.h Source/SongStudio.h Source/SongStudioPanel.h
     Source/YinPitchDetector.cpp Source/YinPitchDetector.h
     Source/BeatboxClassifier.cpp Source/BeatboxClassifier.h
     Source/MidiLearnManager.cpp Source/MidiLearnManager.h
@@ -113,6 +113,17 @@ if(BUILD_TESTING)
     add_executable(IDWReleaseSafetyTests Tests/ReleaseSafetyTests.cpp)
     target_include_directories(IDWReleaseSafetyTests PRIVATE Source)
     add_test(NAME IDWReleaseSafety COMMAND IDWReleaseSafetyTests)
+    add_executable(IDWSongStudioTests Tests/SongStudioTests.cpp)
+    target_include_directories(IDWSongStudioTests PRIVATE Source)
+    target_compile_definitions(IDWSongStudioTests PRIVATE JUCE_USE_CURL=0)
+    target_link_libraries(IDWSongStudioTests PRIVATE juce::juce_audio_formats)
+    add_test(NAME IDWSongStudio COMMAND IDWSongStudioTests)
+    add_executable(IDWSongPatternTests Tests/SongPatternTests.cpp)
+    target_include_directories(IDWSongPatternTests PRIVATE Source)
+    add_test(NAME IDWSongPattern COMMAND IDWSongPatternTests)
+    add_executable(IDWCustomSkinTests Tests/CustomSkinTests.cpp)
+    target_include_directories(IDWCustomSkinTests PRIVATE Source)
+    add_test(NAME IDWCustomSkins COMMAND IDWCustomSkinTests)
     add_executable(IDWSkinThemeTests Tests/SkinThemeTests.cpp)
     target_include_directories(IDWSkinThemeTests PRIVATE Source)
     add_test(NAME IDWSkinThemes COMMAND IDWSkinThemeTests)

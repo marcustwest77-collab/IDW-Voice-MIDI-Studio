@@ -21,7 +21,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     theme.setColour(juce::ComboBox::backgroundColourId,card);
     theme.setColour(juce::ToggleButton::tickColourId,mint);
     setLookAndFeel(&theme);setResizable(true,true);setResizeLimits(1040,890,1600,1200);setSize(1120,900);
-    title.setText("IDW / VOICE MIDI STUDIO V10.6",juce::dontSendNotification);title.setFont(juce::FontOptions(23.0f,juce::Font::bold));
+    title.setText("IDW / VOICE MIDI STUDIO V11 PREVIEW",juce::dontSendNotification);title.setFont(juce::FontOptions(23.0f,juce::Font::bold));
     readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));readout.setColour(juce::Label::textColourId,mint);
     traceLabel.setText("LIVE PITCH  /  7 SECONDS",juce::dontSendNotification);traceLabel.setColour(juce::Label::textColourId,muted);
     status.setText("Start with Preview sound, then sing or press Test note.",juce::dontSendNotification);
@@ -42,7 +42,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     expressionSelector.setTooltip("Scale lock off: free pitch. Strict: centered pitch. Natural: retains up to 45 cents of deviation around the selected scale note.");
     inputSelector.addItem("Input: Left / mono",1);inputSelector.addItem("Input: Right",2);inputSelector.addItem("Input: L + R",3);
     for(int i=0;i<idw::skinCount();++i)skinSelector.addItem(idw::skinByIndex(i).name,i+1);
-    skinSelector.setTooltip("Switch the complete interface appearance instantly. The selected skin is saved with this project.");
+    skinSelector.setTooltip("Choose the base theme. Design skin can override five colours; Built-in skin disables those overrides. Saved with this project.");
     skinSelector.onChange=[this]{applySkin(skinSelector.getSelectedId()-1);};
     for(auto pair:{std::pair<const char*,juce::ComboBox*>{"root",&rootSelector},{"scaleExpression",&expressionSelector},{"inputMode",&inputSelector}})
         combos.push_back(std::make_unique<ComboAttachment>(p.apvts,pair.first,*pair.second));
@@ -70,7 +70,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     preview.setTooltip("Simple local sine instrument for setup. Turn off when using your DAW synth.");
     helpText.setMultiLine(true);helpText.setReadOnly(true);helpText.setScrollbarsShown(true);helpText.setCaretVisible(false);
     helpText.setColour(juce::TextEditor::backgroundColourId,background);helpText.setColour(juce::TextEditor::outlineColourId,gold);helpText.setFont(juce::FontOptions(16));helpText.setText(manualText());
-    addAndMakeVisible(helpText);addAndMakeVisible(closeHelp);help.onClick=[this]{instrumentVisible=false;vocalFxVisible=false;connectionVisible=true;connectionPanel->begin(p.eventCount());connectionPanel->update(audioRunning(),p.peak(),p.level(),p.eventCount(),setupStatus.getText(),p.apvts.getRawParameterValue("synthEnabled")->load()>0.5f||p.apvts.getRawParameterValue("previewAudio")->load()>0.5f);resized();};closeHelp.onClick=[this]{showHelp(false);};
+    addAndMakeVisible(helpText);addAndMakeVisible(closeHelp);help.onClick=[this]{songVisible=false;designerVisible=false;instrumentVisible=false;vocalFxVisible=false;connectionVisible=true;connectionPanel->begin(p.eventCount());connectionPanel->update(audioRunning(),p.peak(),p.level(),p.eventCount(),setupStatus.getText(),p.apvts.getRawParameterValue("synthEnabled")->load()>0.5f||p.apvts.getRawParameterValue("previewAudio")->load()>0.5f);resized();};closeHelp.onClick=[this]{showHelp(false);};
     record.onClick=[this]{if(p.capture.isRecording()){p.capture.stop();record.setButtonText("Stopping...");}else beginCapture();};
     exportMidi.onClick=[this]{exportCapture();};exportMidi.setEnabled(false);
     bpmSlider.setSliderStyle(juce::Slider::LinearHorizontal);bpmSlider.setTextBoxStyle(juce::Slider::TextBoxRight,false,55,24);bpmSlider.setNumDecimalPlacesToDisplay(0);addAndMakeVisible(bpmSlider);attachSlider("captureBpm",bpmSlider);bpmSlider.textFromValueFunction=[](double v){return juce::String(v,0);};bpmSlider.updateText();
@@ -89,21 +89,35 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     addAndMakeVisible(instrumentButton);
     instrumentPanel=std::make_unique<InstrumentPanel>(p.apvts,[this]{instrumentVisible=false;resized();},[this]{p.requestPanic();});
     addChildComponent(*instrumentPanel);
-    instrumentButton.onClick=[this]{connectionVisible=false;vocalFxVisible=false;instrumentVisible=!instrumentVisible;resized();};
+    instrumentButton.onClick=[this]{songVisible=false;designerVisible=false;connectionVisible=false;vocalFxVisible=false;instrumentVisible=!instrumentVisible;resized();};
     addAndMakeVisible(vocalFxButton);
     vocalFxPanel=std::make_unique<VocalFXPanel>(p.apvts,[this]{vocalFxVisible=false;resized();},
         [this]{p.startAutoKeyLearn();},[this]{p.stopAutoKeyLearn();},[this]{return p.autoKeySuggestion();});
     addChildComponent(*vocalFxPanel);
-    vocalFxButton.onClick=[this]{connectionVisible=false;instrumentVisible=false;showHelp(false);vocalFxVisible=!vocalFxVisible;resized();};
-    addAndMakeVisible(audioLabButton);audioLabButton.onClick=[this]{connectionVisible=false;instrumentVisible=false;vocalFxVisible=false;showHelp(false);resized();openAudioLab();};
+    vocalFxButton.onClick=[this]{songVisible=false;designerVisible=false;connectionVisible=false;instrumentVisible=false;showHelp(false);vocalFxVisible=!vocalFxVisible;resized();};
+    addAndMakeVisible(audioLabButton);audioLabButton.onClick=[this]{songVisible=false;designerVisible=false;connectionVisible=false;instrumentVisible=false;vocalFxVisible=false;showHelp(false);resized();openAudioLab();};
     connectionPanel=std::make_unique<ConnectionPanel>([this]{connectionVisible=false;resized();},[this]{showHelp(true);},[this]{p.requestTestNote();},[this](bool local){p.requestPanic();setValue("synthEnabled",local?1.0f:0.0f);setValue("previewAudio",0);setValue("monitorMic",0);},[this]{juce::SystemClipboard::copyTextToClipboard(diagnosticReport());});
     addChildComponent(*connectionPanel);
+    addAndMakeVisible(songButton);
+    songPanel=std::make_unique<SongStudioPanel>(p.songStudio,[this]{songVisible=false;resized();},[this]{setValue("monitorMic",1);});
+    addChildComponent(*songPanel);
+    songButton.onClick=[this]{songVisible=!songVisible;designerVisible=false;resized();};
+    addAndMakeVisible(designSkin);
+    skinDesigner=std::make_unique<SkinDesigner>(p.apvts,[this]{designerVisible=false;resized();});
+    addChildComponent(*skinDesigner);
+    designSkin.onClick=[this]{songVisible=false;designerVisible=!designerVisible;if(designerVisible)skinDesigner->refresh();resized();};
     setupV5();history.fill(-1);refreshPresets();syncScale();activeSkin=-1;applySkin((int)p.apvts.getRawParameterValue("uiSkin")->load());showHelp(false);resized();timerCallback();startTimerHz(30);
 }
 IDWVoiceMIDIStudioAudioProcessorEditor::~IDWVoiceMIDIStudioAudioProcessorEditor(){stopTimer();p.takes.drain();p.takes.checkpoint();setLookAndFeel(nullptr);}
 void IDWVoiceMIDIStudioAudioProcessorEditor::configureSlider(juce::Slider& s,juce::Label& l,const juce::String& text,const juce::String& tip){s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);s.setTextBoxStyle(juce::Slider::TextBoxBelow,false,85,22);s.setTooltip(tip);l.setText(text,juce::dontSendNotification);l.setJustificationType(juce::Justification::centred);l.setColour(juce::Label::textColourId,muted);addAndMakeVisible(s);addAndMakeVisible(l);}
 void IDWVoiceMIDIStudioAudioProcessorEditor::applySkin(int index){
-    index=idw::validSkinIndex(index);if(index==activeSkin)return;activeSkin=index;skin=&idw::skinByIndex(index);
+    index=idw::validSkinIndex(index);
+    const bool custom=p.apvts.getRawParameterValue("customSkinEnabled")->load()>0.5f;
+    std::array<std::uint32_t,5> colours{};
+    for(size_t i=0;i<colours.size();++i)colours[i]=(std::uint32_t)p.apvts.getRawParameterValue(idw::skinColourIds[i])->load();
+    if(index==activeSkin && custom==activeCustom && colours==activeColours)return;
+    activeSkin=index;activeCustom=custom;activeColours=colours;
+    displayedSkin=custom?idw::customSkin(idw::skinByIndex(index),colours):idw::skinByIndex(index);skin=&displayedSkin;
     const auto bg=juce::Colour(skin->background),panel=juce::Colour(skin->card),accent=juce::Colour(skin->accent);
     const auto secondary=juce::Colour(skin->muted),signal=juce::Colour(skin->highlight);
     theme.setColour(juce::ResizableWindow::backgroundColourId,bg);
@@ -117,6 +131,7 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::applySkin(int index){
     theme.setColour(juce::ComboBox::outlineColourId,accent.withAlpha(0.45f));theme.setColour(juce::ComboBox::arrowColourId,accent);
     theme.setColour(juce::PopupMenu::backgroundColourId,panel);theme.setColour(juce::PopupMenu::textColourId,secondary);
     theme.setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(skin->buttonOn));
+    theme.setColour(juce::TextEditor::backgroundColourId,panel);theme.setColour(juce::TextEditor::textColourId,secondary);
     theme.setColour(juce::ToggleButton::textColourId,secondary);theme.setColour(juce::ToggleButton::tickColourId,signal);
     readout.setColour(juce::Label::textColourId,signal);traceLabel.setColour(juce::Label::textColourId,secondary);
     diagnostics.setColour(juce::Label::textColourId,secondary);drumLabel.setColour(juce::Label::textColourId,accent);
@@ -233,7 +248,7 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::timerCallback(){
     const auto now=juce::Time::getMillisecondCounterHiRes();
     const auto callbacks=p.audioCallbacks();if(callbacks!=lastCallbacks){lastCallbacks=callbacks;lastAudioChange=now;}
     const auto param=[this](const char* id){return p.apvts.getRawParameterValue(id)->load();};
-    const int requestedSkin=(int)param("uiSkin");if(requestedSkin!=activeSkin)applySkin(requestedSkin);
+    applySkin((int)param("uiSkin"));
     setupStatus.setText(idw::guidance(idw::diagnose(audioRunning(),p.peak(),p.level(),param("gate"),p.beats.trainingPad()>=0,param("melody")>0.5f,param("beatbox")>0.5f,p.conf(),param("confidence"),p.note()>=0,p.hz()<=0 || (69+12*std::log2(p.hz()/440)>=juce::jmin(param("voiceLow"),param("voiceHigh"))-0.5f && 69+12*std::log2(p.hz()/440)<=juce::jmax(param("voiceLow"),param("voiceHigh"))+0.5f))),juce::dontSendNotification);
     if(calibrating){calibrationPeak=juce::jmax(calibrationPeak,p.peak());noisePeak=juce::jmax(noisePeak,p.level());if(juce::Time::getMillisecondCounterHiRes()-calibrationStarted>=1000){calibrating=false;calibrate.setEnabled(true);if(!audioRunning()||calibrationPeak<0.00001f||calibrationPeak>=0.98f){status.setText("Calibration skipped: input is silent, stopped or clipping. Check mic settings.",juce::dontSendNotification);}else{auto* param=p.apvts.getParameter("gate");param->beginChangeGesture();param->setValueNotifyingHost(param->convertTo0to1(juce::jlimit(0.001f,0.2f,juce::jmax(0.002f,noisePeak*2.5f))));param->endChangeGesture();status.setText("Noise gate calibrated. Sing a steady note.",juce::dontSendNotification);}}}
     const float hz=p.hz();const int n=p.note();history[(size_t)historyPos]=hz>0?69+12*std::log2(hz/440):-1;historyPos=(historyPos+1)%220;
@@ -267,7 +282,7 @@ bool IDWVoiceMIDIStudioAudioProcessorEditor::audioRunning() const {
     return lastAudioChange>0 && juce::Time::getMillisecondCounterHiRes()-lastAudioChange<1000;
 }
 juce::String IDWVoiceMIDIStudioAudioProcessorEditor::diagnosticReport() const {
-    juce::String text="IDW Voice MIDI Studio 10.6.0 setup report\n";
+    juce::String text="IDW Voice MIDI Studio 11.0.0 setup report\n";
     text += "Audio callbacks active: "+juce::String(audioRunning()?"yes":"no")+"\n";
     text += "Sample rate: "+juce::String(p.deviceRate(),0)+" Hz; block: "+juce::String(p.deviceBlock())+" samples\n";
     text += "Input RMS: "+juce::String(juce::Decibels::gainToDecibels(p.level(),-100.0f),1)+" dBFS; peak: "+juce::String(p.peak(),4)+"\n";
@@ -296,6 +311,20 @@ CPU Eco bypasses LPC formants and limits audio harmony to one voice. Studio is t
 Safe Tracking temporarily bypasses formant processing, audio harmony, doubler, reverb and delay while retaining tuning, de-essing, compression and saturation.
 Store A/B captures the Vocal FX panel settings in memory for level-matched comparisons. Snapshots last until the plugin editor window is closed.
 User preset saves are atomic and keep one previous copy for recovery if the newest XML becomes unreadable.
+
+V11 SONG STUDIO PREVIEW
+Song Studio beneath the title opens a 16-step kick/snare/hi-hat sequencer.
+Set BPM and Bars, then Play song or Record take. Use headphones: recording enables mic monitoring.
+Record starts immediately with no count-in and captures one processed vocal/instrument audio track.
+Stop preserves the take in memory. Save song writes a self-contained .idwsong file.
+Song files are separate from plugin presets and DAW state. Save explicitly before closing IDW.
+Export mix WAV writes a 48 kHz / 24-bit stereo mix. Maximum duration is 180 seconds.
+Tempo edits do not stretch the recorded take. This preview has no multitrack editing or crash recovery.
+
+V10.7 CUSTOM SKIN DESIGNER
+Design skin opens five RGB hex colour fields. Apply colours previews them.
+Name and Save new skin to reuse it in other projects; Load skin restores it.
+Built-in skin disables custom overrides. All custom colours are stored in the project.
 
 V10.6 CUSTOM SKIN STUDIO
 Use the SKIN selector in the top toolbar to switch the entire interface live.
@@ -450,6 +479,8 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::layoutV5(){
     const int w=getWidth();
     for(auto* child:getChildren())child->setVisible(!performanceView);
     for(auto* c:std::initializer_list<juce::Component*>{&harmonyMode,&harmonyVoicing,&bassLayer,&arrangementTitle,&arrangementStatus,&profileTitle,&profileSelector,&saveProfile,&learnRange,&voiceLow,&voiceHigh,&lowLabel,&highLabel,&recover})c->setVisible(performanceView);
+    songButton.setBounds(216,59,120,18);songButton.setVisible(true);
+    designSkin.setBounds(86,59,115,18);designSkin.setVisible(true);
     title.setBounds(86,18,285,40);skinSelector.setBounds(380,24,135,30);skinSelector.setVisible(true);viewButton.setBounds(525,24,120,30);viewButton.setVisible(true);viewButton.setButtonText(performanceView?"Studio controls":"Performance view");
     if(performanceView){
         for(auto* c:std::initializer_list<juce::Component*>{&title,&skinSelector,&readout,&status,&diagnostics,&setupStatus,&copyDiagnostics,&preview,&test,&panic,&record,&exportMidi,&captureLabel,&bpmLabel,&bpmSlider,&help,&rootSelector,&calibrate})c->setVisible(true);
@@ -471,6 +502,8 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::layoutV5(){
     if(vocalFxPanel){vocalFxPanel->setBounds(25,78,w-50,getHeight()-128);vocalFxPanel->setVisible(vocalFxVisible);if(vocalFxVisible)vocalFxPanel->toFront(false);}
     if(connectionPanel){connectionPanel->setBounds(25,78,w-50,getHeight()-128);connectionPanel->setVisible(connectionVisible);if(connectionVisible)connectionPanel->toFront(false);}
     helpText.setVisible(helpVisible);closeHelp.setVisible(helpVisible);if(helpVisible){helpText.toFront(false);closeHelp.toFront(false);}
+    if(songPanel){songPanel->setBounds(25,78,w-50,getHeight()-128);songPanel->setVisible(songVisible);if(songVisible)songPanel->toFront(false);}
+    if(skinDesigner){skinDesigner->setBounds(25,78,w-50,getHeight()-128);skinDesigner->setVisible(designerVisible);if(designerVisible)skinDesigner->toFront(false);}
 }
 
 void IDWVoiceMIDIStudioAudioProcessorEditor::saveRetrospective(){

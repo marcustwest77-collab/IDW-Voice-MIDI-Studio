@@ -65,6 +65,12 @@ Auto-Key never uploads audio and never changes the song key without the Apply ke
 
 These are original local DSP features. Formant Preserve is marked Beta until it has been evaluated with a broad collection of real voices; V10.5 does not claim transparent correction for extreme pitch shifts.
 
+### V10.7 Custom Skin Designer
+
+Click **Design skin**, beneath the title. Enter six RGB hex digits (with an optional #) for Background, Panels, Accent, Text and Signal. Click **Apply colours** to preview. Choose a name and click **Save new skin** to save a reusable copy; choose it from the saved-skin list and click **Load skin** in another project. Each save creates a new file, even if the name is reused.
+
+**Built-in skin** disables custom overrides and returns to the toolbar's selected theme. This button always uses white text on black so it remains readable if your colour choices clash. The toolbar theme still supplies button, grid and safety colours while overrides are enabled. Custom colours and their enabled state are saved inside the DAW/standalone state. Saved skin files are local to this computer; reopening a project does not require them. Loading an older project disables custom overrides.
+
 ### V10.6 Custom Skin Studio
 
 Use the **SKIN** selector in the top toolbar to change the application appearance immediately. IDW Gold, Midnight Studio, Electric Blue, Vocal Heat, Platinum and High Contrast are included. The selection is stored in the plugin/standalone state and returns with the DAW project. Skin changes are visual only and do not restart audio, alter presets or change MIDI routing.
@@ -196,3 +202,7 @@ Run the companion's own automated test suite anytime with:
 - Song scenes: `IDW Voice MIDI Studio/Song Scenes` (user application-data folder).
 - Lyrics, history, and checkpoints: `IDW Audio Lab/Lyrics` (user home folder).
 - Setup reports and MIDI Learn mappings never leave your machine unless you explicitly export or share them.
+
+### V11 Song Studio preview
+
+Open **Song Studio** beneath the title to sequence kick/snare/hi-hat, record one processed audio performance, save a `.idwsong` project and export a stereo WAV. Use headphones: Record take enables microphone monitoring. Recording starts immediately with no count-in. Songs are not stored in plugin presets or DAW state; use **Save song** before closing. See [V11 Song Studio guide](V11-SONG-STUDIO.md) for setup, limits and tests.

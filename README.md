@@ -1,6 +1,6 @@
 # IDW Voice MIDI Studio
 
-IDW Voice MIDI Studio V10.6 is a clean-room voice-to-MIDI and vocal-performance application from In Da Wind Entertainment, paired with Audio Lab for offline vocal tuning, lyrics and take management.
+IDW Voice MIDI Studio V11 (local Song Studio preview) is a clean-room voice-to-MIDI and vocal-performance application from In Da Wind Entertainment, paired with Audio Lab for offline vocal tuning, lyrics and take management.
 
 The official IDW Entertainment crown, wings and microphone logo is embedded in the interface, standalone startup screen and platform packaging. Source and deployment variants are kept in `Resources/Brand`.
 
@@ -33,6 +33,8 @@ The official IDW Entertainment crown, wings and microphone logo is embedded in t
 - Optional LPC-based Formant Preserve (Beta) path for reducing chipmunk/boomy artifacts during larger correction moves
 - Scale-aware audio harmonies with upper-third, low/high-third, third/fifth and octave-stack voicings
 - V10.5 Clip Guard, confidence-gated harmonies, Eco/Studio/High CPU modes, Safe Tracking and temporary A/B Vocal FX snapshots
+- V11 Song Studio: native 16-step drum sequencer, one recorded audio track, self-contained song files and stereo WAV export (local preview; see docs/V11-SONG-STUDIO.md)
+- V10.7 Custom Skin Designer with five editable RGB colours and reusable named local skins
 - V10.6 Custom Skin Studio with six live-switchable, project-persistent interface skins
 - Atomic user-preset saving with one-copy recovery fallback
 - Local, non-destructive Tune Studio for creating corrected WAV copies that can be imported into Pro Tools Intro

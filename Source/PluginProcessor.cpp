@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 #include "StateCompatibility.h"
 #include "SkinTheme.h"
+#include "CustomSkin.h"
 #include <cmath>
 IDWVoiceMIDIStudioAudioProcessor::IDWVoiceMIDIStudioAudioProcessor()
  : AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::mono(),true)
@@ -93,11 +94,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout IDWVoiceMIDIStudioAudioProce
     p.add(std::make_unique<F>("vocalFxMix", "Vocal FX Mix", 0.0f,1.0f,1.0f));
     p.add(std::make_unique<B>("vocalFxAutoGain", "Level Match", false));
     p.add(std::make_unique<I>("delayDivision", "Delay Division", 0,3,1));
+    p.add(std::make_unique<B>("customSkinEnabled", "Custom Skin Enabled", false));
+    for(size_t i=0;i<idw::skinColourIds.size();++i)
+        p.add(std::make_unique<I>(idw::skinColourIds[i], juce::String("Skin ")+idw::skinColourNames[i], 0,0xffffff,(int)idw::skinDefaults[i]));
     return p;
 }
 
 
 void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
+    songStudio.prepare(sr);
     retrospective.resetAudio();
     studioSynth.prepare(sr);incomingMidi.clear();synthWasEnabled=false;
     heldHarmony={};
@@ -111,7 +116,7 @@ void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
     displayedTuneCorrection.store(0);displayedTuneTarget.store(-1);lastTuneTarget=-1;tuneTransitionSamples=0;audioHarmonyRatioA=audioHarmonyRatioB=1;audioHarmonyVoices=0;harmonyGateOpen=false;formantWasEnabled=false;audioHarmonyWasEnabled=false;
     setLatencySamples(0); // Live tracking is causal; no artificial delay is added.
 }
-void IDWVoiceMIDIStudioAudioProcessor::releaseResources(){pitch.reset();capture.resetAudio();}
+void IDWVoiceMIDIStudioAudioProcessor::releaseResources(){songStudio.stop();pitch.reset();capture.resetAudio();}
 bool IDWVoiceMIDIStudioAudioProcessor::isBusesLayoutSupported(const BusesLayout& b) const{
     const auto i=b.getMainInputChannelSet(),o=b.getMainOutputChannelSet();
     return (i==juce::AudioChannelSet::mono()||i==juce::AudioChannelSet::stereo())
@@ -223,12 +228,13 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
     const double started=juce::Time::getMillisecondCounterHiRes();
     incomingMidi.clear();incomingMidi.swapWith(out);learn.process(incomingMidi,apvts);out.clear();
     const int count=buffer.getNumSamples(),channels=buffer.getNumChannels();
+    const bool songRecording=songStudio.isRecording();
     if(count<=0 || channels<=0 || hop.empty())return;
     callbacks.fetch_add(1,std::memory_order_relaxed);
     observedRate.store(sampleRateHz);observedBlock.store(count);
     float blockPeak=0;
     capture.beginBlock(sampleRateHz);
-    if(panicRequested.exchange(false)){allOff(out,0);inhibitSamples=(int)(sampleRateHz*0.300);}
+    if(panicRequested.exchange(false)){songStudio.stop();allOff(out,0);inhibitSamples=(int)(sampleRateHz*0.300);}
     if(testRequested.exchange(false)){
         allOff(out,0);negotiateBend(out,0,1,(int)value("bend"));
         out.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)100),0);
@@ -299,7 +305,7 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
             if(audioHarmonyEnabled&&audioHarmonyA.isReady()&&effectiveHarmonyVoices>0){const float first=audioHarmonyMix*harmonyGate*(effectiveHarmonyVoices==1?.42f:.52f);produced+=harmonyA*(ch==0?first:first*.55f);}
             if(audioHarmonyEnabled&&audioHarmonyB.isReady()&&effectiveHarmonyVoices>1){const float second=audioHarmonyMix*harmonyGate*.52f;produced+=harmonyB*(ch==0?second*.55f:second);}
             if(audioHarmonyEnabled)produced=juce::jlimit(-1.0f,1.0f,produced);
-            const float source=tuneEnabled||fx.enabled||audioHarmonyEnabled?produced:(monitor?(ch<inputs?buffer.getSample(ch,i):left):0.0f);
+            const float source=tuneEnabled||fx.enabled||audioHarmonyEnabled||songRecording?produced:(monitor?(ch<inputs?buffer.getSample(ch,i):left):0.0f);
             buffer.setSample(ch,i,source+tone);
         }
     }
@@ -315,6 +321,7 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
             const auto sound=studioSynth.sample();for(int ch=0;ch<channels;++ch)buffer.addSample(ch,i,sound);
         }
     }
+    songStudio.process(buffer);
     float blockOutputPeak=0.0f;bool guardTouched=false;const bool guardEnabled=value("outputGuard")>0.5f;
     for(int ch=0;ch<channels;++ch)for(int i=0;i<count;++i){
         const float sample=buffer.getSample(ch,i),finite=std::isfinite(sample)?sample:0.0f;blockOutputPeak=juce::jmax(blockOutputPeak,std::abs(finite));
