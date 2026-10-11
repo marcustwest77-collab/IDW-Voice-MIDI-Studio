@@ -206,3 +206,7 @@ Run the companion's own automated test suite anytime with:
 ### V11 Song Studio preview
 
 Open **Song Studio** beneath the title to sequence kick/snare/hi-hat, record one processed audio performance, save a `.idwsong` project and export a stereo WAV. Use headphones: Record take enables microphone monitoring. Recording starts immediately with no count-in. Songs are not stored in plugin presets or DAW state; use **Save song** before closing. See [V11 Song Studio guide](V11-SONG-STUDIO.md) for setup, limits and tests.
+
+### V11.1 lyrics in Song Studio
+
+Open **Song Studio > Lyrics** to write a song title and lyrics. Section buttons insert headings at the cursor. **Import TXT** appends a UTF-8 draft from Audio Lab; **Export TXT** exports the lyric body. **Save song** stores the title and lyrics together with the beat and recorded take. Editing works during playback, but stop transport before saving. There is no autosave. Native dictation/shared microphone capture is a later milestone. See [V11.1 guide](V11.1-UNIFIED-LYRICS.md) for compatibility and tests.

@@ -8,6 +8,13 @@
 // Disk IO and buffer allocation occur only on the UI thread while transport is stopped.
 class SongStudio {
 public:
+    struct Lyrics {juce::String title,text;};
+    static constexpr int maxTitleBytes=1024,maxLyricsBytes=131072;
+    Lyrics lyrics()const{const juce::ScopedLock guard(lyricsLock);return words;}
+    bool setLyrics(Lyrics next){
+        if(next.title.length()>256||next.text.length()>32768||next.title.getNumBytesAsUTF8()>maxTitleBytes||next.text.getNumBytesAsUTF8()>maxLyricsBytes)return false;
+        const juce::ScopedLock guard(lyricsLock);words=std::move(next);return true;
+    }
     void prepare(double nextRate){const juce::ScopedLock guard(lock);playing=false;recording=false;rate=nextRate;displayRate=nextRate;drums.prepare(rate);configureDrums(drums);}
     bool isPlaying()const{return playing.load();}
     bool isRecording()const{return recording.load();}
@@ -45,23 +52,31 @@ public:
     juce::Result save(const juce::File& destination){
         const juce::ScopedLock guard(lock);if(playing)return juce::Result::fail("Stop playback or recording first.");
         juce::TemporaryFile temp(destination);auto out=temp.getFile().createOutputStream();if(!out)return juce::Result::fail("Cannot create project file.");
-        out->writeInt(0x49445731);out->writeInt(1);out->writeInt(song.bpm);out->writeInt(song.bars);
+        out->writeInt(0x49445731);out->writeInt(2);out->writeInt(song.bpm);out->writeInt(song.bars);
         for(auto row:song.rows)out->writeInt(row);
         out->writeFloat(song.beatGain);out->writeFloat(song.trackGain);out->writeInt((int)takeRate);out->writeInt(recorded);
+        const auto document=lyrics();
+        for(const auto& text:{document.title,document.text}){const int bytes=(int)text.getNumBytesAsUTF8();out->writeInt(bytes);out->write(text.toRawUTF8(),(size_t)bytes);}
         for(int i=0;i<recorded;++i)for(int ch=0;ch<2;++ch)out->writeFloat(track.getSample(ch,i));
         out->flush();const bool ok=out->getStatus().wasOk();out.reset();
         return ok&&temp.overwriteTargetFileWithTemporary()?juce::Result::ok():juce::Result::fail("Project save failed; previous file preserved.");
     }
     juce::Result load(const juce::File& file){
         const juce::ScopedLock guard(lock);if(playing)return juce::Result::fail("Stop transport first.");
-        auto in=file.createInputStream();if(!in||in->getTotalLength()<44||in->readInt()!=0x49445731||in->readInt()!=1)return juce::Result::fail("Not a supported IDW song project.");
+        auto in=file.createInputStream();if(!in||in->getTotalLength()<44||in->readInt()!=0x49445731)return juce::Result::fail("Not a supported IDW song project.");
+        const int version=in->readInt();if(version!=1&&version!=2)return juce::Result::fail("Unsupported song version. Current song kept.");
         idw::SongPattern next;next.bpm=in->readInt();next.bars=in->readInt();
         for(auto& row:next.rows){const int value=in->readInt();if(value<0||value>65535)return juce::Result::fail("Invalid drum pattern.");row=(std::uint16_t)value;}
         next.beatGain=in->readFloat();next.trackGain=in->readFloat();const int sr=in->readInt(),frames=in->readInt();
-        if(!next.valid()||sr<8000||sr>192000||frames<0||frames>sr*180||in->getTotalLength()!=44+(juce::int64)frames*8)return juce::Result::fail("Invalid or truncated song project.");
+        if(!next.valid()||sr<8000||sr>192000||frames<0||frames>sr*180)return juce::Result::fail("Invalid or truncated song project.");
+        Lyrics loadedWords;
+        if(version==2){
+            if(!readText(*in,loadedWords.title,maxTitleBytes)||!readText(*in,loadedWords.text,maxLyricsBytes))return juce::Result::fail("Invalid or truncated lyrics. Current song kept.");
+        }
+        if(in->getTotalLength()!=in->getPosition()+(juce::int64)frames*8)return juce::Result::fail("Invalid or truncated song audio.");
         juce::AudioBuffer<float> loaded(2,frames);
         for(int i=0;i<frames;++i)for(int ch=0;ch<2;++ch){const float value=in->readFloat();if(!std::isfinite(value))return juce::Result::fail("Invalid recorded audio.");loaded.setSample(ch,i,value);}
-        track=std::move(loaded);song=next;takeRate=sr;recorded=frames;position=0;return juce::Result::ok();
+        setLyrics(std::move(loadedWords));track=std::move(loaded);song=next;takeRate=sr;recorded=frames;position=0;return juce::Result::ok();
     }
     juce::Result exportWav(const juce::File& file){
         const juce::ScopedLock guard(lock);if(playing)return juce::Result::fail("Stop transport first.");
@@ -82,6 +97,16 @@ public:
         writer.reset();return temp.overwriteTargetFileWithTemporary()?juce::Result::ok():juce::Result::fail("Could not finish WAV export.");
     }
 private:
+    static bool readText(juce::InputStream& input,juce::String& result,int limit){
+        if(input.getTotalLength()-input.getPosition()<4)return false;
+        const int bytes=input.readInt();if(bytes<0||bytes>limit||input.getTotalLength()-input.getPosition()<bytes)return false;
+        juce::MemoryBlock buffer((size_t)bytes+1,true);
+        if(input.read(buffer.getData(),bytes)!=bytes)return false;
+        const auto* data=static_cast<const char*>(buffer.getData());
+        if(std::memchr(data,0,(size_t)bytes)!=nullptr||!juce::CharPointer_UTF8::isValidString(data,bytes))return false;
+        result=juce::String::fromUTF8(data,bytes);return result.length()<=limit/4;
+    }
+    mutable juce::CriticalSection lyricsLock;Lyrics words;
     static void configureDrums(idw::StudioSynth& synth){idw::StudioSynth::Settings settings;settings.gain=1;settings.delay=0;synth.configure(settings);}
     static void trigger(idw::StudioSynth& synth,const idw::SongPattern& pattern,std::int64_t step){const int notes[]{36,38,42};for(int row=0;row<3;++row)if(pattern.rows[(size_t)row]&(1u<<(step%16)))synth.message(0x99,notes[row],100);}
     float readTrack(int ch,double time)const{

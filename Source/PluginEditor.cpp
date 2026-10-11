@@ -21,7 +21,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     theme.setColour(juce::ComboBox::backgroundColourId,card);
     theme.setColour(juce::ToggleButton::tickColourId,mint);
     setLookAndFeel(&theme);setResizable(true,true);setResizeLimits(1040,890,1600,1200);setSize(1120,900);
-    title.setText("IDW / VOICE MIDI STUDIO V11 PREVIEW",juce::dontSendNotification);title.setFont(juce::FontOptions(23.0f,juce::Font::bold));
+    title.setText("IDW / VOICE MIDI STUDIO V11.1 PREVIEW",juce::dontSendNotification);title.setFont(juce::FontOptions(23.0f,juce::Font::bold));
     readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));readout.setColour(juce::Label::textColourId,mint);
     traceLabel.setText("LIVE PITCH  /  7 SECONDS",juce::dontSendNotification);traceLabel.setColour(juce::Label::textColourId,muted);
     status.setText("Start with Preview sound, then sing or press Test note.",juce::dontSendNotification);
@@ -282,7 +282,7 @@ bool IDWVoiceMIDIStudioAudioProcessorEditor::audioRunning() const {
     return lastAudioChange>0 && juce::Time::getMillisecondCounterHiRes()-lastAudioChange<1000;
 }
 juce::String IDWVoiceMIDIStudioAudioProcessorEditor::diagnosticReport() const {
-    juce::String text="IDW Voice MIDI Studio 11.0.0 setup report\n";
+    juce::String text="IDW Voice MIDI Studio 11.1.0 setup report\n";
     text += "Audio callbacks active: "+juce::String(audioRunning()?"yes":"no")+"\n";
     text += "Sample rate: "+juce::String(p.deviceRate(),0)+" Hz; block: "+juce::String(p.deviceBlock())+" samples\n";
     text += "Input RMS: "+juce::String(juce::Decibels::gainToDecibels(p.level(),-100.0f),1)+" dBFS; peak: "+juce::String(p.peak(),4)+"\n";
@@ -312,11 +312,13 @@ Safe Tracking temporarily bypasses formant processing, audio harmony, doubler, r
 Store A/B captures the Vocal FX panel settings in memory for level-matched comparisons. Snapshots last until the plugin editor window is closed.
 User preset saves are atomic and keep one previous copy for recovery if the newest XML becomes unreadable.
 
-V11 SONG STUDIO PREVIEW
+V11.1 SONG STUDIO PREVIEW
 Song Studio beneath the title opens a 16-step kick/snare/hi-hat sequencer.
 Set BPM and Bars, then Play song or Record take. Use headphones: recording enables mic monitoring.
 Record starts immediately with no count-in and captures one processed vocal/instrument audio track.
 Stop preserves the take in memory. Save song writes a self-contained .idwsong file.
+Open Lyrics to write a title and lyrics, add section headings, or import/export UTF-8 TXT.
+Save song includes lyrics with your beat and take. Dictation still runs in Audio Lab.
 Song files are separate from plugin presets and DAW state. Save explicitly before closing IDW.
 Export mix WAV writes a 48 kHz / 24-bit stereo mix. Maximum duration is 180 seconds.
 Tempo edits do not stretch the recorded take. This preview has no multitrack editing or crash recovery.

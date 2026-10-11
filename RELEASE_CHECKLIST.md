@@ -31,3 +31,12 @@ V10.7 Custom Skin Designer release status (local candidate)
 - [ ] Automated editor render/bounds coverage produces V10 Performance, Studio, Instrument, Vocal FX and Connection Center previews (requires CI compile).
 - [ ] Real voice listening test for Natural/Tight/Hard presets and Pro Tools import alignment.
 - [ ] Human screenshot inspection and Windows display-scaling pass — automation catches empty/out-of-bounds controls, not poor visual hierarchy at every DPI.
+
+## V11.1 unified lyrics candidate
+
+- [x] Local JUCE-linked song tests: Unicode metadata, v1 migration, corrupt file preservation, lyrics-only projects and existing audio workflow.
+- [ ] Full Windows/macOS build and plugin validation for V11.1.
+- [ ] Minimum-size and all-skin visual checks of lyrics and beat views.
+- [ ] AudioBox USB 96 recording while editing lyrics; close/reopen a saved song.
+- [ ] Import/export TXT, cancel dialogs, invalid input and unwritable destination checks.
+- [ ] Confirm explicit-save messaging and v2 format compatibility instructions.
