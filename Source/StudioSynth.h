@@ -10,7 +10,7 @@ class StudioSynth {
 public:
     struct Settings { int lead=1,chord=3,bass=0; float gain=.55f,tone=.65f,attack=.008f,release=.25f,delay=.12f; bool mpe=false; };
     void prepare(double rate) { sr=std::max(8000.0,rate); delayLine.assign((size_t)(sr*.25),0); reset(); }
-    void reset() { voices={}; bends.fill(0); ranges.fill(2); rpnMSB.fill(127);rpnLSB.fill(127);sustain.fill(false); std::fill(delayLine.begin(),delayLine.end(),0); delayPos=0; }
+    void reset(bool resetNoise=false) { if(resetNoise)rng=1234567;voices={}; bends.fill(0); ranges.fill(2); rpnMSB.fill(127);rpnLSB.fill(127);sustain.fill(false); std::fill(delayLine.begin(),delayLine.end(),0); delayPos=0; }
     void configure(Settings s) { settings=s; filterAlpha=1.0-std::exp(-6.28318530718*(150+std::clamp(s.tone,0.f,1.f)*10000)/sr); }
     void message(int status,int a,int b) {
         const int ch=status&15,type=status&240;

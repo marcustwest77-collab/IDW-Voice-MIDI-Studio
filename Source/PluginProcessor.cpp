@@ -102,6 +102,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout IDWVoiceMIDIStudioAudioProce
 
 
 void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
+    dictation.audioStopped();
     songStudio.prepare(sr);
     retrospective.resetAudio();
     studioSynth.prepare(sr);incomingMidi.clear();synthWasEnabled=false;
@@ -116,7 +117,7 @@ void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
     displayedTuneCorrection.store(0);displayedTuneTarget.store(-1);lastTuneTarget=-1;tuneTransitionSamples=0;audioHarmonyRatioA=audioHarmonyRatioB=1;audioHarmonyVoices=0;harmonyGateOpen=false;formantWasEnabled=false;audioHarmonyWasEnabled=false;
     setLatencySamples(0); // Live tracking is causal; no artificial delay is added.
 }
-void IDWVoiceMIDIStudioAudioProcessor::releaseResources(){songStudio.stop();pitch.reset();capture.resetAudio();}
+void IDWVoiceMIDIStudioAudioProcessor::releaseResources(){dictation.audioStopped();songStudio.stop();pitch.reset();capture.resetAudio();}
 bool IDWVoiceMIDIStudioAudioProcessor::isBusesLayoutSupported(const BusesLayout& b) const{
     const auto i=b.getMainInputChannelSet(),o=b.getMainOutputChannelSet();
     return (i==juce::AudioChannelSet::mono()||i==juce::AudioChannelSet::stereo())
@@ -234,7 +235,7 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
     observedRate.store(sampleRateHz);observedBlock.store(count);
     float blockPeak=0;
     capture.beginBlock(sampleRateHz);
-    if(panicRequested.exchange(false)){songStudio.stop();allOff(out,0);inhibitSamples=(int)(sampleRateHz*0.300);}
+    if(panicRequested.exchange(false)){dictation.stop();songStudio.stop();allOff(out,0);inhibitSamples=(int)(sampleRateHz*0.300);}
     if(testRequested.exchange(false)){
         allOff(out,0);negotiateBend(out,0,1,(int)value("bend"));
         out.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)100),0);
@@ -276,6 +277,7 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
     const float tuneMix=value("vocalTuneMix"),tuneGain=juce::Decibels::decibelsToGain(value("vocalTuneOutput"));
     float tuneSmoothing=idw::smoothingCoefficient(sampleRateHz,value("vocalTuneSpeed"));
     const int inputMode=(int)value("inputMode"),inputs=juce::jmin(getTotalNumInputChannels(),channels);
+    dictation.push(inputs>0?buffer.getReadPointer(0):nullptr,inputs>1?buffer.getReadPointer(1):nullptr,count,inputMode,sampleRateHz);
     for(int i=0;i<count;++i){
         if(inhibitSamples>0)--inhibitSamples;
         if(testRemaining>0 && --testRemaining==0)out.addEvent(juce::MidiMessage::noteOff(1,60),i);

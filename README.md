@@ -1,6 +1,6 @@
 # IDW Voice MIDI Studio
 
-IDW Voice MIDI Studio V11.1 (local unified lyrics preview) is a clean-room voice-to-MIDI and vocal-performance application from In Da Wind Entertainment, paired with Audio Lab for offline vocal tuning, lyrics and take management.
+IDW Voice MIDI Studio V12.12 (local export-check preview) is a clean-room voice-to-MIDI and vocal-performance application from In Da Wind Entertainment, paired with Audio Lab for offline vocal tuning, lyrics and take management.
 
 The official IDW Entertainment crown, wings and microphone logo is embedded in the interface, standalone startup screen and platform packaging. Source and deployment variants are kept in `Resources/Brand`.
 
@@ -33,6 +33,22 @@ The official IDW Entertainment crown, wings and microphone logo is embedded in t
 - Optional LPC-based Formant Preserve (Beta) path for reducing chipmunk/boomy artifacts during larger correction moves
 - Scale-aware audio harmonies with upper-third, low/high-third, third/fifth and octave-stack voicings
 - V10.5 Clip Guard, confidence-gated harmonies, Eco/Studio/High CPU modes, Safe Tracking and temporary A/B Vocal FX snapshots
+- Build readiness: 31 direct C++ suites and 52 Python tests passed locally; full native builds remain blocked here. See [Windows build and validation status](docs/V12.12-BUILD-READINESS.md).
+- V12.12 adds a background full-song level check with track/mix peaks, silence detection and limiter-threshold timing. See [export checks](docs/V12.12-EXPORT-CHECK.md).
+- V12.11 adds live track meters, beat/mix peak holds, pre-limiter warnings and peak reset in Timeline. See [mix meters](docs/V12.11-MIX-METERS.md).
+- V12.10 adds background mix/stem export with progress, cancellation and a stable song snapshot. See [background export](docs/V12.10-BACKGROUND-EXPORT.md).
+- V12.9 adds five aligned track WAVs for DAW transfer, with current mix settings and tempo/import instructions. See [stem export](docs/V12.9-STEM-EXPORT.md).
+- V12.8 adds phrase selection: keep surrounding audio while choosing a replacement phrase, with shared sources and a single undo step. See [phrase selection](docs/V12.8-PHRASE-SELECTION.md).
+- V12.7 adds independent clip mute and take selection with undo, recovery, saved choices and matching WAV export. See [take selection](docs/V12.7-TAKE-SELECTION.md).
+- V12.6 adds Record cursor: record new clips into occupied armed tracks with count-in, preserved takes, clean capture and undo. See [recording clips](docs/V12.6-RECORD-CLIPS.md).
+- V12.5 adds 1x–32x timeline zoom, horizontal scrolling, Play cursor and protected playback seeking. See [zoom and seeking](docs/V12.5-ZOOM-SEEK.md).
+- V12.4 adds named bar-range markers and sample-clocked section playback/looping, with undo, persistence and recovery. See [sections and loops](docs/V12.4-SECTIONS-LOOP.md).
+- V12.3 adds per-clip fades, linear overlap crossfades and musical-grid snapping. Fade edits support undo, recovery and WAV export. See [fades and snapping](docs/V12.3-FADES-GRID.md).
+- V12.2 supports up to 64 clips on each of four audio tracks, independent WAV imports, nondestructive split/copy/move, track mixing, undo and embedded source sharing. See [the arrangement guide](docs/V12.2-CLIP-ARRANGEMENT.md).
+- V12 four audio lanes with embedded WAV import, waveform overview, clip placement/trim, gain/pan/mute/solo and bounded track-edit undo/redo. V12.1 adds explicit recording arm for any of the four lanes, overwrite protection and recording undo. Other lanes play without being baked into the take. See [recording setup](docs/V12.1-TRACK-ARMING.md). See [the V12 guide](docs/V12-FOUR-TRACK-STUDIO.md).
+- V11.4 recording count-in (Off/1/2 bars), adjustable metronome and bar/beat display. Clicks are excluded from the recorded track and WAV mix. See [the V11.4 guide](docs/V11.4-COUNT-IN.md).
+- V11.3 background recovery: lyric/dictation writing checkpoints, stopped-song checkpoints, previous-copy fallback and confirmed restore. In-progress audio is not recovered. See [the V11.3 guide](docs/V11.3-SONG-RECOVERY.md).
+- V11.2 native offline dictation: shared IDW microphone input, reviewable transcript and append-to-lyrics workflow. Requires a compatible Vosk runtime/model; see [the V11.2 guide](docs/V11.2-NATIVE-DICTATION.md).
 - V11.1 native lyrics editor: song title, section headings, UTF-8 text import/export and lyrics saved with the beat and take. See [the V11.1 guide](docs/V11.1-UNIFIED-LYRICS.md).
 - V11 Song Studio: native 16-step drum sequencer, one recorded audio track, self-contained song files and stereo WAV export (local preview; see docs/V11-SONG-STUDIO.md)
 - V10.7 Custom Skin Designer with five editable RGB colours and reusable named local skins

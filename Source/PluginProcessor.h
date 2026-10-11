@@ -19,6 +19,8 @@
 #include "ScaleAwareHarmony.h"
 #include "ReleaseSafety.h"
 #include "SongStudio.h"
+#include "NativeDictation.h"
+#include "SongRecovery.h"
 class IDWVoiceMIDIStudioAudioProcessor : public juce::AudioProcessor {
 public:
     IDWVoiceMIDIStudioAudioProcessor();
@@ -43,6 +45,8 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout layout();
     juce::AudioProcessorValueTreeState apvts;
     SongStudio songStudio;
+    NativeDictation dictation;
+    SongRecovery recovery{songStudio,dictation};
     PresetManager presets;
     MidiLearnManager learn;
     BeatboxClassifier beats;

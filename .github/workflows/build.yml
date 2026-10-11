@@ -2,7 +2,7 @@ name: Build, Validate and Package IDW Voice MIDI Studio
 
 on:
   push:
-    branches: [main, v9.2-guided-routing, v10-vocal-fx, v10.5-release-candidate, v10.6-skin-studio, v10.7-custom-skins, v11-song-studio, v11.1-unified-lyrics]
+    branches: [main, v9.2-guided-routing, v10-vocal-fx, v10.5-release-candidate, v10.6-skin-studio, v10.7-custom-skins, v11-song-studio, v11.1-unified-lyrics, v11.2-native-dictation, v11.3-song-recovery, v11.4-count-in, v12-four-track-studio, v12.1-track-arming, v12.2-clip-arrangement, v12.3-fades-grid, v12.4-sections-loop, v12.5-zoom-seek, v12.6-record-clips, v12.7-take-selection, v12.8-phrase-selection, v12.9-stem-export, v12.10-background-export, v12.11-mix-meters, v12.12-export-check, v12.12-build-readiness]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -39,18 +39,26 @@ jobs:
             ${{ runner.os }}-build-juce9.0.2-
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
 
       - name: Build
         run: cmake --build build --config Release --parallel 2
 
       - name: Run regression tests
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
 
       - name: Package and self-test Audio Lab on Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/package-audio-lab.ps1
+
+      - name: Validate native dictation with bundled speech assets
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $assets = (Resolve-Path 'audio-lab-dist/IDW-Audio-Lab/_internal').Path
+          & ./build/Release/IDWNativeSpeechSmoke.exe "$assets/vosk/libvosk.dll" "$assets/speech-model/vosk-model-small-en-us-0.15" "$PWD/speech-test.wav"
+          if ($LASTEXITCODE -ne 0) { throw 'Native dictation speech gate failed' }
 
       - name: Download pluginval on Windows
         if: runner.os == 'Windows'
@@ -108,7 +116,7 @@ jobs:
           Copy-Item -Recurse "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" "release/Windows/VST3/"
           Copy-Item "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.exe" "release/Windows/Standalone/"
           Copy-Item -Recurse "audio-lab-dist/IDW-Audio-Lab/*" "release/Windows/Audio-Lab/"
-          Copy-Item "docs/USER_MANUAL.md", "docs/PRO_TOOLS_SETUP.md", "docs/V10-UPGRADE.md", "docs/V10.1-UPGRADE.md", "docs/V10.2-UPGRADE.md", "docs/V10.3-UPGRADE.md", "docs/V10.4-UPGRADE.md", "docs/V10.5-UPGRADE.md", "docs/V10.6-UPGRADE.md", "docs/V10.7-UPGRADE.md", "docs/V11-SONG-STUDIO.md", "docs/V11.1-UNIFIED-LYRICS.md" "release/Documentation/"
+          Copy-Item "docs/USER_MANUAL.md", "docs/PRO_TOOLS_SETUP.md", "docs/V10-UPGRADE.md", "docs/V10.1-UPGRADE.md", "docs/V10.2-UPGRADE.md", "docs/V10.3-UPGRADE.md", "docs/V10.4-UPGRADE.md", "docs/V10.5-UPGRADE.md", "docs/V10.6-UPGRADE.md", "docs/V10.7-UPGRADE.md", "docs/V11-SONG-STUDIO.md", "docs/V11.1-UNIFIED-LYRICS.md", "docs/V11.2-NATIVE-DICTATION.md", "docs/V11.3-SONG-RECOVERY.md", "docs/V11.4-COUNT-IN.md", "docs/V12-FOUR-TRACK-STUDIO.md", "docs/V12.1-TRACK-ARMING.md", "docs/V12.2-CLIP-ARRANGEMENT.md", "docs/V12.3-FADES-GRID.md", "docs/V12.4-SECTIONS-LOOP.md", "docs/V12.5-ZOOM-SEEK.md", "docs/V12.6-RECORD-CLIPS.md", "docs/V12.7-TAKE-SELECTION.md", "docs/V12.8-PHRASE-SELECTION.md", "docs/V12.9-STEM-EXPORT.md", "docs/V12.10-BACKGROUND-EXPORT.md", "docs/V12.11-MIX-METERS.md", "docs/V12.12-EXPORT-CHECK.md", "docs/V12.12-BUILD-READINESS.md" "release/Documentation/"
           Copy-Item "START-HERE.html", "START-HERE.txt" "release/"
           Copy-Item "IDW-V10-Take-Editor.png" "release/Documentation/" -ErrorAction SilentlyContinue
 
@@ -133,7 +141,7 @@ jobs:
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3" release/macOS/VST3/
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/AU/IDW Voice MIDI Studio.component" release/macOS/AU/
           cp -R "build/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.app" release/macOS/Standalone/
-          cp docs/USER_MANUAL.md docs/PRO_TOOLS_SETUP.md docs/V10-UPGRADE.md docs/V10.1-UPGRADE.md docs/V10.2-UPGRADE.md docs/V10.3-UPGRADE.md docs/V10.4-UPGRADE.md docs/V10.5-UPGRADE.md docs/V10.6-UPGRADE.md docs/V10.7-UPGRADE.md docs/V11-SONG-STUDIO.md docs/V11.1-UNIFIED-LYRICS.md release/Documentation/
+          cp docs/USER_MANUAL.md docs/PRO_TOOLS_SETUP.md docs/V10-UPGRADE.md docs/V10.1-UPGRADE.md docs/V10.2-UPGRADE.md docs/V10.3-UPGRADE.md docs/V10.4-UPGRADE.md docs/V10.5-UPGRADE.md docs/V10.6-UPGRADE.md docs/V10.7-UPGRADE.md docs/V11-SONG-STUDIO.md docs/V11.1-UNIFIED-LYRICS.md docs/V11.2-NATIVE-DICTATION.md docs/V11.3-SONG-RECOVERY.md docs/V11.4-COUNT-IN.md docs/V12-FOUR-TRACK-STUDIO.md docs/V12.1-TRACK-ARMING.md docs/V12.2-CLIP-ARRANGEMENT.md docs/V12.3-FADES-GRID.md docs/V12.4-SECTIONS-LOOP.md docs/V12.5-ZOOM-SEEK.md docs/V12.6-RECORD-CLIPS.md docs/V12.7-TAKE-SELECTION.md docs/V12.8-PHRASE-SELECTION.md docs/V12.9-STEM-EXPORT.md docs/V12.10-BACKGROUND-EXPORT.md docs/V12.11-MIX-METERS.md docs/V12.12-EXPORT-CHECK.md docs/V12.12-BUILD-READINESS.md release/Documentation/
 
       - name: Build macOS installer package and DMG
         if: runner.os == 'macOS'

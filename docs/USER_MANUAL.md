@@ -210,3 +210,77 @@ Open **Song Studio** beneath the title to sequence kick/snare/hi-hat, record one
 ### V11.1 lyrics in Song Studio
 
 Open **Song Studio > Lyrics** to write a song title and lyrics. Section buttons insert headings at the cursor. **Import TXT** appends a UTF-8 draft from Audio Lab; **Export TXT** exports the lyric body. **Save song** stores the title and lyrics together with the beat and recorded take. Editing works during playback, but stop transport before saving. There is no autosave. Native dictation/shared microphone capture is a later milestone. See [V11.1 guide](V11.1-UNIFIED-LYRICS.md) for compatibility and tests.
+
+### V11.2 native dictation preview
+
+Open **Song Studio > Dictation**. Select your input channel on the main screen first. With compatible local speech assets installed, choose **Start dictation**, wait for **MIC ON**, and speak. **Stop dictation** finishes the last phrase. Review the draft, choose **Append to lyrics**, then stop song transport and **Save song**. Dictation uses the same raw input stream as IDW without opening another microphone device. It does not enable audible monitoring. Closing Song Studio or pressing PANIC stops dictation; the draft is only temporary until appended and saved. See [V11.2 setup and limits](V11.2-NATIVE-DICTATION.md).
+
+### V11.3 song recovery preview
+
+Writing (title, lyrics and completed dictation draft phrases) is checkpointed approximately every 10 seconds. Beat settings and completed takes are checkpointed approximately every 30 seconds while song transport is stopped. **Song Studio > Recover…** lists available checkpoints. Restore the song first, then restore writing from the same entry if it is newer. Both actions require confirmation; invalid newest copies fall back to the previous copy. In-progress audio and changes since the last successful checkpoint are not protected. **Save song** remains the permanent project save. See [recovery guide](V11.3-SONG-RECOVERY.md) for storage, retention and tests.
+
+### V11.4 count-in and metronome
+
+Before recording in Song Studio, choose **Count-in: Off**, **1 bar** or **2 bars**. Press **Record take**, wait for the count, then perform at bar 1. The countdown does not consume song length or enter the recorded track. **Metronome** enables clicks during recording/playback; the count-in clicks regardless of this switch. **Click level** sets the level of both. Use headphones: software excludes clicks from recording/export, but speaker bleed can still reach your microphone. Playback starts immediately. These are per-instance session settings, not stored in song files or presets. See [V11.4 guide](V11.4-COUNT-IN.md).
+
+### V12.12 full-song export check preview
+
+Stop transport, then choose **Export audio > Check full-song levels**. The background scan shows progress and supports **Cancel check**. Its report gives track/drum/mix sample peaks before limiting, detects an exactly silent mix, and shows the first limiter-threshold crossing plus the percentage of affected stereo frames. Metronome and live input are excluded. Current mute/solo, gain, pan and clip choices apply. The report describes a snapshot; scan again after edits. It does not change levels or certify loudness compliance. See [export-check guide](V12.12-EXPORT-CHECK.md).
+
+### V12.11 mix meters preview
+
+Timeline shows each track's peak in dBFS and a moving level bar where row height permits. Header readings hold the highest Beat and Mix peaks. Click **Reset peaks**, then play the part you want to check. Track readings include gain/pan, clip mute, solo and the track master level; recording includes monitored input. Mix is measured before the safety limiter and includes metronome/count-in cues. **LIMIT** appears after the mix exceeds the limiter knee (0.94 linear, about −0.54 dBFS). It stays until reset. Turn off the metronome when checking music-only levels. See [mix-meter guide](V12.11-MIX-METERS.md).
+
+### V12.10 background export preview
+
+Stop transport to begin either **Export audio** mode. A snapshot renders on a worker thread while you continue editing or playing. Song Studio shows percentage progress; **Cancel export** requests cancellation and partial-file cleanup. Only one export runs per Song Studio panel. Later edits are excluded from the current export. Closing/destroying the panel cancels and joins its worker; wait for completion before closing if you want to keep the export. See [background export guide](V12.10-BACKGROUND-EXPORT.md).
+
+### V12.9 separate-track export preview
+
+Stop transport and choose **Export audio > Export separate track WAVs**. Select a parent folder; IDW creates a new uniquely named folder containing five aligned 48 kHz / 24-bit stereo WAVs plus tempo/import notes. Files represent Lead, Backing, Double, Ad-lib and Drum pattern. All start at song time zero and last the full song. Current mute/solo, clip choices, fades, gain and pan are printed, so some files may be silent. Import together at the same DAW position with automatic stretching disabled. In V12.10, begin export while stopped; rendering then runs in the background. See [stem export guide](V12.9-STEM-EXPORT.md).
+
+### V12.8 phrase selection preview
+
+Stop, select a replacement clip and Apply its Start/Trim settings for the desired phrase. **Take options > Use this phrase (keep surrounding audio)** splits competing audible clips at the phrase boundaries and mutes only their overlapping pieces. Outside pieces keep their audio and outer fades. One Undo edit restores the entire operation. Already-muted clips stay muted. Cuts inside fades, sub-sample pieces and edits exceeding 64 clips are rejected without partial changes. No automatic boundary crossfade is added; audition the joins. See [phrase-selection guide](V12.8-PHRASE-SELECTION.md).
+
+### V12.7 clip mute and take selection preview
+
+Stop playback, open Timeline and select a take from the Clip menu. **Clip mute** immediately silences that clip without changing track mute/solo. **Take options > Use this take** enables it and mutes whole directly overlapping clips on the same track. Non-overlapping clips and other tracks keep their settings. **Unmute this take and overlapping clips** restores their combined playback. Press Play cursor to compare; stop before choosing again. Undo edit restores the previous choice. Save song preserves mute states; WAV export respects them.
+
+Muting affects entire clips, including portions outside the chosen take. Split/trim first for phrase-level choices; this is not automatic comping. New recordings start unmuted. Muted clips show “M” in Timeline and “muted” in the Clip menu. Projects containing clip mute require V12.7 or newer. See [take-selection guide](V12.7-TAKE-SELECTION.md).
+
+### V12.6 recording new clips preview
+
+**Song Studio > Timeline > Record cursor** adds a new clip to the **armed track**, even when it already contains audio. Set the edit cursor (Snap applies), arm the intended track explicitly, and press Record cursor. After the chosen count-in, recording starts there and continues until Stop or song end. Existing clips stay intact and play alongside the performance; their playback is excluded from captured audio. Use headphones to prevent microphone bleed.
+
+The button shows the armed lane number. Selecting a waveform alone does not arm it. Cancelling during count-in adds no clip. Recording supports Undo/Redo and Save song. Overlapping clips play together; this is not punch replacement, take comping or loop recording. Main Record still starts at bar 1 and requires an empty track. See [V12.6 recording guide](V12.6-RECORD-CLIPS.md).
+
+### V12.5 timeline zoom and seeking preview
+
+In **Song Studio > Timeline**, place the edit cursor near a phrase and use **Zoom + / Zoom −** (1×–32×). **View / s** scrolls the visible window; **Fit song** restores the full song. These are editor-only view settings. Waveforms, fade ramps, section markers and grid lines follow the visible time range; clips retain their positions.
+
+While stopped, **Play cursor** starts at the snapped edit cursor and plays to song end. During playback, **Seek cursor** jumps to it. Normal song playback can seek throughout the song; section playback remains inside that section, including while looping. Seeking is rejected during recording/count-in or outside the active range. Clicking a waveform still only selects a clip and edit cursor. Stop and use Play cursor to leave a section. See [V12.5 guide](V12.5-ZOOM-SEEK.md).
+
+### V12.4 sections and loop playback preview
+
+**Song Studio > Sections** stores up to 32 named sections. Enter a name, First bar and Last bar (included), then **Add section**. Select a marker to Update or Remove it. **Play section** plays the range once; **Loop section** repeats until Stop. The normal **Play song** button still starts the whole song at bar 1. Section starts are marked in Timeline; the Sections menu shows exact names/ranges.
+
+Markers use bars in 4/4 and follow tempo changes. Audio clips remain at their existing times. If you shorten Song Bars so a marker no longer fits, it is kept but cannot play until Song Bars includes it again. Edits require stopped transport and support Undo. Looping is playback-only: recording still starts at bar 1 with existing overwrite protection. WAV export always renders the full song once. Section markers are saved/recovered in format 6, requiring V12.4. See [V12.4 guide](V12.4-SECTIONS-LOOP.md).
+
+### V12.3 fades and beat snapping preview
+
+In **Song Studio > Timeline**, select a clip, set **Fade in / s** and **Fade out / s**, then **Apply clip / mix**. Fades are nondestructive, linear and included in playback and mix export. Their combined duration must fit the trimmed clip. Aqua ramps show fade lengths. Splits inside fades are rejected; splitting the unfaded middle preserves the original outer fades.
+
+**Crossfade next** creates matching linear fade-out/fade-in across the overlap with the next clip by start time on this track. It does not move clips. The next clip must overlap and extend at least to the selected clip's end. The edit supports Undo. Moving either clip later does not automatically recalculate that crossfade.
+
+Choose **Snap: Bar / Beat / 1/2 beat / 1/4 beat** to align the edit cursor, split/copy/move/import positions and applied Start values. Source trims and fade lengths remain in seconds. Snapping is off by default and is an editor-session setting. It does not change audio speed or existing clip positions on tempo changes. Songs containing fades use format 5, requiring V12.3; older formats still open. See [V12.3 guide](V12.3-FADES-GRID.md).
+
+### V12.2 multi-clip arrangement preview
+
+**Song Studio > Timeline** supports up to 64 clips per track. **Add WAV clip…** adds a separate source at the edit cursor without replacing existing clips. Select by clicking a clip or using the clip menu. Set **Edit cursor / s**, then use **Split at cursor**, **Copy to cursor** or **Move to cursor**. Split keeps the original source intact; overlaps play together. **Start / s** and Trim controls edit the selected clip; Gain/Pan/Mute/Solo affect the whole track. Click **Apply clip / mix** to commit those controls. **Remove clip…** removes only the selected clip; **Clear armed track** in Beat controls removes all clips on the armed track after confirmation. Track edits support undo/redo within the memory budget.
+
+Armed recording still requires an empty track and starts at bar 1. Multi-clip projects use format 4 and require V12.2; formats 1–3 still load. Save under a new filename before using multi-clip editing on an older song. See [V12.2 guide](V12.2-CLIP-ARRANGEMENT.md) for workflow, compatibility and testing. This is a local source candidate, pending native packaging and hardware validation.
+
+### V12 four-track studio preview
+
+**Song Studio > Timeline** opens four audio lanes: Lead vocal, Beat/backing, Double and Ad-lib. In V12/V12.1, each lane holds one clip. Select a lane and **Import WAV…**, adjust Start/Trim in/Trim out/Gain/Pan/Mute/Solo, then **Apply track edit**. All edits require stopped transport. **Undo track edit** and **Redo track edit** retain up to eight recent edits within the audio-memory budget. In V12.1, select a lane and click **Arm selected lane**. The Record button shows the armed lane number; recording captures only the processed input into that lane while other lanes play. Existing clips cannot be overwritten: save first, then remove the clip explicitly or arm an empty lane. Arming is locked during transport and resets to Lead when opening a song. See [V12.1 recording guide](V12.1-TRACK-ARMING.md). Set Bars long enough for your clips. Save song embeds all source audio. Arrangements use format 3, which older versions cannot open. See [V12 guide](V12-FOUR-TRACK-STUDIO.md) for compatibility, memory limits and tests.

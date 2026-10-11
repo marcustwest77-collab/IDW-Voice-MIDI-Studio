@@ -1,0 +1,61 @@
+test_clipping (test_companion.AudioTests.test_clipping) ... ok
+test_explicit_upload (test_companion.AudioTests.test_explicit_upload) ... ok
+test_http_error (test_companion.AudioTests.test_http_error) ... ok
+test_inspection (test_companion.AudioTests.test_inspection) ... ok
+test_invalid_file (test_companion.AudioTests.test_invalid_file) ... ok
+test_job_path (test_companion.AudioTests.test_job_path) ... ok
+test_no_redirect (test_companion.AudioTests.test_no_redirect) ... ok
+test_settings_validate_before_model (test_companion.AudioTests.test_settings_validate_before_model) ... ok
+test_silence (test_companion.AudioTests.test_silence) ... ok
+test_transcription_export_contract (test_companion.AudioTests.test_transcription_export_contract) ... ok
+test_duplicate_suppresses_route (test_companion.RouterTests.test_duplicate_suppresses_route) ... ok
+test_layers (test_companion.RouterTests.test_layers) ... ok
+test_panic_and_other_channel (test_companion.RouterTests.test_panic_and_other_channel) ... ok
+test_refresh_preserves_notes_when_mapping_unchanged (test_companion.RouterTests.test_refresh_preserves_notes_when_mapping_unchanged) ... ok
+test_input_two_ignores_input_one (test_dictation_diagnostics.MicrophoneTests.test_input_two_ignores_input_one) ... ok
+test_invalid_frame_and_channel (test_dictation_diagnostics.MicrophoneTests.test_invalid_frame_and_channel) ... ok
+test_silence_and_clipping (test_dictation_diagnostics.MicrophoneTests.test_silence_and_clipping) ... ok
+test_counts_ignore_blank_lines_and_headers (test_lyric_commands.CommandsTests.test_counts_ignore_blank_lines_and_headers) ... ok
+test_disabled_is_literal (test_lyric_commands.CommandsTests.test_disabled_is_literal) ... ok
+test_empty_and_header_are_not_punctuated (test_lyric_commands.CommandsTests.test_empty_and_header_are_not_punctuated) ... ok
+test_exact_phrases_only (test_lyric_commands.CommandsTests.test_exact_phrases_only) ... ok
+test_paragraph_and_section_boundaries (test_lyric_commands.CommandsTests.test_paragraph_and_section_boundaries) ... ok
+test_phrase_layout_and_typed_tail (test_lyric_commands.CommandsTests.test_phrase_layout_and_typed_tail) ... ok
+test_punctuation_attaches_to_last_line (test_lyric_commands.CommandsTests.test_punctuation_attaches_to_last_line) ... ok
+test_checkpoint_failure_keeps_song (test_lyric_files.LyricFilesTests.test_checkpoint_failure_keeps_song) ... ok
+test_checkpoint_labels_do_not_become_paths (test_lyric_files.LyricFilesTests.test_checkpoint_labels_do_not_become_paths) ... ok
+test_checkpoint_limit_no_pruning_and_corrupt_skip (test_lyric_files.LyricFilesTests.test_checkpoint_limit_no_pruning_and_corrupt_skip) ... ok
+test_checkpoint_survives_rolling_history (test_lyric_files.LyricFilesTests.test_checkpoint_survives_rolling_history) ... ok
+test_import_encodings_and_source_unchanged (test_lyric_files.LyricFilesTests.test_import_encodings_and_source_unchanged) ... ok
+test_import_rejects_binary_encoding_and_size (test_lyric_files.LyricFilesTests.test_import_rejects_binary_encoding_and_size) ... ok
+test_bad_identifier (test_lyrics_store.LyricsTests.test_bad_identifier) ... ok
+test_conflict_keeps_both_current_and_file (test_lyrics_store.LyricsTests.test_conflict_keeps_both_current_and_file) ... ok
+test_export_never_overwrites (test_lyrics_store.LyricsTests.test_export_never_overwrites) ... ok
+test_failed_atomic_write_keeps_draft (test_lyrics_store.LyricsTests.test_failed_atomic_write_keeps_draft) ... ok
+test_history_failure_preserves_current (test_lyrics_store.LyricsTests.test_history_failure_preserves_current) ... ok
+test_history_retains_twenty_and_current (test_lyrics_store.LyricsTests.test_history_retains_twenty_and_current) ... ok
+test_lock_and_invalid_input (test_lyrics_store.LyricsTests.test_lock_and_invalid_input) ... ok
+test_previous_save (test_lyrics_store.LyricsTests.test_previous_save) ... ok
+test_save_reopen_unicode (test_lyrics_store.LyricsTests.test_save_reopen_unicode) ... ok
+test_v64_previous_fallback_and_corrupt_history (test_lyrics_store.LyricsTests.test_v64_previous_fallback_and_corrupt_history) ... ok
+test_delete_and_history_limit (test_take_editor.TakeTests.test_delete_and_history_limit) ... ok
+test_edit_and_undo_redo (test_take_editor.TakeTests.test_edit_and_undo_redo) ... ok
+test_invalid_and_overlapping_edits_preserve_take (test_take_editor.TakeTests.test_invalid_and_overlapping_edits_preserve_take) ... ok
+test_invalid_grid (test_take_editor.TakeTests.test_invalid_grid) ... ok
+test_out_of_range_is_atomic (test_take_editor.TakeTests.test_out_of_range_is_atomic) ... ok
+test_snap_preserves_lengths (test_take_editor.TakeTests.test_snap_preserves_lengths) ... ok
+test_transpose_skips_drums_and_scopes_tracks (test_take_editor.TakeTests.test_transpose_skips_drums_and_scopes_tracks) ... ok
+test_amount_and_humanize (test_vocal_tune.VocalTuneTests.test_amount_and_humanize) ... ok
+test_chromatic_and_tie (test_vocal_tune.VocalTuneTests.test_chromatic_and_tie) ... ok
+test_continuous_vocal_does_not_define_an_unbounded_gate (test_vocal_tune.VocalTuneTests.test_continuous_vocal_does_not_define_an_unbounded_gate) ... ok
+test_settings_reject_nonfinite_and_ranges (test_vocal_tune.VocalTuneTests.test_settings_reject_nonfinite_and_ranges) ... ok
+test_song_scale (test_vocal_tune.VocalTuneTests.test_song_scale) ... ok
+
+----------------------------------------------------------------------
+Ran 52 tests in 0.098s
+
+OK
+IDW routes: IDW Lead, IDW Chords, IDW Bass, IDW Drums
+IDW routes: IDW Lead, IDW Chords, IDW Bass, IDW Drums
+IDW routes: IDW Lead, IDW Chords, IDW Bass, IDW Drums
+IDW routes: IDW Lead, IDW Chords, IDW Bass, IDW Drums

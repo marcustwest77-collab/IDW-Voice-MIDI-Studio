@@ -5,8 +5,8 @@
 class IDWStandaloneApp final : public juce::JUCEApplication {
 public:
     IDWStandaloneApp(){juce::PropertiesFile::Options options;options.applicationName="IDW Voice MIDI Studio V4";options.filenameSuffix=".settings";options.osxLibrarySubFolder="Application Support";settings.setStorageParameters(options);}
-    const juce::String getApplicationName() override{return "IDW Voice MIDI Studio V11.1 Preview";}
-    const juce::String getApplicationVersion() override{return "11.1.0";}
+    const juce::String getApplicationName() override{return "IDW Voice MIDI Studio V12.12 Preview";}
+    const juce::String getApplicationVersion() override{return "12.12.0";}
     bool moreThanOneInstanceAllowed() override{return false;}
     void anotherInstanceStarted(const juce::String&) override{if(window)window->toFront(true);}
     void initialise(const juce::String&) override{

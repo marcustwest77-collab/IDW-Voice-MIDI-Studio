@@ -21,7 +21,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     theme.setColour(juce::ComboBox::backgroundColourId,card);
     theme.setColour(juce::ToggleButton::tickColourId,mint);
     setLookAndFeel(&theme);setResizable(true,true);setResizeLimits(1040,890,1600,1200);setSize(1120,900);
-    title.setText("IDW / VOICE MIDI STUDIO V11.1 PREVIEW",juce::dontSendNotification);title.setFont(juce::FontOptions(23.0f,juce::Font::bold));
+    title.setText("IDW / VOICE MIDI STUDIO V12.12 PREVIEW",juce::dontSendNotification);title.setFont(juce::FontOptions(23.0f,juce::Font::bold));
     readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));readout.setColour(juce::Label::textColourId,mint);
     traceLabel.setText("LIVE PITCH  /  7 SECONDS",juce::dontSendNotification);traceLabel.setColour(juce::Label::textColourId,muted);
     status.setText("Start with Preview sound, then sing or press Test note.",juce::dontSendNotification);
@@ -99,7 +99,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     connectionPanel=std::make_unique<ConnectionPanel>([this]{connectionVisible=false;resized();},[this]{showHelp(true);},[this]{p.requestTestNote();},[this](bool local){p.requestPanic();setValue("synthEnabled",local?1.0f:0.0f);setValue("previewAudio",0);setValue("monitorMic",0);},[this]{juce::SystemClipboard::copyTextToClipboard(diagnosticReport());});
     addChildComponent(*connectionPanel);
     addAndMakeVisible(songButton);
-    songPanel=std::make_unique<SongStudioPanel>(p.songStudio,[this]{songVisible=false;resized();},[this]{setValue("monitorMic",1);});
+    songPanel=std::make_unique<SongStudioPanel>(p.songStudio,p.dictation,p.recovery,[this]{return p.deviceRate();},[this]{songVisible=false;resized();},[this]{setValue("monitorMic",1);});
     addChildComponent(*songPanel);
     songButton.onClick=[this]{songVisible=!songVisible;designerVisible=false;resized();};
     addAndMakeVisible(designSkin);
@@ -282,7 +282,7 @@ bool IDWVoiceMIDIStudioAudioProcessorEditor::audioRunning() const {
     return lastAudioChange>0 && juce::Time::getMillisecondCounterHiRes()-lastAudioChange<1000;
 }
 juce::String IDWVoiceMIDIStudioAudioProcessorEditor::diagnosticReport() const {
-    juce::String text="IDW Voice MIDI Studio 11.1.0 setup report\n";
+    juce::String text="IDW Voice MIDI Studio 12.12.0 setup report\n";
     text += "Audio callbacks active: "+juce::String(audioRunning()?"yes":"no")+"\n";
     text += "Sample rate: "+juce::String(p.deviceRate(),0)+" Hz; block: "+juce::String(p.deviceBlock())+" samples\n";
     text += "Input RMS: "+juce::String(juce::Decibels::gainToDecibels(p.level(),-100.0f),1)+" dBFS; peak: "+juce::String(p.peak(),4)+"\n";
@@ -312,16 +312,34 @@ Safe Tracking temporarily bypasses formant processing, audio harmony, doubler, r
 Store A/B captures the Vocal FX panel settings in memory for level-matched comparisons. Snapshots last until the plugin editor window is closed.
 User preset saves are atomic and keep one previous copy for recovery if the newest XML becomes unreadable.
 
-V11.1 SONG STUDIO PREVIEW
+V12.12 SONG STUDIO PREVIEW
 Song Studio beneath the title opens a 16-step kick/snare/hi-hat sequencer.
 Set BPM and Bars, then Play song or Record take. Use headphones: recording enables mic monitoring.
-Record starts immediately with no count-in and captures one processed vocal/instrument audio track.
+Choose Count-in Off, 1 bar or 2 bars before Record take. Recording begins at bar 1 after the count.
+Metronome and Click level control your headphone cue; clicks are not stored in the take or WAV.
+Count-in and click settings last for this instance only. Recording captures one processed vocal/instrument track.
 Stop preserves the take in memory. Save song writes a self-contained .idwsong file.
 Open Lyrics to write a title and lyrics, add section headings, or import/export UTF-8 TXT.
-Save song includes lyrics with your beat and take. Dictation still runs in Audio Lab.
+Save song includes lyrics with your beat and take. Dictation opens local speech recognition from IDW input. Stop, review and Append to lyrics, then Save song.
 Song files are separate from plugin presets and DAW state. Save explicitly before closing IDW.
-Export mix WAV writes a 48 kHz / 24-bit stereo mix. Maximum duration is 180 seconds.
-Tempo edits do not stretch the recorded take. This preview has no multitrack editing or crash recovery.
+Export audio offers a full mix WAV or five separate track WAVs. Both export modes run in the background from a stopped-song snapshot. Progress appears in Song Studio; Cancel export stops the job and cleans up partial output. Later edits affect only the next export. Separate tracks share song-start alignment and full duration, respect current mute/solo and mix settings, and include tempo/import instructions in a new folder. Maximum duration is 180 seconds.
+Export audio > Check full-song levels scans a snapshot without writing WAVs. It reports track/mix sample peaks, silence and limiter-threshold crossings, excluding cues and live input. Cancel check stops the scan. Repeat after edits.
+Timeline shows track peak meters and held Beat/Mix readings before the output limiter. Reset peaks clears the holds. LIMIT means the mix exceeded the limiter knee; lower levels and replay. These are sample peaks, not LUFS or true peaks.
+Timeline opens four audio tracks: lead, backing, double and ad-lib. Add WAV clip adds at the edit cursor. Select a clip, adjust timing/track mix, then Apply clip / mix.
+Up to 64 clips per track; Split at cursor, Copy to cursor and Move to cursor are nondestructive and support undo/redo. Unmuted overlaps are summed. Select a lane and Arm selected lane to change the Record destination. The main Record button requires an empty armed track. Timeline Record cursor adds a new clip on the armed track without replacing existing clips. Remove clips explicitly or arm an empty track. Other lanes play without being captured.
+Clip mute affects only the selected clip. While stopped, Take options > Use this take unmutes it and mutes entire directly overlapping clips on its track. Undo restores the choice. Save song preserves mute states; these files require V12.7 or newer.
+Take options > Use this phrase uses the selected trimmed clip, splits audible competing clips at its boundaries, and mutes only the competing pieces. Surrounding audio stays intact. Stop first; cuts within fades and edits exceeding 64 clips are rejected. Undo restores the whole edit.
+Fade in/out (seconds) apply to the selected clip. Crossfade next blends the overlap with the next clip by start time.
+Snap Off/Bar/Beat/half/quarter beat aligns the edit cursor and Start; it does not change source trims or stretch audio.
+Tempo edits do not stretch audio. Increase Bars to include longer clips; audio beyond song end is cut off.
+Timeline Zoom +/- centers on the edit cursor (up to 32x). View / s scrolls horizontally; Fit song shows the whole song.
+Play cursor starts at the edit cursor. Seek cursor jumps during playback inside its current song/section range; recording cannot seek.
+Sections lets you name bar ranges and Play section once or Loop section until Stop. Markers follow BPM; audio does not stretch.
+Sections are playback-only; main Record starts at bar 1, Timeline Record cursor starts at the cursor and WAV export renders the full song once.
+Songs with section markers use format 6 and require V12.4. Songs without markers retain earlier formats where possible. Save a new copy to retain an older-version project.
+Recovery checkpoints writing every 10 seconds and stopped songs every 30 seconds on a disk worker.
+Recover opens current/previous checkpoints. Restore song first, then newer writing if needed.
+In-progress recording is not checkpointed. Save song is still your permanent project save.
 
 V10.7 CUSTOM SKIN DESIGNER
 Design skin opens five RGB hex colour fields. Apply colours previews them.

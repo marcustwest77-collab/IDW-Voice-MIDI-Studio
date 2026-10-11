@@ -1,0 +1,157 @@
+[
+  {
+    "test": "SkinThemeTests",
+    "status": "passed",
+    "output": "PASS V10.6 six-skin palette and bounds\n"
+  },
+  {
+    "test": "NativeDictationTests",
+    "status": "passed",
+    "output": "PASS native speech runtime contract, PCM feed, final phrase, cancellation and device change (fake recognizer, not speech accuracy)\n"
+  },
+  {
+    "test": "AutoKeyTests",
+    "status": "passed",
+    "output": "PASS V10.2 Auto-Key major / minor / minimum evidence / state\n"
+  },
+  {
+    "test": "SongMeterTests",
+    "status": "passed",
+    "output": "PASS track/master meter gain, pan, mute/solo, interval reset, offline isolation, mono recording, count-in cues and pre-limiter overload\n"
+  },
+  {
+    "test": "RollingMidiTests",
+    "status": "passed",
+    "output": "PASS rolling MIDI timing / 30-second boundary / held notes / sustain / bend-range context / Panic / capacity / reset / invalid time\n"
+  },
+  {
+    "test": "SongExportJobTests",
+    "status": "passed",
+    "output": "PASS background mix/stems, immutable snapshot, progress, cancellation before/during render, original-file protection, staging cleanup, worker failure and joined shutdown\n"
+  },
+  {
+    "test": "DictationAudioQueueTests",
+    "status": "passed",
+    "output": "PASS dictation PCM selection, clipping, overflow, wraparound and concurrent ordering\n"
+  },
+  {
+    "test": "DawGuidesTests",
+    "status": "passed",
+    "output": "PASS: eight guided DAW routes including Pro Tools Intro / AudioBox USB 96\n"
+  },
+  {
+    "test": "SongOverdubTests",
+    "status": "passed",
+    "output": "PASS all-lane append recording, count-in cancellation, old take/snapshot preservation, same-track monitoring, clean stereo/mono capture, placement, undo, persistence, song-end and clip-limit protection\n"
+  },
+  {
+    "test": "VocalEffectsTests",
+    "status": "passed",
+    "output": "PASS V10.3 vocal rack bypass / stability / stereo / dry mix / tempo delay / level match\n"
+  },
+  {
+    "test": "VocalTunerTests",
+    "status": "passed",
+    "output": "PASS V10 tuning decisions / scale quantization / humanize / bypass / audio octave shift\n"
+  },
+  {
+    "test": "SongTakeTests",
+    "status": "passed",
+    "output": "PASS take selection on all tracks, whole-clip mute, boundaries, mixer, source preservation, undo/recovery, format7 validation, export parity and new recordings\n"
+  },
+  {
+    "test": "HarmonyTests",
+    "status": "passed",
+    "output": "PASS: chord examples, disabled/invalid input and 6144 harmony range/scale cases\n"
+  },
+  {
+    "test": "SongSeekTests",
+    "status": "passed",
+    "output": "PASS zoom/scroll coordinates, bounds, fit, cursor playback, backward seek, invalid seek, end stop, loop/one-shot bounds, recording/count-in protection and rhythm reset\n"
+  },
+  {
+    "test": "StudioSynthTests",
+    "status": "passed",
+    "output": "PASS five patches / three sample rates / polyphony / channel isolation / sustain / voice stealing / Panic / four drums\n"
+  },
+  {
+    "test": "CustomSkinTests",
+    "status": "passed",
+    "output": "PASS custom skin hex validation / mapping / built-in preservation\n"
+  },
+  {
+    "test": "SongRecoveryTests",
+    "status": "passed",
+    "output": "PASS recovery: writing during recording, stopped take, audio round trip, previous-copy fallback, corrupt data preservation, separate documents/instances, disk failure and background/close checkpoint\n"
+  },
+  {
+    "test": "ReleaseSafetyTests",
+    "status": "passed",
+    "output": "PASS V10.5 Clip Guard / harmony confidence gate / CPU quality plans\n"
+  },
+  {
+    "test": "SongSectionTests",
+    "status": "passed",
+    "output": "PASS section one-shot/loop sample boundaries, fractional tempo, transport lock, undo, format6, corrupt load, recovery, full export, BPM changes and recording isolation\n"
+  },
+  {
+    "test": "AdaptiveTuneTests",
+    "status": "passed",
+    "output": "PASS V10.3 adaptive transitions / vibrato preserve / smoothing\n"
+  },
+  {
+    "test": "SongFadeTests",
+    "status": "passed",
+    "output": "PASS fades, split continuity, crossfade gain, undo, format5, corrupt-load preservation, export/recovery and musical grid\n"
+  },
+  {
+    "test": "SetupDiagnosticsTests",
+    "status": "passed",
+    "output": "PASS: ten setup diagnostic scenarios\n"
+  },
+  {
+    "test": "SongClipTests",
+    "status": "passed",
+    "output": "PASS multi-clip split continuity, source sharing, placement, track mixer, overlaps, independent imports, format4, malformed references, export parity, undo/recovery, armed capture, bounds and legacy migration\n"
+  },
+  {
+    "test": "SongArrangementTests",
+    "status": "passed",
+    "output": "PASS all-lane arming, capture isolation, mono input, overwrite/transport protection, recording undo and recovery; four-track import, placement/trim, gain/pan/mute/solo, undo/redo, embedded format 3, corrupt-load preservation, mix/export parity and clean overdub capture\n"
+  },
+  {
+    "test": "FormantHarmonyTests",
+    "status": "passed",
+    "output": "PASS V10.4 scale-aware harmony / LPC formant beta stability / bypass\n"
+  },
+  {
+    "test": "SongMixCheckTests",
+    "status": "passed",
+    "output": "PASS full-song scan silence, cues excluded, per-track peaks, export parity, limiter frames/time, mute, cancellation preservation, worker snapshot and meter isolation\n"
+  },
+  {
+    "test": "SongStudioTests",
+    "status": "passed",
+    "output": "PASS song record boundaries / take preservation / project round trip / corrupt file rejection / sample-rate playback / WAV export / audible beat / Unicode lyrics / v1 migration / lyric limits / lyrics-only projects\n"
+  },
+  {
+    "test": "SongPatternTests",
+    "status": "passed",
+    "output": "PASS song sample-clock timing / fractional boundaries / duration limits\n"
+  },
+  {
+    "test": "SongPhraseTests",
+    "status": "passed",
+    "output": "PASS phrase selection on four tracks, preserved surrounding audio/fades/mixer, shared sources, atomic undo/recovery, persistence, primary selection and rejection rollback\n"
+  },
+  {
+    "test": "SongStemTests",
+    "status": "passed",
+    "output": "PASS aligned 24-bit stems, isolated tracks/drums, fades/pan/master levels, muted takes, solo, exact low-level mix sum, tempo notes and overwrite/transport protection\n"
+  },
+  {
+    "test": "SongCountInTests",
+    "status": "passed",
+    "output": "PASS count-in sample timing, monitoring, cancellation, immediate playback, click exclusion from take/WAV and legacy Off behavior\n"
+  }
+]

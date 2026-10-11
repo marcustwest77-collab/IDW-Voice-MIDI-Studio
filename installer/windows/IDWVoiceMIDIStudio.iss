@@ -9,7 +9,7 @@
 #endif
 
 #define AppName "IDW Voice MIDI Studio"
-#define AppVersion "11.1.0"
+#define AppVersion "12.12.0"
 #define Publisher "In Da Wind Entertainment"
 #define AppExeName "IDW Voice MIDI Studio.exe"
 
