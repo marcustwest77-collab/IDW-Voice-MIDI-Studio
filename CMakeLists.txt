@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(IDWVoiceMIDIStudio VERSION 12.12.0)
+project(IDWVoiceMIDIStudio VERSION 13.0.0)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
@@ -124,6 +124,11 @@ if(BUILD_TESTING)
     target_compile_definitions(IDWSongSeekTests PRIVATE JUCE_USE_CURL=0)
     target_link_libraries(IDWSongSeekTests PRIVATE juce::juce_audio_formats)
     add_test(NAME IDWSongSeek COMMAND IDWSongSeekTests)
+    add_executable(IDWSongBeatArrangementTests Tests/SongBeatArrangementTests.cpp)
+    target_include_directories(IDWSongBeatArrangementTests PRIVATE Source)
+    target_compile_definitions(IDWSongBeatArrangementTests PRIVATE JUCE_USE_CURL=0)
+    target_link_libraries(IDWSongBeatArrangementTests PRIVATE juce::juce_audio_formats)
+    add_test(NAME IDWSongBeatArrangement COMMAND IDWSongBeatArrangementTests)
     add_executable(IDWSongSectionTests Tests/SongSectionTests.cpp)
     target_include_directories(IDWSongSectionTests PRIVATE Source)
     target_compile_definitions(IDWSongSectionTests PRIVATE JUCE_USE_CURL=0)

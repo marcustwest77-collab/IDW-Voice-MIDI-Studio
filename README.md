@@ -1,6 +1,6 @@
 # IDW Voice MIDI Studio
 
-IDW Voice MIDI Studio V12.12 (local export-check preview) is a clean-room voice-to-MIDI and vocal-performance application from In Da Wind Entertainment, paired with Audio Lab for offline vocal tuning, lyrics and take management.
+IDW Voice MIDI Studio V13 (local beat-arrangement preview) is a clean-room voice-to-MIDI and vocal-performance application from In Da Wind Entertainment, paired with Audio Lab for offline vocal tuning, lyrics and take management.
 
 The official IDW Entertainment crown, wings and microphone logo is embedded in the interface, standalone startup screen and platform packaging. Source and deployment variants are kept in `Resources/Brand`.
 
@@ -33,7 +33,8 @@ The official IDW Entertainment crown, wings and microphone logo is embedded in t
 - Optional LPC-based Formant Preserve (Beta) path for reducing chipmunk/boomy artifacts during larger correction moves
 - Scale-aware audio harmonies with upper-third, low/high-third, third/fifth and octave-stack voicings
 - V10.5 Clip Guard, confidence-gated harmonies, Eco/Studio/High CPU modes, Safe Tracking and temporary A/B Vocal FX snapshots
-- Build readiness: 31 direct C++ suites and 52 Python tests passed locally; full native builds remain blocked here. See [Windows build and validation status](docs/V12.12-BUILD-READINESS.md).
+- V13 adds custom drum patterns per bar, range copying, and beat undo/redo. See [beat arrangement and build instructions](docs/V13-BEAT-ARRANGEMENT.md). V13 native builds and installer validation are pending.
+- Native V12.12 builds passed on Windows and macOS: 32/32 CTest tests on each platform, plugin checks, and installer generation. See [download and installation results](docs/V12.12-NATIVE-BUILD-RESULTS.md). Hardware and manual GUI testing remain pending.
 - V12.12 adds a background full-song level check with track/mix peaks, silence detection and limiter-threshold timing. See [export checks](docs/V12.12-EXPORT-CHECK.md).
 - V12.11 adds live track meters, beat/mix peak holds, pre-limiter warnings and peak reset in Timeline. See [mix meters](docs/V12.11-MIX-METERS.md).
 - V12.10 adds background mix/stem export with progress, cancellation and a stable song snapshot. See [background export](docs/V12.10-BACKGROUND-EXPORT.md).

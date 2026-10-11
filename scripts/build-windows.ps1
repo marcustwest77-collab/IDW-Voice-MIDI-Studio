@@ -59,7 +59,8 @@ Copy-Item "$BuildDirectory\Testing\Temporary\LastTest.log" "$release\Build-Tests
     "Launch: Run-IDW.cmd",
     "Native CTest results: Build-Tests.log",
     "Manual: docs/USER_MANUAL.md",
-    "Build gates: docs/V12.12-BUILD-READINESS.md",
+    "V13 guide and pending release gates: docs/V13-BEAT-ARRANGEMENT.md",
+    "Build prerequisites: docs/V12.12-BUILD-READINESS.md",
     "Audio Lab included: $(-not $SkipAudioLab)",
     "Passing tests does not replace plugin-host, installer or AudioBox validation."
 ) | Set-Content "$release\BUILD-INFO.txt"

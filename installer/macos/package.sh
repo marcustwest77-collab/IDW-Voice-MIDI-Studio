@@ -3,7 +3,7 @@ set -euo pipefail
 
 BUILD_ROOT="${1:-build/IDWVoiceMIDIStudio_artefacts/Release}"
 OUT_DIR="${2:-release/Installer}"
-VERSION="12.12.0"
+VERSION="13.0.0"
 PKG_NAME="IDW-Voice-MIDI-Studio-Setup-macOS-arm64.pkg"
 DMG_NAME="IDW-Voice-MIDI-Studio-macOS-arm64.dmg"
 
@@ -36,6 +36,7 @@ cp docs/V12.8-PHRASE-SELECTION.md "release/pkgroot/Library/Application Support/I
 cp docs/V12.9-STEM-EXPORT.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V12.9-STEM-EXPORT.md"
 cp docs/V12.10-BACKGROUND-EXPORT.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V12.10-BACKGROUND-EXPORT.md"
 cp docs/V12.11-MIX-METERS.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V12.11-MIX-METERS.md"
+cp docs/V13-BEAT-ARRANGEMENT.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V13-BEAT-ARRANGEMENT.md"
 cp docs/V12.12-EXPORT-CHECK.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V12.12-EXPORT-CHECK.md"
 cp docs/V12.5-ZOOM-SEEK.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V12.5-ZOOM-SEEK.md"
 cp docs/V12.4-SECTIONS-LOOP.md "release/pkgroot/Library/Application Support/IDW Voice MIDI Studio/V12.4-SECTIONS-LOOP.md"
@@ -71,6 +72,7 @@ cp docs/V12.8-PHRASE-SELECTION.md release/dmgroot/V12.8-PHRASE-SELECTION.md
 cp docs/V12.9-STEM-EXPORT.md release/dmgroot/V12.9-STEM-EXPORT.md
 cp docs/V12.10-BACKGROUND-EXPORT.md release/dmgroot/V12.10-BACKGROUND-EXPORT.md
 cp docs/V12.11-MIX-METERS.md release/dmgroot/V12.11-MIX-METERS.md
+cp docs/V13-BEAT-ARRANGEMENT.md release/dmgroot/V13-BEAT-ARRANGEMENT.md
 cp docs/V12.12-EXPORT-CHECK.md release/dmgroot/V12.12-EXPORT-CHECK.md
 cp docs/V12.5-ZOOM-SEEK.md release/dmgroot/V12.5-ZOOM-SEEK.md
 cp docs/V12.4-SECTIONS-LOOP.md release/dmgroot/V12.4-SECTIONS-LOOP.md
@@ -81,7 +83,7 @@ cp docs/V12-FOUR-TRACK-STUDIO.md release/dmgroot/V12-FOUR-TRACK-STUDIO.md
 cp docs/V10.7-UPGRADE.md release/dmgroot/V10.7-UPGRADE.md
 cp docs/V10.6-UPGRADE.md release/dmgroot/V10.6-UPGRADE.md
 cat > release/dmgroot/README.txt <<'EOF'
-IDW Voice MIDI Studio V12.12 Preview
+IDW Voice MIDI Studio V13 Preview
 
 This installer places:
 - Standalone app in /Applications

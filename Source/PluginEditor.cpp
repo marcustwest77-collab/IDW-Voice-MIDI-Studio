@@ -21,7 +21,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     theme.setColour(juce::ComboBox::backgroundColourId,card);
     theme.setColour(juce::ToggleButton::tickColourId,mint);
     setLookAndFeel(&theme);setResizable(true,true);setResizeLimits(1040,890,1600,1200);setSize(1120,900);
-    title.setText("IDW / VOICE MIDI STUDIO V12.12 PREVIEW",juce::dontSendNotification);title.setFont(juce::FontOptions(23.0f,juce::Font::bold));
+    title.setText("IDW / VOICE MIDI STUDIO V13 PREVIEW",juce::dontSendNotification);title.setFont(juce::FontOptions(23.0f,juce::Font::bold));
     readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));readout.setColour(juce::Label::textColourId,mint);
     traceLabel.setText("LIVE PITCH  /  7 SECONDS",juce::dontSendNotification);traceLabel.setColour(juce::Label::textColourId,muted);
     status.setText("Start with Preview sound, then sing or press Test note.",juce::dontSendNotification);
@@ -282,7 +282,7 @@ bool IDWVoiceMIDIStudioAudioProcessorEditor::audioRunning() const {
     return lastAudioChange>0 && juce::Time::getMillisecondCounterHiRes()-lastAudioChange<1000;
 }
 juce::String IDWVoiceMIDIStudioAudioProcessorEditor::diagnosticReport() const {
-    juce::String text="IDW Voice MIDI Studio 12.12.0 setup report\n";
+    juce::String text="IDW Voice MIDI Studio 13.0.0 setup report\n";
     text += "Audio callbacks active: "+juce::String(audioRunning()?"yes":"no")+"\n";
     text += "Sample rate: "+juce::String(p.deviceRate(),0)+" Hz; block: "+juce::String(p.deviceBlock())+" samples\n";
     text += "Input RMS: "+juce::String(juce::Decibels::gainToDecibels(p.level(),-100.0f),1)+" dBFS; peak: "+juce::String(p.peak(),4)+"\n";
@@ -312,8 +312,11 @@ Safe Tracking temporarily bypasses formant processing, audio harmony, doubler, r
 Store A/B captures the Vocal FX panel settings in memory for level-matched comparisons. Snapshots last until the plugin editor window is closed.
 User preset saves are atomic and keep one previous copy for recovery if the newest XML becomes unreadable.
 
-V12.12 SONG STUDIO PREVIEW
+V13 SONG STUDIO PREVIEW
 Song Studio beneath the title opens a 16-step kick/snare/hi-hat sequencer.
+Choose Base for the repeating beat or a numbered bar for a custom pattern. A star marks custom bars.
+Beat tools copies the displayed pattern to a bar range, restores a bar to Base, or undoes/redoes beat and track edits. Stop before editing.
+Custom beats save as song format 8 and require V13. Playback, loops and exports use the same arrangement.
 Set BPM and Bars, then Play song or Record take. Use headphones: recording enables mic monitoring.
 Choose Count-in Off, 1 bar or 2 bars before Record take. Recording begins at bar 1 after the count.
 Metronome and Click level control your headphone cue; clicks are not stored in the take or WAV.

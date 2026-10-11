@@ -59,7 +59,18 @@ public:
     bool armedLaneHasAudio()const{const juce::ScopedLock guard(lock);return laneHasAudio(recordLane.load());}
     bool hasTake()const{const juce::ScopedLock guard(lock);return recorded>0;}
     idw::SongPattern pattern()const{const juce::ScopedLock guard(lock);return song;}
-    bool setPattern(idw::SongPattern next){const juce::ScopedLock guard(lock);if(playing||!next.valid())return false;song=next;++revision;return true;}
+    bool setPattern(idw::SongPattern next){const juce::ScopedLock guard(lock);if(playing||!next.valid())return false;if(!song.sameBeats(next))rememberEdit();song=next;trimHistory();++revision;return true;}
+    // Bar indices are zero-based. Reject stale dialogs atomically with the edit.
+    bool copyBeatRange(const std::array<std::uint16_t,3>& source,int first,int last,std::uint64_t expectedRevision){
+        const juce::ScopedLock guard(lock);
+        if(playing||revision!=expectedRevision||first<0||last<first||last>=song.bars)return false;
+        auto next=song;for(int bar=first;bar<=last;++bar){next.customBars[(size_t)bar]=true;next.barRows[(size_t)bar]=source;}
+        return setPattern(next);
+    }
+    bool useBaseBeat(int bar){
+        const juce::ScopedLock guard(lock);if(playing||bar<0||bar>=song.bars)return false;
+        auto next=song;next.customBars[(size_t)bar]=false;next.barRows[(size_t)bar]={};return setPattern(next);
+    }
     bool recordAtCursor(double seconds){return start(true,seconds,0,false,true);}
     bool start(bool record,double from=0,double until=0,bool repeat=false,bool append=false){
         const juce::ScopedLock guard(lock);
@@ -286,7 +297,7 @@ public:
     juce::Result save(const juce::File& destination){
         const juce::ScopedLock guard(lock);if(playing)return juce::Result::fail("Stop playback or recording first.");
         juce::TemporaryFile temp(destination);auto out=temp.getFile().createOutputStream();if(!out)return juce::Result::fail("Cannot create project file.");
-        const bool muted=hasMutedClips(),marked=!songSections.empty()||muted,faded=hasFades()||marked,multiple=hasMultipleClips()||faded,arranged=hasArrangement()||multiple;out->writeInt(0x49445731);out->writeInt(muted?7:marked?6:faded?5:multiple?4:arranged?3:2);out->writeInt(song.bpm);out->writeInt(song.bars);
+        const bool sequenced=song.hasArrangement(),muted=hasMutedClips()||sequenced,marked=!songSections.empty()||muted,faded=hasFades()||marked,multiple=hasMultipleClips()||faded,arranged=hasArrangement()||multiple;out->writeInt(0x49445731);out->writeInt(sequenced?8:muted?7:marked?6:faded?5:multiple?4:arranged?3:2);out->writeInt(song.bpm);out->writeInt(song.bars);
         for(auto row:song.rows)out->writeInt(row);
         out->writeFloat(song.beatGain);out->writeFloat(song.trackGain);out->writeInt((int)takeRate);out->writeInt(recorded);
         const auto document=lyrics();
@@ -310,13 +321,14 @@ public:
         if(faded)for(int lane=0;lane<4;++lane){const auto primary=laneView(lane);out->writeDouble(primary.settings.fadeIn);out->writeDouble(primary.settings.fadeOut);for(const auto& clip:extraClips[(size_t)lane]){out->writeDouble(clip.settings.fadeIn);out->writeDouble(clip.settings.fadeOut);}}
         if(marked){out->writeInt((int)songSections.size());for(const auto& section:songSections){const int bytes=(int)section.name.getNumBytesAsUTF8();out->writeInt(bytes);out->write(section.name.toRawUTF8(),(size_t)bytes);out->writeInt(section.firstBar);out->writeInt(section.lastBar);}}
         if(muted)for(int lane=0;lane<4;++lane){out->writeInt(lanes[(size_t)lane].settings.clipMuted?1:0);for(const auto& clip:extraClips[(size_t)lane])out->writeInt(clip.settings.clipMuted?1:0);}
+        if(sequenced)for(int bar=0;bar<64;++bar){out->writeInt(song.customBars[(size_t)bar]?1:0);if(song.customBars[(size_t)bar])for(auto row:song.barRows[(size_t)bar])out->writeInt(row);}
         out->flush();const bool ok=out->getStatus().wasOk();out.reset();
         return ok&&temp.overwriteTargetFileWithTemporary()?juce::Result::ok():juce::Result::fail("Project save failed; previous file preserved.");
     }
     juce::Result load(const juce::File& file){
         const juce::ScopedLock guard(lock);if(playing)return juce::Result::fail("Stop transport first.");
         auto in=file.createInputStream();if(!in||in->getTotalLength()<44||in->readInt()!=0x49445731)return juce::Result::fail("Not a supported IDW song project.");
-        const int version=in->readInt();if(version!=1&&version!=2&&version!=3&&version!=4&&version!=5&&version!=6&&version!=7)return juce::Result::fail("Unsupported song version. Current song kept.");
+        const int version=in->readInt();if(version!=1&&version!=2&&version!=3&&version!=4&&version!=5&&version!=6&&version!=7&&version!=8)return juce::Result::fail("Unsupported song version. Current song kept.");
         idw::SongPattern next;next.bpm=in->readInt();next.bars=in->readInt();
         for(auto& row:next.rows){const int value=in->readInt();if(value<0||value>65535)return juce::Result::fail("Invalid drum pattern.");row=(std::uint16_t)value;}
         next.beatGain=in->readFloat();next.trackGain=in->readFloat();const int sr=in->readInt(),frames=in->readInt();
@@ -377,6 +389,11 @@ public:
             if(in->getTotalLength()-in->getPosition()<4)return juce::Result::fail("Truncated clip mute data. Current song kept.");
             const int flag=in->readInt();if(flag!=0&&flag!=1)return juce::Result::fail("Invalid clip mute flag. Current song kept.");
             auto& settings=clip==0?loadedLanes[(size_t)lane].settings:loadedExtras[(size_t)lane][(size_t)clip-1].settings;settings.clipMuted=flag!=0;
+        }
+        if(version>=8)for(int bar=0;bar<64;++bar){
+            if(in->getTotalLength()-in->getPosition()<4)return juce::Result::fail("Truncated beat arrangement. Current song kept.");
+            const int flag=in->readInt();if(flag!=0&&flag!=1)return juce::Result::fail("Invalid beat arrangement flag.");next.customBars[(size_t)bar]=flag!=0;
+            if(flag){if(in->getTotalLength()-in->getPosition()<12)return juce::Result::fail("Truncated bar pattern.");for(auto& row:next.barRows[(size_t)bar]){const int value=in->readInt();if(value<0||value>65535)return juce::Result::fail("Invalid bar pattern.");row=(std::uint16_t)value;}}
         }
         if(in->getPosition()!=in->getTotalLength())return juce::Result::fail("Unexpected project data. Current song kept.");
         {const juce::ScopedLock writingGuard(lyricsLock);words=std::move(loadedWords);documentId=juce::Uuid().toString();}
@@ -464,7 +481,7 @@ private:
     static_assert(std::atomic<float>::is_always_lock_free,"Audio meters require lock-free float atomics");
     std::array<std::atomic<float>,6> meterPeaks{0.f,0.f,0.f,0.f,0.f,0.f};
     static void configureDrums(idw::StudioSynth& synth){idw::StudioSynth::Settings settings;settings.gain=1;settings.delay=0;synth.configure(settings);}
-    static void trigger(idw::StudioSynth& synth,const idw::SongPattern& pattern,std::int64_t step){const int notes[]{36,38,42};for(int row=0;row<3;++row)if(pattern.rows[(size_t)row]&(1u<<(step%16)))synth.message(0x99,notes[row],100);}
+    static void trigger(idw::StudioSynth& synth,const idw::SongPattern& pattern,std::int64_t step){const int notes[]{36,38,42};for(int row=0;row<3;++row)if(pattern.rowsAtBar((int)(step/16))[(size_t)row]&(1u<<(step%16)))synth.message(0x99,notes[row],100);}
     bool anySolo()const{for(const auto& lane:lanes)if(lane.settings.solo)return true;return false;}
     bool laneAudible(int lane)const{return !lanes[(size_t)lane].settings.mute&&(!anySolo()||lanes[(size_t)lane].settings.solo);}
     idw::SongLane laneView(int lane)const{auto result=lanes[(size_t)lane];if(lane==0){result.audio=track;result.frames=recorded;result.rate=takeRate;}return result;}
@@ -506,9 +523,9 @@ private:
         for(const auto* history:{&undoEdits,&redoEdits})for(const auto& edit:*history){add(edit.take);for(const auto& lane:edit.lanes)add(lane.audio);for(const auto& clips:edit.extras)for(const auto& clip:clips)add(clip.audio);}return bytes;
     }
     void trimHistory(){while(retainedBytes()>maxAudioBytes){if(!undoEdits.empty())undoEdits.erase(undoEdits.begin());else if(!redoEdits.empty())redoEdits.erase(redoEdits.begin());else break;}}
-    struct Edit {std::shared_ptr<juce::AudioBuffer<float>> take;int frames;double sr;std::array<idw::SongLane,4> lanes;std::array<std::vector<idw::SongLane>,4> extras;std::vector<Section> sections;};
-    Edit editState()const{return {track,recorded,takeRate,lanes,extraClips,songSections};}
-    void applyEdit(const Edit& edit){track=edit.take;recorded=edit.frames;takeRate=edit.sr;lanes=edit.lanes;extraClips=edit.extras;songSections=edit.sections;++revision;}
+    struct Edit {std::shared_ptr<juce::AudioBuffer<float>> take;int frames;double sr;std::array<idw::SongLane,4> lanes;std::array<std::vector<idw::SongLane>,4> extras;std::vector<Section> sections;idw::SongPattern pattern;};
+    Edit editState()const{return {track,recorded,takeRate,lanes,extraClips,songSections,song};}
+    void applyEdit(const Edit& edit){track=edit.take;recorded=edit.frames;takeRate=edit.sr;lanes=edit.lanes;extraClips=edit.extras;songSections=edit.sections;song.rows=edit.pattern.rows;song.barRows=edit.pattern.barRows;song.customBars=edit.pattern.customBars;++revision;}
     void rememberEdit(){if(!playing&&pendingCapture){pendingCapture.reset();captureBuffer=nullptr;}undoEdits.push_back(editState());redoEdits.clear();if(undoEdits.size()>8)undoEdits.erase(undoEdits.begin());}
     std::array<idw::SongLane,4> lanes{};std::array<std::vector<idw::SongLane>,4> extraClips;std::vector<Edit> undoEdits,redoEdits;
     std::shared_ptr<juce::AudioBuffer<float>> pendingCapture;juce::AudioBuffer<float>* captureBuffer=nullptr;std::int64_t captureOffset=0;int captureIndex=0;bool capturePublished=false;

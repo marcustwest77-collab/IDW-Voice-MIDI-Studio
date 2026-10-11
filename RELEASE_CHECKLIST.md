@@ -1,3 +1,19 @@
+# V13 beat arrangement — local candidate
+
+- [x] Per-bar drum overrides, Base fallback and range copying
+- [x] Shared beat/track undo, recovery and format-8 persistence
+- [x] Playback, loop, mix/stem export and level-check parity tested
+- [x] Song/section/recording/take regressions and processor/editor syntax checks
+- [x] Atomic range-copy validation, stale-dialog rejection, range undo and Base-reset tests
+- [x] CMake test registration and packaging documentation
+- [ ] Native Windows/macOS full build, tests and plugin validation
+- [ ] Manual GUI, range-copy and save/reopen checks
+- [ ] Installer and Windows 10 built-in audio smoke test
+- [ ] AudioBox capture and latency test when hardware is available
+- [ ] Approval before pushing this V13 branch
+
+See [V13 guide](docs/V13-BEAT-ARRANGEMENT.md). Prior V12.12 results below do not certify V13.
+
 # Native-build follow-up
 
 - [x] Installed isolated CMake/pkgconf tools and retried full native configuration

@@ -13,12 +13,14 @@ public:
         markerPanel=std::make_unique<SongSectionsPanel>(engine);addChildComponent(*markerPanel);addAndMakeVisible(markerTab);markerTab.onClick=[this]{markerVisible=!markerVisible;timelineVisible=false;speechVisible=false;lyricsVisible=true;dictation.stop();resized();};
         timelinePanel=std::make_unique<SongTimelinePanel>(engine,monitor);addChildComponent(*timelinePanel);addAndMakeVisible(timelineTab);timelineTab.onClick=[this]{markerVisible=false;timelineVisible=!timelineVisible;lyricsVisible=true;speechVisible=false;dictation.stop();resized();};
         title.setText("IDW SONG STUDIO",juce::dontSendNotification);
-        info.setText("Four audio lanes in Timeline, plus a 16-step drum pattern. Record take captures IDW's processed input into the armed lane (Lead by default). Arm another lane in Timeline.\nUse headphones. Record enables microphone monitoring. Save song keeps your permanent project. Recovery saves completed takes only; in-progress audio is not protected.",juce::dontSendNotification);
-        for(auto* c:std::initializer_list<juce::Component*>{&title,&info,&status,&tempo,&bars,&tempoLabel,&barsLabel,&beatGain,&trackGain,&beatLabel,&trackLabel,&play,&record,&stop,&discard,&save,&load,&exportAudio,&done})addAndMakeVisible(c);
+        info.setText("Four audio lanes in Timeline, plus per-bar 16-step drum patterns. Record take captures IDW's processed input into the armed lane (Lead by default). Arm another lane in Timeline.\nUse headphones. Record enables microphone monitoring. Save song keeps your permanent project. Recovery saves completed takes only; in-progress audio is not protected.",juce::dontSendNotification);
+        for(auto* c:std::initializer_list<juce::Component*>{&title,&info,&status,&beatBar,&beatTools,&tempo,&bars,&tempoLabel,&barsLabel,&beatGain,&trackGain,&beatLabel,&trackLabel,&play,&record,&stop,&discard,&save,&load,&exportAudio,&done})addAndMakeVisible(c);
+        beatBar.onChange=[this]{refresh();};beatTools.onClick=[this]{showBeatTools();};
+        beatBar.setTooltip("Base repeats on bars without a custom pattern. Select a numbered bar to edit that bar only. * means custom.");
         tempoLabel.setText("BPM",juce::dontSendNotification);barsLabel.setText("Bars",juce::dontSendNotification);
         beatLabel.setText("Beat level",juce::dontSendNotification);trackLabel.setText("Audio tracks level",juce::dontSendNotification);
         tempo.setRange(40,240,1);bars.setRange(1,64,1);beatGain.setRange(0,2,.01);trackGain.setRange(0,2,.01);
-        for(auto* slider:{&tempo,&bars,&beatGain,&trackGain}){slider->setSliderStyle(juce::Slider::LinearHorizontal);slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,65,26);slider->onValueChange=[this]{updatePattern();};}
+        for(auto* slider:{&tempo,&bars,&beatGain,&trackGain}){slider->setSliderStyle(juce::Slider::LinearHorizontal);slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,65,26);slider->onValueChange=[this]{auto p=engine.pattern();p.bpm=(int)tempo.getValue();p.bars=(int)bars.getValue();p.beatGain=(float)beatGain.getValue();p.trackGain=(float)trackGain.getValue();if(!engine.setPattern(p))status.setText("Maximum duration is 180 seconds; reduce Bars or increase BPM.",juce::dontSendNotification);refresh();};}
         const char* names[]{"Kick","Snare","Hi-hat"};
         for(int row=0;row<3;++row){rowLabels[(size_t)row].setText(names[row],juce::dontSendNotification);addAndMakeVisible(rowLabels[(size_t)row]);
             for(int step=0;step<16;++step){auto& button=steps[(size_t)(row*16+step)];button.setButtonText(juce::String(step+1));button.setClickingTogglesState(true);button.onClick=[this]{updatePattern();};addAndMakeVisible(button);}}
@@ -61,7 +63,7 @@ public:
         speechTab.setBounds(w-435,18,115,30);speechTab.setButtonText(speechVisible?"Back to lyrics":"Dictation");
         speechPanel->setBounds(24,135,w-48,getHeight()-330);speechPanel->setVisible(speechVisible);
         lyricsTab.setBounds(w-310,18,150,30);lyricsTab.setButtonText(lyricsVisible&&!speechVisible&&!timelineVisible&&!markerVisible?"Beat controls":"Lyrics");
-        for(auto* c:std::initializer_list<juce::Component*>{&tempo,&bars,&tempoLabel,&barsLabel,&beatGain,&trackGain,&beatLabel,&trackLabel,&discard})c->setVisible(!lyricsVisible);
+        for(auto* c:std::initializer_list<juce::Component*>{&beatBar,&beatTools,&tempo,&bars,&tempoLabel,&barsLabel,&beatGain,&trackGain,&beatLabel,&trackLabel,&discard})c->setVisible(!lyricsVisible);
         for(auto& label:rowLabels)label.setVisible(!lyricsVisible);for(auto& step:steps)step.setVisible(!lyricsVisible);
         for(auto* c:std::initializer_list<juce::Component*>{&songTitle,&lyricText,&lyricsHelp,&importLyrics,&exportLyrics})c->setVisible(lyricsVisible&&!speechVisible&&!timelineVisible&&!markerVisible);
         songTitle.setBounds(24,135,w-48,30);lyricsHelp.setBounds(24,171,w-48,36);
@@ -69,6 +71,7 @@ public:
         importLyrics.setBounds(w-284,213,120,28);exportLyrics.setBounds(w-154,213,130,28);
         lyricText.setBounds(24,250,w-48,juce::jmax(160,getHeight()-435));done.setBounds(w-140,18,116,30);info.setBounds(24,55,w-48,70);
         tempoLabel.setBounds(24,138,50,30);tempo.setBounds(78,138,250,30);barsLabel.setBounds(355,138,50,30);bars.setBounds(410,138,230,30);
+        beatBar.setBounds(650,138,170,30);beatTools.setBounds(830,138,140,30);
         const int cell=(w-125)/16;
         for(int row=0;row<3;++row){rowLabels[(size_t)row].setBounds(24,192+row*52,74,40);for(int step=0;step<16;++step)steps[(size_t)(row*16+step)].setBounds(104+step*cell,192+row*52,cell-4,40);}
         beatLabel.setBounds(24,365,120,30);beatGain.setBounds(150,365,250,30);trackLabel.setBounds(430,365,175,30);trackGain.setBounds(610,365,250,30);
@@ -80,6 +83,23 @@ public:
         if(lyricsVisible){const int y=getHeight()-175;play.setBounds(24,y,105,36);record.setBounds(140,y,140,36);stop.setBounds(292,y,100,36);save.setBounds(24,y+48,160,36);load.setBounds(200,y+48,160,36);exportAudio.setBounds(376,y+48,180,36);status.setBounds(24,y+92,w-48,44);}
     }
 private:
+    int editedBar()const{return beatBar.getSelectedId()-2;}
+    void showBeatTools(){
+        if(engine.isPlaying())return;juce::PopupMenu menu;menu.addItem(1,"Copy displayed pattern to bars…");menu.addItem(2,"Use Base on selected bar",editedBar()>=0);menu.addItem(3,"Undo beat/track edit",engine.canUndo());menu.addItem(4,"Redo beat/track edit",engine.canRedo());
+        const juce::Component::SafePointer<SongStudioPanel> safe(this);menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&beatTools),[safe](int choice){if(!safe||safe->engine.isPlaying())return;
+            if(choice==3){safe->engine.undoTrackEdit();safe->refresh();return;}if(choice==4){safe->engine.redoTrackEdit();safe->refresh();return;}
+            const int bar=safe->editedBar();auto pattern=safe->engine.pattern();
+            if(choice==2&&bar>=0){safe->engine.useBaseBeat(bar);safe->refresh();return;}
+            if(choice!=1)return;const auto source=pattern.rowsAtBar(bar);const auto revision=safe->engine.audioRevision();
+            auto* dialog=new juce::AlertWindow("Copy beat to bars","Replaces patterns on the inclusive bar range. Undo restores the previous beats.",juce::MessageBoxIconType::QuestionIcon);
+            dialog->addTextEditor("first","1","First bar");dialog->addTextEditor("last",juce::String(pattern.bars),"Last bar");dialog->getTextEditor("first")->setInputRestrictions(2,"0123456789");dialog->getTextEditor("last")->setInputRestrictions(2,"0123456789");dialog->addButton("Copy",1);dialog->addButton("Cancel",0);
+            const juce::Component::SafePointer<juce::AlertWindow> alert(dialog);
+            dialog->enterModalState(true,juce::ModalCallbackFunction::create([safe,alert,source,revision](int answer){if(!safe||!alert||answer!=1)return;auto next=safe->engine.pattern();const auto first=alert->getTextEditorContents("first").trim(),last=alert->getTextEditorContents("last").trim();
+                const int a=first.getIntValue(),b=last.getIntValue();if(first.length()>2||last.length()>2||!first.containsOnly("0123456789")||!last.containsOnly("0123456789")||a<1||b<a||b>next.bars||safe->engine.audioRevision()!=revision){safe->status.setText("Copy rejected: enter a range within song Bars, and retry if the song changed.",juce::dontSendNotification);return;}
+                const bool ok=safe->engine.copyBeatRange(source,a-1,b-1,revision);safe->status.setText(ok?"Beat copied. Save song to keep the arrangement.":"Copy rejected: stop transport and retry if the song changed.",juce::dontSendNotification);safe->refresh();
+            }),true);
+        });
+    }
     void showRecovery(){
         if(engine.isPlaying()||dictation.busy()){status.setText("Stop playback, recording and dictation before recovering.",juce::dontSendNotification);return;}
         const auto entries=recovery.entries();
@@ -105,9 +125,9 @@ private:
     }
     void syncLyrics(){if(!engine.setLyrics({songTitle.getText(),lyricText.getText()}))status.setText("Lyrics exceed the project size limit. Shorten the text before saving.",juce::dontSendNotification);}
     void refreshLyrics(){const auto doc=engine.lyrics();songTitle.setText(doc.title,false);lyricText.setText(doc.text,false);}
-    void refresh(){const auto p=engine.pattern();tempo.setValue(p.bpm,juce::dontSendNotification);bars.setValue(p.bars,juce::dontSendNotification);beatGain.setValue(p.beatGain,juce::dontSendNotification);trackGain.setValue(p.trackGain,juce::dontSendNotification);for(int r=0;r<3;++r)for(int s=0;s<16;++s)steps[(size_t)(r*16+s)].setToggleState((p.rows[(size_t)r]&(1<<s))!=0,juce::dontSendNotification);}
-    void updatePattern(){auto p=engine.pattern();p.bpm=(int)tempo.getValue();p.bars=(int)bars.getValue();p.beatGain=(float)beatGain.getValue();p.trackGain=(float)trackGain.getValue();p.rows.fill(0);for(int r=0;r<3;++r)for(int s=0;s<16;++s)if(steps[(size_t)(r*16+s)].getToggleState())p.rows[(size_t)r]|=(std::uint16_t)(1<<s);if(!engine.setPattern(p)){refresh();status.setText("Maximum song duration is 180 seconds. Reduce bars or increase tempo.",juce::dontSendNotification);}}
-    void timerCallback()override{record.setButtonText("Record lane "+juce::String(engine.armedLane()+1));record.setTooltip("Record into "+juce::String(SongStudio::laneName(engine.armedLane())));recoveryStatus.setText(recovery.status(),juce::dontSendNotification);const bool active=engine.isPlaying();countInChoice.setEnabled(!active);for(auto* c:std::initializer_list<juce::Component*>{&tempo,&bars,&beatGain,&trackGain,&play,&record,&discard,&save,&load,&exportAudio})c->setEnabled(!active);for(auto& button:steps)button.setEnabled(!active);if(active)status.setText(engine.isCountingIn()?("Count-in "+juce::String(engine.countInBeat())+" / "+juce::String(engine.countInTotalBeats())+" — get ready; no audio is recorded yet."):((engine.isRecording()?"Recording "+juce::String(SongStudio::laneName(engine.armedLane()))+" / ":juce::String(engine.isLooping()?"Looping ":"Playing "))+"bar "+juce::String(engine.songBar())+", beat "+juce::String(engine.songBeat())+" / "+juce::String(engine.seconds(),1)+" s — Save song afterwards."),juce::dontSendNotification);else if(wasActive)status.setText("Stopped. Take stays in memory until you Save song.",juce::dontSendNotification);wasActive=active;updateExport();}
+    void refresh(){const auto p=engine.pattern();const int selected=juce::jlimit(1,p.bars+1,juce::jmax(1,beatBar.getSelectedId()));beatBar.clear(juce::dontSendNotification);beatBar.addItem("Edit: Base pattern",1);for(int bar=0;bar<p.bars;++bar)beatBar.addItem("Edit: Bar "+juce::String(bar+1)+(p.customBars[(size_t)bar]?" *":""),bar+2);beatBar.setSelectedId(selected,juce::dontSendNotification);const auto& displayed=p.rowsAtBar(editedBar());beatRevision=engine.audioRevision();tempo.setValue(p.bpm,juce::dontSendNotification);bars.setValue(p.bars,juce::dontSendNotification);beatGain.setValue(p.beatGain,juce::dontSendNotification);trackGain.setValue(p.trackGain,juce::dontSendNotification);for(int r=0;r<3;++r)for(int s=0;s<16;++s)steps[(size_t)(r*16+s)].setToggleState((displayed[(size_t)r]&(1<<s))!=0,juce::dontSendNotification);}
+    void updatePattern(){auto p=engine.pattern();p.bpm=(int)tempo.getValue();p.bars=(int)bars.getValue();p.beatGain=(float)beatGain.getValue();p.trackGain=(float)trackGain.getValue();auto& rows=editedBar()<0?p.rows:p.barRows[(size_t)editedBar()];rows.fill(0);for(int r=0;r<3;++r)for(int s=0;s<16;++s)if(steps[(size_t)(r*16+s)].getToggleState())rows[(size_t)r]|=(std::uint16_t)(1<<s);if(editedBar()>=0)p.customBars[(size_t)editedBar()]=true;if(!engine.setPattern(p)){refresh();status.setText("Maximum song duration is 180 seconds. Reduce bars or increase tempo.",juce::dontSendNotification);}else refresh();}
+    void timerCallback()override{record.setButtonText("Record lane "+juce::String(engine.armedLane()+1));record.setTooltip("Record into "+juce::String(SongStudio::laneName(engine.armedLane())));recoveryStatus.setText(recovery.status(),juce::dontSendNotification);const bool active=engine.isPlaying();beatBar.setEnabled(!active);beatTools.setEnabled(!active);if(!active&&beatRevision!=engine.audioRevision())refresh();countInChoice.setEnabled(!active);for(auto* c:std::initializer_list<juce::Component*>{&tempo,&bars,&beatGain,&trackGain,&play,&record,&discard,&save,&load,&exportAudio})c->setEnabled(!active);for(auto& button:steps)button.setEnabled(!active);if(active)status.setText(engine.isCountingIn()?("Count-in "+juce::String(engine.countInBeat())+" / "+juce::String(engine.countInTotalBeats())+" — get ready; no audio is recorded yet."):((engine.isRecording()?"Recording "+juce::String(SongStudio::laneName(engine.armedLane()))+" / ":juce::String(engine.isLooping()?"Looping ":"Playing "))+"bar "+juce::String(engine.songBar())+", beat "+juce::String(engine.songBeat())+" / "+juce::String(engine.seconds(),1)+" s — Save song afterwards."),juce::dontSendNotification);else if(wasActive)status.setText("Stopped. Take stays in memory until you Save song.",juce::dontSendNotification);wasActive=active;updateExport();}
     void choose(int action){
         if(engine.isPlaying())return;
         if(action==1&&(dictation.busy()||!dictation.snapshot().text.isEmpty())){status.setText("Stop dictation and append or discard your draft before opening another song.",juce::dontSendNotification);return;}
@@ -183,6 +203,7 @@ private:
     juce::Label title,info,status,tempoLabel,barsLabel,beatLabel,trackLabel;std::array<juce::Label,3> rowLabels;
     juce::Slider tempo,bars,beatGain,trackGain;std::array<juce::TextButton,48> steps;
     juce::TextButton play{"Play song"},record{"Record take"},stop{"Stop"},discard{"Clear armed track"},save{"Save song"},load{"Open song"},exportAudio{"Export audio…"},done{"Done"};
+    juce::ComboBox beatBar;juce::TextButton beatTools{"Beat tools…"};std::uint64_t beatRevision=0;
     std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<SongExportJob> exportJob;
 };
