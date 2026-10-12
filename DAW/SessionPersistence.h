@@ -28,6 +28,16 @@ inline juce::var sessionToJson(const Session& s) {
             clips.add(juce::var(clip.release()));
         }
         track->setProperty("clips",juce::var(clips));
+        juce::Array<juce::var> notes;
+        for(const auto& n:t.notes){
+            auto note=std::make_unique<juce::DynamicObject>();
+            note->setProperty("pitch",n.pitch);
+            note->setProperty("startBeat",n.startBeat);
+            note->setProperty("lengthBeats",n.lengthBeats);
+            note->setProperty("velocity",n.velocity);
+            notes.add(juce::var(note.release()));
+        }
+        track->setProperty("notes",juce::var(notes));
         tracks.add(juce::var(track.release()));
     }
     root->setProperty("tracks",juce::var(tracks));
@@ -64,6 +74,24 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
                 co->getProperty("sourcePath").toString().toStdString(),
                 (double)co->getProperty("startBeat"),(double)co->getProperty("lengthBeats"),
                 (double)co->getProperty("sourceOffsetSeconds")}))return false;
+        }
+        // Older v1 sessions may omit the new MIDI notes property.
+        const auto notes=obj->getProperty("notes");
+        if(!notes.isVoid()){
+            if(!notes.isArray())return false;
+            for(const auto& n:*notes.getArray()){
+                auto* no=n.getDynamicObject();
+                if(!no)return false;
+                const auto pitch=no->getProperty("pitch");
+                const auto velocity=no->getProperty("velocity");
+                if((!pitch.isInt()&&!pitch.isInt64()) ||
+                   (!velocity.isInt()&&!velocity.isInt64()))return false;
+                if(!next.addMidiNote(next.tracks.size()-1,{
+                    (int)pitch,
+                    (double)no->getProperty("startBeat"),
+                    (double)no->getProperty("lengthBeats"),
+                    (int)velocity}))return false;
+            }
         }
     }
     output=std::move(next);
