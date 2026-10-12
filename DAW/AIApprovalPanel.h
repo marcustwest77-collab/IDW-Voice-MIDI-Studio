@@ -36,6 +36,27 @@ public:
                     feedback.setText("Sanitized session metadata copied.",juce::dontSendNotification);
                 }));
         };
+        // Import a proposal from a local JSON file chosen by the user. No polling
+        // or background filesystem access: the user explicitly selects the file.
+        importFile.setButtonText("IMPORT JSON");
+        addAndMakeVisible(importFile);
+        importFile.onClick=[this]{
+            chooser=std::make_unique<juce::FileChooser>(
+                "Choose an IDW AI proposal",juce::File{},"*.json");
+            chooser->launchAsync(juce::FileBrowserComponent::openMode |
+                                 juce::FileBrowserComponent::canSelectFiles,
+                [this](const juce::FileChooser& selected){
+                    const auto file=selected.getResult();
+                    if(!file.existsAsFile())return;
+                    if(file.getSize()>4096){
+                        apply.setEnabled(false);
+                        feedback.setText("Proposal file exceeds 4 KB limit.",juce::dontSendNotification);
+                        return;
+                    }
+                    editor.setText(file.loadFileAsString());
+                    apply.setEnabled(false);
+                });
+        };
         paste.setButtonText("PASTE JSON");
         addAndMakeVisible(paste);
         paste.onClick=[this]{
@@ -108,10 +129,11 @@ public:
         editor.setBounds(a.removeFromTop(94));
         a.removeFromTop(8);
         auto row=a.removeFromTop(34);
-        copyStatus.setBounds(row.removeFromLeft(100).reduced(2));
-        paste.setBounds(row.removeFromLeft(108).reduced(2));
-        review.setBounds(row.removeFromLeft(165).reduced(2));
-        apply.setBounds(row.removeFromLeft(150).reduced(2));
+        importFile.setBounds(row.removeFromLeft(110).reduced(2));
+        copyStatus.setBounds(row.removeFromLeft(94).reduced(2));
+        paste.setBounds(row.removeFromLeft(98).reduced(2));
+        review.setBounds(row.removeFromLeft(142).reduced(2));
+        apply.setBounds(row.removeFromLeft(121).reduced(2));
         a.removeFromTop(6);
         feedback.setBounds(a.removeFromTop(35));
     }
@@ -122,5 +144,6 @@ private:
     idw::daw::AIProposal pending{idw::daw::AIProposal::Kind::tempo};
     juce::Label heading,feedback;
     juce::TextEditor editor;
-    juce::TextButton copyStatus,paste,review,apply;
+    juce::TextButton importFile,copyStatus,paste,review,apply;
+    std::unique_ptr<juce::FileChooser> chooser;
 };
