@@ -77,3 +77,7 @@ The JUCE parser and action helper are covered by `IDWDAWPersistenceTests`. They 
 ## IDW AI Studio approval panel (V14 experimental)
 
 Choose **IDW AI STUDIO** in the DAW toolbar. Paste an `idw-ai-proposal-v1` JSON action, choose **REVIEW PROPOSAL**, inspect the action description, then click **APPROVE & APPLY** once. Supported actions: set BPM (20–300), add one audio track, add one MIDI track. Requests are rejected while playback, recording, or WAV export is active. Unknown commands and extra parameters are rejected. This panel is **local and manual**: there is still no direct MCP-to-running-DAW connection and no embedded ChatGPT or Claude conversation. The separate MCP server reads saved-project snapshots and produces previews; its output is not auto-executed.
+
+### AI preview handoff (manual)
+
+The MCP tools `idw_preview_tempo` and `idw_preview_track` now return `approval_json`. Copy only that JSON object into the DAW's **IDW AI STUDIO** panel, choose **REVIEW PROPOSAL**, then **APPROVE & APPLY**. The DAW validates the JSON again and will not apply it without a click. This is a local/manual handoff, **not live MCP remote control**. Mix changes still return previews only and cannot be applied through the approval panel yet.
