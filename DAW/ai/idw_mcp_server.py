@@ -5,12 +5,22 @@ No API keys, network listener, project writes, or file-content disclosure.
 Configure IDW_PROJECT_FILE to a saved IDW V14 .json project.
 """
 import json
+import math
 import os
 import sys
 from pathlib import Path
 
 PROTOCOL = "2025-03-26"
 TOOLS = [
+    {"name": "idw_stage_proposal", "description": "Stage a validated non-destructive proposal in an explicitly configured local JSON inbox; never executes it in the DAW.",
+     "inputSchema": {"type": "object", "properties": {
+         "action": {"type": "string", "enum": ["set_tempo", "add_track", "set_track_mix"]},
+         "bpm": {"type": "number", "minimum": 20, "maximum": 300},
+         "track_type": {"type": "string", "enum": ["audio", "midi"]},
+         "track_index": {"type": "integer", "minimum": 0, "maximum": 127},
+         "gain": {"type": "number", "minimum": 0, "maximum": 2},
+         "pan": {"type": "number", "minimum": -1, "maximum": 1}},
+         "required": ["action"], "additionalProperties": False}},
     {"name": "idw_session_snapshot", "description": "Read an explicitly exported sanitized DAW status JSON snapshot; not a live stream.",
      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "idw_project_status", "description": "Read BPM, meter, and track count from the configured saved IDW project (read-only).",
@@ -71,7 +81,46 @@ def session_snapshot():
             "playing": data.get("playing"), "recording": data.get("recording"),
             "tracks": tracks, "source": "explicitly-exported-status", "live": False}
 
+def stage_proposal(args):
+    action = args.get("action")
+    if action == "set_tempo" and set(args) == {"action", "bpm"}:
+        bpm = args["bpm"]
+        if type(bpm) not in (int, float) or not math.isfinite(bpm) or not 20 <= bpm <= 300:
+            raise ValueError("Invalid BPM.")
+        payload = {"type": action, "bpm": bpm}
+    elif action == "add_track" and set(args) == {"action", "track_type"}:
+        if args["track_type"] not in ("audio", "midi"):
+            raise ValueError("Invalid track type.")
+        payload = {"type": action, "track_type": args["track_type"]}
+    elif action == "set_track_mix" and set(args) == {"action", "track_index", "gain", "pan"}:
+        index, gain, pan = args["track_index"], args["gain"], args["pan"]
+        if (type(index) is not int or not 0 <= index < 128
+            or any(type(x) not in (int, float) or not math.isfinite(x) for x in (gain, pan))
+            or not 0 <= gain <= 2 or not -1 <= pan <= 1):
+            raise ValueError("Invalid track mix.")
+        payload = {"type": action, "track_index": index, "gain": gain, "pan": pan}
+    else:
+        raise ValueError("Unsupported action or extra parameters.")
+    configured = os.environ.get("IDW_PROPOSAL_INBOX")
+    if not configured:
+        raise ValueError("Set IDW_PROPOSAL_INBOX to a dedicated local JSON file path.")
+    path = Path(configured).expanduser()
+    if not path.parent.is_dir() or path.suffix.lower() != ".json" or path.is_symlink():
+        raise ValueError("Invalid proposal inbox location.")
+    # Stage only: the DAW never watches or auto-executes this file.
+    # Refuse overwrites so separate AI requests cannot silently replace one another.
+    proposal = {"format": "idw-ai-proposal-v1", "action": payload}
+    encoded = json.dumps(proposal, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    try:
+        with path.open("xb") as out:
+            out.write(encoded)
+    except FileExistsError:
+        raise ValueError("Proposal inbox already contains a pending file; review and remove it first.")
+    return {"staged": True, "applied": False, "note": "Use IMPORT JSON in IDW AI STUDIO, review and approve manually."}
+
 def dispatch(name, args):
+    if name == "idw_stage_proposal":
+        return stage_proposal(args)
     if name == "idw_session_snapshot":
         return session_snapshot()
     if name == "idw_preview_tempo":
