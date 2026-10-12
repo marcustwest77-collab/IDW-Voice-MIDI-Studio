@@ -1,6 +1,7 @@
 #include "SessionPersistence.h"
 #include "AIProposal.h"
 #include "AIStatusSnapshot.h"
+#include "MidiScheduler.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
@@ -56,6 +57,19 @@ int main(){
     !midiRestored.tracks[0].notes.empty() ||
     midiRestored.removeMidiNote(0,0))
     throw std::runtime_error("MIDI note deletion");
+ Session scheduleFixture;
+ scheduleFixture.addTrack(TrackType::midi);
+ scheduleFixture.addMidiNote(0,{60,1.0,1.0,100});
+ scheduleFixture.addMidiNote(0,{62,2.0,0.5,80});
+ const auto events=buildMidiSchedule(scheduleFixture);
+ if(events.size()!=4 || events[0].beat!=1.0 || !events[0].noteOn ||
+    events[1].beat!=2.0 || events[1].noteOn ||
+    events[2].beat!=2.0 || !events[2].noteOn ||
+    events[3].beat!=2.5 || events[3].noteOn)
+    throw std::runtime_error("MIDI playback event ordering");
+ scheduleFixture.tracks[0].mute=true;
+ if(!buildMidiSchedule(scheduleFixture).empty())
+    throw std::runtime_error("muted MIDI notes scheduled");
  Session statusFixture;statusFixture.addTrack(TrackType::audio);
  statusFixture.addClip(0,{"PRIVATE_RECORDING_PATH_DO_NOT_SHARE.wav",0,4,0});
  const auto statusJson=juce::JSON::toString(aiSessionStatus(statusFixture,true,false));
