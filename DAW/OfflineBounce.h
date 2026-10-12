@@ -77,16 +77,19 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             const double first=clip.offset+(begin-clip.start)*ratio;
             const int64_t sourceStart=(int64_t)std::floor(first);
             const int sourceCount=(int)std::ceil(first-sourceStart+(number-1)*ratio)+2;
-            juce::AudioBuffer<float> resample(2,sourceCount);
-            resample.clear();
-            clip.reader->read(&resample,0,sourceCount,sourceStart,true,true);
+            // Reuse the scratch buffer across clips and blocks rather than allocating
+            // a temporary AudioBuffer for every overlap.
+            if(scratch.getNumSamples()<sourceCount)
+                scratch.setSize(2,sourceCount,false,false,true);
+            scratch.clear(0,sourceCount);
+            clip.reader->read(&scratch,0,sourceCount,sourceStart,true,true);
             for(int i=0;i<number;++i){
                 const double at=first-sourceStart+i*ratio;
                 const int index=(int)std::floor(at);
                 const float fraction=(float)(at-index);
-                const float l=resample.getSample(0,index)*(1.0f-fraction)+resample.getSample(0,index+1)*fraction;
+                const float l=scratch.getSample(0,index)*(1.0f-fraction)+scratch.getSample(0,index+1)*fraction;
                 const int right=clip.reader->numChannels>1?1:0;
-                const float r=resample.getSample(right,index)*(1.0f-fraction)+resample.getSample(right,index+1)*fraction;
+                const float r=scratch.getSample(right,index)*(1.0f-fraction)+scratch.getSample(right,index+1)*fraction;
                 mix.addSample(0,offset+i,l*clip.left);
                 mix.addSample(1,offset+i,r*clip.right);
             }
