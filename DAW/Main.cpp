@@ -15,9 +15,10 @@ public:
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
-        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject}) addAndMakeVisible(*b);
+        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
         saveProject.setButtonText("SAVE PROJECT");
+        openProject.setButtonText("OPEN PROJECT");
         record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
         play.onClick=[this]{if(loadedCount()>0){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
@@ -25,6 +26,7 @@ public:
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
         saveProject.onClick=[this]{saveProjectFile();};
+        openProject.onClick=[this]{openProjectFile();};
         audio.onClick=[this]{addAudioTrack();refreshMixer();repaint();};
         midi.onClick=[this]{if(!playing.load())session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
@@ -71,7 +73,8 @@ public:
         midi.setBounds(controls.removeFromLeft(160).reduced(3));
         open.setBounds(controls.removeFromLeft(180).reduced(3));
         record.setBounds(controls.removeFromLeft(165).reduced(3));
-        saveProject.setBounds(controls.removeFromLeft(150).reduced(3));
+        saveProject.setBounds(controls.removeFromLeft(140).reduced(3));
+        openProject.setBounds(controls.removeFromLeft(140).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(185));
@@ -207,6 +210,58 @@ private:
         int count=0;for(auto& slot:sources)if(slot->reader)++count;
         return count;
     }
+    bool restoreProject(const juce::File& project){
+        if(playing.load() || recorder.isRecording())return false;
+        idw::daw::Session restored;
+        if(!idw::daw::loadSession(project,restored))return false;
+        // Build replacement players before replacing the current project.
+        std::vector<std::unique_ptr<AudioSlot>> staged;
+        int missing=0;
+        for(size_t index=0;index<restored.tracks.size();++index){
+            if(restored.tracks[index].type!=idw::daw::TrackType::audio)continue;
+            auto slot=std::make_unique<AudioSlot>();
+            slot->trackIndex=index;
+            if(!restored.tracks[index].clips.empty()){
+                const auto& clip=restored.tracks[index].clips.front();
+                const auto file=juce::File(juce::String(clip.sourcePath));
+                std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+                if(reader && reader->sampleRate>0){
+                    auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
+                    const double rate=source->getAudioFormatReader()->sampleRate;
+                    slot->transport.setSource(source.get(),0,nullptr,rate);
+                    slot->reader=std::move(source);
+                    slot->file=file;
+                }else ++missing;
+            }
+            if(preparedBlockSize>0){
+                slot->scratch.setSize(2,preparedBlockSize,false,true,false);
+                slot->transport.prepareToPlay(preparedBlockSize,deviceRate);
+            }
+            staged.push_back(std::move(slot));
+        }
+        for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
+        sources.clear();
+        session=std::move(restored);
+        sources=std::move(staged);
+        selectedTrack=0;sessionFrames.store(0);playheadBeats=0;
+        tempo.setValue(session.bpm,juce::dontSendNotification);
+        refreshMixer();repaint();
+        if(missing>0)juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            "Missing audio",juce::String(missing)+" audio file(s) could not be located. Their clip references remain in the project.");
+        return true;
+    }
+    void openProjectFile(){
+        if(playing.load() || recorder.isRecording())return;
+        projectChooser=std::make_unique<juce::FileChooser>("Open IDW DAW Project",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*.idwproj");
+        projectChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& picker){
+                const auto project=picker.getResult();
+                if(project.existsAsFile() && !restoreProject(project))
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Open failed",
+                        "The project is invalid or cannot be opened during playback.");
+            });
+    }
     void saveProjectFile(){
         if(recorder.isRecording())return;
         projectChooser=std::make_unique<juce::FileChooser>("Save IDW DAW Project",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW Session.idwproj"),"*.idwproj");
@@ -287,7 +342,7 @@ private:
     juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record,saveProject;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject;
     IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
