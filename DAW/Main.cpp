@@ -231,7 +231,7 @@ public:
             for(const auto& clip:track.clips){
                 const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
                 const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*12.0));
-                if(clipX>=getWidth()-25)continue;
+                if(clipX>=getWidth()-25){++renderedClipIndex;continue;}
                 g.setColour(juce::Colour(0xff89551e));
                 g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
                 if(selectedClipValid && renderedTrackIndex==selectedClipTrack && renderedClipIndex==selectedClipIndex){
