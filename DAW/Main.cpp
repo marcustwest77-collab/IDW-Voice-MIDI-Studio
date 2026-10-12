@@ -6,6 +6,7 @@
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
 #include <atomic>
+#include <thread>
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
 public:
     Workstation() {
@@ -368,9 +369,22 @@ private:
             [this](const juce::FileChooser& picker){
                 auto output=picker.getResult();if(output==juce::File{})return;
                 output=output.withFileExtension(".wav");
-                juce::String error;
-                if(!idw::daw::renderSessionWav(session,output,error,44100,masterLevel.load(),ceilingDb.load(),lowDb.load(),highDb.load()))
-                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"WAV bounce unavailable",error);
+                if(exportThread.joinable())exportThread.join();
+                const auto snapshot=session;
+                const float gain=masterLevel.load(),ceiling=ceilingDb.load(),bass=lowDb.load(),treble=highDb.load();
+                bounce.setEnabled(false);
+                exportRunning.store(true);
+                exportThread=std::thread([this,snapshot,output,gain,ceiling,bass,treble]{
+                    juce::String error;
+                    const bool ok=idw::daw::renderSessionWav(snapshot,output,error,44100,gain,ceiling,bass,treble);
+                    juce::MessageManager::callAsync([safe=juce::Component::SafePointer<Workstation>(this),ok,error]{
+                        if(!safe)return;
+                        safe->exportRunning.store(false);
+                        safe->bounce.setEnabled(true);
+                        juce::AlertWindow::showMessageBoxAsync(ok?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
+                            ok?"WAV export complete":"WAV bounce unavailable",ok?"Stereo WAV written successfully.":error);
+                    });
+                });
             });
     }
     void exportProjectFile(){
@@ -456,7 +470,9 @@ private:
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {recorder.stop();deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {if(exportThread.joinable())exportThread.join();recorder.stop();deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    std::thread exportThread;
+    std::atomic<bool> exportRunning{false};
     idw::daw::Session session;
     std::atomic<bool> playing{false};
     double playheadBeats=0;
