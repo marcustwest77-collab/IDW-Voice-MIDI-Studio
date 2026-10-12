@@ -119,3 +119,7 @@ Inbox import additionally checks the actual UTF-8 payload size after reading the
 ### Timeline editing foundation
 
 The session model now exposes validated `moveClip(trackIndex, clipIndex, newStartBeat)` and `resizeClip(trackIndex, clipIndex, newLengthBeats)` operations. Negative positions, nonpositive durations, nonfinite values, and missing clips are rejected without mutation. Persistence tests cover moving and resizing and saving the results. These are model operations for future timeline editing UI, **not yet drag handles or a complete MIDI piano roll**.
+
+### Interactive audio clip timeline (experimental)
+
+With transport stopped, drag the body of an existing audio clip to move it horizontally, or drag its rightmost 10 pixels to resize the duration. Positions and duration snap to quarter-beat increments. Edits are disabled during playback, recording or export. Dragging edits the in-memory session; use **SAVE PROJECT** to persist it. Clip overlap and crossfades are not yet managed by this interface.
