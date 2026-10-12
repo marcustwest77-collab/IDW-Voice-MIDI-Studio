@@ -21,7 +21,20 @@ int main(){
     .getNonexistentChildFile("idw-portable-test","",false);
  if(!root.createDirectory())throw std::runtime_error("test directory");
  const auto sourceAudio=root.getChildFile("source.wav");
- if(!sourceAudio.replaceWithData("IDW WAV test fixture",20))throw std::runtime_error("source fixture");
+ // Construct a genuine 16-bit PCM WAV fixture rather than copying arbitrary bytes.
+ juce::WavAudioFormat wav;
+ auto stream=std::unique_ptr<juce::FileOutputStream>(sourceAudio.createOutputStream());
+ if(!stream)throw std::runtime_error("fixture stream");
+ auto writer=std::unique_ptr<juce::AudioFormatWriter>(
+    wav.createWriterFor(stream.get(),44100.0,1,16,{},0));
+ if(!writer)throw std::runtime_error("fixture writer");
+ stream.release();
+ juce::AudioBuffer<float> audioFixture(1,4410);
+ audioFixture.clear();
+ audioFixture.setSample(0,100,0.5f);
+ const float* channels[]{audioFixture.getReadPointer(0)};
+ if(!writer->writeFromFloatArrays(channels,1,4410))throw std::runtime_error("fixture write");
+ writer.reset();
  Session portableSource;portableSource.addTrack(TrackType::audio);
  if(!portableSource.addClip(0,{sourceAudio.getFullPathName().toStdString(),4.0,8.0,0.0}))
     throw std::runtime_error("portable clip");
@@ -37,6 +50,10 @@ int main(){
  const auto relative=juce::String(reopened.tracks[0].clips[0].sourcePath);
  if(juce::File::isAbsolutePath(relative) || !moved.getChildFile(relative).existsAsFile())
     throw std::runtime_error("broken portable audio reference");
+ auto reader=std::unique_ptr<juce::AudioFormatReader>(wav.createReaderFor(
+    moved.getChildFile(relative).createInputStream().release(),true));
+ if(!reader || reader->lengthInSamples!=4410 || reader->sampleRate!=44100.0)
+    throw std::runtime_error("packaged WAV unreadable");
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
 }
