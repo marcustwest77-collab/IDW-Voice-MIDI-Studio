@@ -27,20 +27,24 @@ with tempfile.TemporaryDirectory() as folder:
         {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "idw_preview_track", "arguments": {"type": "midi"}}},
         {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "idw_preview_tempo", "arguments": {"bpm": 500}}},
         {"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "idw_preview_mix", "arguments": {"track_index": 0, "gain": 0.8, "pan": -0.3}}},
-        {"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "idw_preview_mix", "arguments": {"track_index": 0, "gain": 3.0, "pan": 0}}}
+        {"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "idw_preview_mix", "arguments": {"track_index": 0, "gain": 3.0, "pan": 0}}},
+        {"jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": {"name": "idw_analyze_project", "arguments": {}}}
     ]
     proc = subprocess.run([sys.executable, str(server)], input="\n".join(map(json.dumps, commands))+"\n",
                           capture_output=True, text=True, timeout=8,
                           env={**os.environ, "IDW_PROJECT_FILE": str(path)})
     assert proc.returncode == 0, proc.stderr
     outputs = [json.loads(line) for line in proc.stdout.splitlines()]
-    assert len(outputs) == 9
-    assert len(outputs[1]["result"]["tools"]) == 5
+    assert len(outputs) == 10
+    assert len(outputs[1]["result"]["tools"]) == 6
     assert '"bpm": 124' in outputs[2]["result"]["content"][0]["text"]
     assert "/private/do-not-expose.wav" not in proc.stdout
     assert '"applied": false' in outputs[4]["result"]["content"][0]["text"]
     assert outputs[6]["result"].get("isError") is True
     assert '"applied": false' in outputs[7]["result"]["content"][0]["text"]
     assert outputs[8]["result"].get("isError") is True
+    analysis = json.loads(outputs[9]["result"]["content"][0]["text"])
+    assert analysis["track_count"] == 1 and analysis["warnings"] == []
+    assert analysis["live"] is False and analysis["applied"] is False
     assert '"bpm": 124' in path.read_text(encoding="utf-8")
     print("IDW MCP protocol smoke tests: PASS")
