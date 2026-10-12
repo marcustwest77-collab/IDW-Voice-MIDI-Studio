@@ -169,6 +169,7 @@ public:
     }
     void mouseDown(const juce::MouseEvent& e) override {
         draggingClip=false;
+        selectedClipValid=false;
         if(playing.load() || recorder.isRecording() || exportRunning.load() ||
            aiPanel.isVisible() || connectPanel.isVisible())return;
         constexpr int top=366, height=70, left=205;
@@ -183,9 +184,11 @@ public:
             if(e.x>=x && e.x<x+w && e.y>=top+(int)ti*height+8 &&
                e.y<top+(int)(ti+1)*height-10){
                 dragTrack=ti;dragIndex=i-1;dragOriginX=e.x;
+                selectedClipTrack=ti;selectedClipIndex=i-1;selectedClipValid=true;
                 dragOriginalStart=c.startBeat;dragOriginalLength=c.lengthBeats;
                 dragResize=e.x>=x+w-10;
                 draggingClip=true;
+                repaint();
                 break;
             }
         }
@@ -216,6 +219,7 @@ public:
             g.drawText(juce::String(bar+1),x+3,top,40,30,juce::Justification::centredLeft);
         }
         int y=top+36;
+        size_t renderedTrackIndex=0;
         for(const auto& track:session.tracks){
             g.setColour(juce::Colour((y/trackHeight)%2 ? 0xff252b35 : 0xff1c222a));
             g.fillRect(20,y,getWidth()-40,trackHeight-2);
@@ -223,16 +227,23 @@ public:
             g.fillRect(20,y,5,trackHeight-2);
             g.setColour(juce::Colours::white);
             g.drawText(juce::String(track.name),35,y+10,155,35,juce::Justification::centredLeft);
+            size_t renderedClipIndex=0;
             for(const auto& clip:track.clips){
                 const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
                 const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*12.0));
                 if(clipX>=getWidth()-25)continue;
                 g.setColour(juce::Colour(0xff89551e));
                 g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
+                if(selectedClipValid && renderedTrackIndex==selectedClipTrack && renderedClipIndex==selectedClipIndex){
+                    g.setColour(juce::Colours::gold);
+                    g.drawRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX),(float)trackHeight-18,4.0f,2.0f);
+                }
+                ++renderedClipIndex;
                 g.setColour(juce::Colours::white);
                 g.drawFittedText(juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
             }
             y+=trackHeight;
+            ++renderedTrackIndex;
             if(y>getHeight()-60)break;
         }
         const int head=left+(int)(playheadBeats*12.0);
@@ -260,6 +271,8 @@ public:
     }
 private:
     bool draggingClip=false,dragResize=false;
+    bool selectedClipValid=false;
+    size_t selectedClipTrack=0,selectedClipIndex=0;
     size_t dragTrack=0,dragIndex=0;
     int dragOriginX=0;
     double dragOriginalStart=0.0,dragOriginalLength=0.0;
