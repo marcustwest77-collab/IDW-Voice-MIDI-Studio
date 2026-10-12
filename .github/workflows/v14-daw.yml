@@ -15,6 +15,6 @@ jobs:
       - name: Configure V14 DAW
         run: cmake -S . -B build-v14 -DIDW_BUILD_DAW=ON -DBUILD_TESTING=ON
       - name: Build workstation and test
-        run: cmake --build build-v14 --config Release --target IDWDAW IDWDAWSessionTests --parallel 2
+        run: cmake --build build-v14 --config Release --target IDWDAW IDWDAWSessionTests IDWDAWTimelineTests --parallel 2
       - name: Test session model
-        run: ctest --test-dir build-v14 -C Release -R IDWDAWSession --output-on-failure
+        run: ctest --test-dir build-v14 -C Release -R IDWDAW --output-on-failure
