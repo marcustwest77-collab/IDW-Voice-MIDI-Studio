@@ -5,6 +5,7 @@
 #include "SessionPersistence.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
+#include "IDWConnectPanel.h"
 #include <atomic>
 #include <thread>
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
@@ -18,13 +19,19 @@ public:
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
-        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject,&bounce,&cancelBounce}) addAndMakeVisible(*b);
+        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject,&bounce,&cancelBounce,&connectButton}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN PROJECT");
         exportProject.setButtonText("EXPORT PORTABLE");
         bounce.setButtonText("BOUNCE WAV");
         cancelBounce.setButtonText("CANCEL EXPORT");cancelBounce.setEnabled(false);
+        connectButton.setButtonText("IDW CONNECT");
+        addChildComponent(connectPanel);
+        connectButton.onClick=[this]{
+            connectPanel.setVisible(!connectPanel.isVisible());
+            connectPanel.toFront(false);
+        };
         record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
         play.onClick=[this]{if(loadedCount()>0){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
@@ -111,6 +118,7 @@ public:
         exportProject.setBounds(projectRow.removeFromLeft(180).reduced(3));
         bounce.setBounds(projectRow.removeFromLeft(145).reduced(3));
         cancelBounce.setBounds(projectRow.removeFromLeft(150).reduced(3));
+        connectButton.setBounds(projectRow.removeFromLeft(145).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(185));
@@ -131,6 +139,7 @@ public:
         auto ceilingRow=area.removeFromTop(35);
         limitLabel.setBounds(ceilingRow.removeFromLeft(145));
         ceilingControl.setBounds(ceilingRow.removeFromLeft(220));
+        connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
@@ -509,7 +518,8 @@ private:
     juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton;
+    IDWConnectPanel connectPanel;
     IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
