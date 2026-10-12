@@ -85,7 +85,8 @@ int main(){
  renderMidiSine(sineSession,bass.data(),nullptr,256,0,48000.0);
  sineSession.setTrackSynthPreset(0,2);
  renderMidiSine(sineSession,lead.data(),nullptr,256,0,48000.0);
- if(bass==left || lead==left || bass==lead)
+ if(std::all_of(bass.begin(),bass.end(),[](float x){return x==0.0f;}) ||
+    bass==left || lead==left || bass==lead)
     throw std::runtime_error("synth presets should yield distinct audio");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
