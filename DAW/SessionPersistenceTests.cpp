@@ -34,6 +34,24 @@ int main(){
     throw std::runtime_error("accepted unsafe AI mix");
  if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_track_mix","track_index":-1,"gain":1,"pan":0}})"),action))
     throw std::runtime_error("accepted negative track index");
+ Session midiFixture;
+ if(!midiFixture.addTrack(TrackType::midi) ||
+    !midiFixture.addMidiNote(0,{64,2.0,1.5,93}) ||
+    !midiFixture.moveMidiNote(0,0,3.0,67) ||
+    !midiFixture.resizeMidiNote(0,0,0.75))
+    throw std::runtime_error("MIDI note creation/editing");
+ if(midiFixture.addMidiNote(0,{128,0,1,100}) ||
+    midiFixture.moveMidiNote(0,0,-1,64) ||
+    midiFixture.resizeMidiNote(0,0,0) ||
+    midiFixture.tracks[0].notes.size()!=1)
+    throw std::runtime_error("Invalid MIDI edit accepted");
+ Session midiRestored;
+ if(!sessionFromJson(sessionToJson(midiFixture),midiRestored) ||
+    midiRestored.tracks.size()!=1 || midiRestored.tracks[0].notes.size()!=1 ||
+    midiRestored.tracks[0].notes[0].pitch!=67 ||
+    midiRestored.tracks[0].notes[0].startBeat!=3 ||
+    midiRestored.tracks[0].notes[0].lengthBeats!=0.75)
+    throw std::runtime_error("MIDI notes persistence");
  Session statusFixture;statusFixture.addTrack(TrackType::audio);
  statusFixture.addClip(0,{"PRIVATE_RECORDING_PATH_DO_NOT_SHARE.wav",0,4,0});
  const auto statusJson=juce::JSON::toString(aiSessionStatus(statusFixture,true,false));
