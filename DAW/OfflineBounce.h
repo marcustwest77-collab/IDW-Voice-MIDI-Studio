@@ -80,6 +80,10 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             // Linear interpolation at the source sample rate, with one extra frame
             // to interpolate across export block boundaries.
             const double ratio=clip.sourceRate/sampleRate;
+            if(!std::isfinite(ratio) || ratio<=0.0 || ratio>1000.0){
+                error="Unsupported source sample rate.";
+                writer.reset();destination.deleteFile();return false;
+            }
             const double first=clip.offset+(begin-clip.start)*ratio;
             const int64_t sourceStart=(int64_t)std::floor(first);
             const int sourceCount=(int)std::ceil(first-sourceStart+(number-1)*ratio)+2;
