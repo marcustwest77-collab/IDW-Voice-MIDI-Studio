@@ -1,5 +1,6 @@
 #include "SessionPersistence.h"
 #include "AIProposal.h"
+#include "AIStatusSnapshot.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
@@ -29,6 +30,12 @@ int main(){
     throw std::runtime_error("accepted unsafe AI mix");
  if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_track_mix","track_index":-1,"gain":1,"pan":0}})"),action))
     throw std::runtime_error("accepted negative track index");
+ Session statusFixture;statusFixture.addTrack(TrackType::audio);
+ statusFixture.addClip(0,{"PRIVATE_RECORDING_PATH_DO_NOT_SHARE.wav",0,4,0});
+ const auto statusJson=juce::JSON::toString(aiSessionStatus(statusFixture,true,false));
+ if(statusJson.contains("PRIVATE_RECORDING_PATH_DO_NOT_SHARE") ||
+    !statusJson.contains("clipCount") || !statusJson.contains("playing"))
+    throw std::runtime_error("AI snapshot leaked source paths or missed state");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
