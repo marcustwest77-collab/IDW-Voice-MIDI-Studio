@@ -85,3 +85,5 @@ The MCP tools `idw_preview_tempo` and `idw_preview_track` now return `approval_j
 The **PASTE JSON** button imports a proposal from the system clipboard. Pasting disables approval until **REVIEW PROPOSAL** is selected again, and changes still require an explicit **APPROVE & APPLY** click.
 
 The MCP `idw_preview_mix` tool now returns compatible `approval_json` for `set_track_mix`. The AI STUDIO panel can review and apply track gain (0–2) and pan (-1 to 1) to an existing track after a user click. Track indices are zero-based; changes are rejected while recording, playing, or exporting. No network control or automatic edits have been enabled.
+
+AI approval safety: immediately before execution, IDW AI STUDIO reparses the editor JSON and checks that the action and all parameters still match the previously reviewed proposal. Changed or invalid proposals must be reviewed again.
