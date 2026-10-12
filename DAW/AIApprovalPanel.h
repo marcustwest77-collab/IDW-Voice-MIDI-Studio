@@ -42,7 +42,10 @@ public:
             const auto description=parsed.kind==idw::daw::AIProposal::Kind::tempo
                 ? "Set tempo to "+juce::String(parsed.bpm,1)+" BPM"
                 : parsed.kind==idw::daw::AIProposal::Kind::addAudioTrack
-                    ? "Add ONE audio track" : "Add ONE MIDI track";
+                    ? "Add ONE audio track"
+                    : parsed.kind==idw::daw::AIProposal::Kind::addMidiTrack
+                        ? "Add ONE MIDI track"
+                        : "Set track "+juce::String((int)parsed.trackIndex+1)+" volume to "+juce::String(parsed.gain,2)+" and pan to "+juce::String(parsed.pan,2);
             feedback.setText("REVIEW: "+description,juce::dontSendNotification);
             apply.setEnabled(true);
         };
