@@ -47,9 +47,12 @@ int main(){
     midiFixture.resizeMidiNote(0,0,0) ||
     midiFixture.tracks[0].notes.size()!=1)
     throw std::runtime_error("Invalid MIDI edit accepted");
+ if(!midiFixture.setTrackSynthPreset(0,2) || midiFixture.setTrackSynthPreset(0,3))
+    throw std::runtime_error("MIDI preset validation");
  Session midiRestored;
  if(!sessionFromJson(sessionToJson(midiFixture),midiRestored) ||
     midiRestored.tracks.size()!=1 || midiRestored.tracks[0].notes.size()!=1 ||
+    midiRestored.tracks[0].synthPreset!=2 ||
     midiRestored.tracks[0].notes[0].pitch!=67 ||
     midiRestored.tracks[0].notes[0].startBeat!=3 ||
     midiRestored.tracks[0].notes[0].lengthBeats!=0.75)
@@ -78,8 +81,10 @@ int main(){
  if(std::all_of(left.begin(),left.end(),[](float x){return x==0.0f;}) ||
     left!=right)throw std::runtime_error("MIDI sine render silent or wrong stereo");
  std::vector<float> bass(256,0.0f),lead(256,0.0f);
- renderMidiSine(sineSession,bass.data(),nullptr,256,0,48000.0,SynthPreset::bass);
- renderMidiSine(sineSession,lead.data(),nullptr,256,0,48000.0,SynthPreset::lead);
+ sineSession.setTrackSynthPreset(0,1);
+ renderMidiSine(sineSession,bass.data(),nullptr,256,0,48000.0);
+ sineSession.setTrackSynthPreset(0,2);
+ renderMidiSine(sineSession,lead.data(),nullptr,256,0,48000.0);
  if(bass==left || lead==left || bass==lead)
     throw std::runtime_error("synth presets should yield distinct audio");
  sineSession.tracks[0].mute=true;
