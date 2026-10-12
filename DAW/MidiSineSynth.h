@@ -44,14 +44,16 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
             const double freq=440.0*std::pow(2.0,(n.pitch-69)/12.0);
             const double increment=6.283185307179586*freq/sampleRate;
             const float velocity=n.velocity/127.0f;
+            // Calculate per-note constants outside the sample loop.
+            const auto total=noteEnd-noteStart;
+            const auto attackFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthAttackMs/1000.0));
+            const auto releaseFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthReleaseMs/1000.0));
+            const auto preset=static_cast<SynthPreset>(std::clamp(t.synthPreset,0,2));
             for(auto i=first;i<last;++i){
                 const auto offset=(startFrame+i-noteStart);
-                const auto total=noteEnd-noteStart;
-                const auto attackFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthAttackMs/1000.0));
-                const auto releaseFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthReleaseMs/1000.0));
                 const float fade=std::clamp(std::min((double)offset/attackFrames,
                                          (double)(total-1-offset)/releaseFrames),0.0,1.0);
-                const float wave=synthWave(static_cast<SynthPreset>(std::clamp(t.synthPreset,0,2)),(double)offset*increment)*velocity*std::max(0.0f,fade);
+                const float wave=synthWave(preset,(double)offset*increment)*velocity*std::max(0.0f,fade);
                 left[i]+=wave*l;
                 if(right)right[i]+=wave*r;
             }
