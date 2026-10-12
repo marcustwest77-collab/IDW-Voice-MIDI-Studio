@@ -7,6 +7,7 @@
 class IDWAIApprovalPanel final : public juce::Component {
 public:
     std::function<bool(const idw::daw::AIProposal&)> onApproved;
+    std::function<juce::String()> getSanitizedStatus;
     IDWAIApprovalPanel(){
         heading.setText("IDW AI STUDIO  |  REVIEW PROPOSED ACTION",juce::dontSendNotification);
         heading.setColour(juce::Label::textColourId,juce::Colours::gold);
@@ -15,6 +16,14 @@ public:
         editor.setReturnKeyStartsNewLine(true);
         editor.setText(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":140}})");
         addAndMakeVisible(editor);
+        copyStatus.setButtonText("COPY STATUS");
+        addAndMakeVisible(copyStatus);
+        copyStatus.onClick=[this]{
+            if(getSanitizedStatus){
+                juce::SystemClipboard::copyTextToClipboard(getSanitizedStatus());
+                feedback.setText("Session status copied (no audio paths).",juce::dontSendNotification);
+            }
+        };
         paste.setButtonText("PASTE JSON");
         addAndMakeVisible(paste);
         paste.onClick=[this]{
@@ -72,9 +81,10 @@ public:
         editor.setBounds(a.removeFromTop(94));
         a.removeFromTop(8);
         auto row=a.removeFromTop(34);
-        paste.setBounds(row.removeFromLeft(120).reduced(2));
-        review.setBounds(row.removeFromLeft(185).reduced(2));
-        apply.setBounds(row.removeFromLeft(170).reduced(2));
+        copyStatus.setBounds(row.removeFromLeft(100).reduced(2));
+        paste.setBounds(row.removeFromLeft(108).reduced(2));
+        review.setBounds(row.removeFromLeft(165).reduced(2));
+        apply.setBounds(row.removeFromLeft(150).reduced(2));
         a.removeFromTop(6);
         feedback.setBounds(a.removeFromTop(35));
     }
@@ -85,5 +95,5 @@ private:
     idw::daw::AIProposal pending{idw::daw::AIProposal::Kind::tempo};
     juce::Label heading,feedback;
     juce::TextEditor editor;
-    juce::TextButton paste,review,apply;
+    juce::TextButton copyStatus,paste,review,apply;
 };
