@@ -48,6 +48,10 @@ with tempfile.TemporaryDirectory() as folder:
         "format": "idw-ai-proposal-v1", "action": {"type": "add_track", "track_type": "midi"}}
     assert outputs[6]["result"].get("isError") is True
     assert '"applied": false' in outputs[7]["result"]["content"][0]["text"]
+    mix_preview = json.loads(outputs[7]["result"]["content"][0]["text"])
+    assert mix_preview["approval_json"] == {
+        "format": "idw-ai-proposal-v1", "action": {
+            "type": "set_track_mix", "track_index": 0, "gain": 0.8, "pan": -0.3}}
     assert outputs[8]["result"].get("isError") is True
     analysis = json.loads(outputs[9]["result"]["content"][0]["text"])
     assert analysis["track_count"] == 1 and analysis["warnings"] == []
