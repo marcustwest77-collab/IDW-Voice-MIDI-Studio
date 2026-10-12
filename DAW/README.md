@@ -161,3 +161,7 @@ Keys, Bass, and Lead are now saved separately on each MIDI track in V14 session 
 ### MIDI synth envelope foundation
 
 Each MIDI track now stores attack and release durations in milliseconds (0–2000 ms, defaults 5 ms). The oscillator shapes note onset and ending with these values, and sessions persist them with backward-compatible defaults. This is an **engine and project-model update**; on-screen attack/release controls have not yet been added. Automated tests cover accepted values, rejected values and save/load.
+
+### On-screen synth envelope controls
+
+Select a MIDI track and use the **ATTACK ms** and **RELEASE ms** sliders to set that track's envelope (0–2000 ms). The controls load the selected track's saved values and edits are refused during playback, recording and export. Save the session to persist changes. These sliders remain subject to hardware validation; playback-time editing is disabled.
