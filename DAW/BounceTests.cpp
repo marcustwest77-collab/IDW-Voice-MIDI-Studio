@@ -101,6 +101,24 @@ int main(){
     std::abs(boundaryAudio.getSample(1,1025)+0.2f)>0.01f)
     throw std::runtime_error("clip entry not sample aligned");
  boundaryReader.reset();
+ // A source offset near end-of-file must contribute valid audio first,
+ // then silence after the available source frames are exhausted.
+ const auto tailOutput=root.getChildFile("tail.wav");
+ Session tail;tail.setTempo(120);tail.addTrack(TrackType::audio);
+ if(!tail.addClip(0,{stereo.getFullPathName().toStdString(),0.0,0.2,0.09}))
+    throw std::runtime_error("tail clip");
+ if(!renderSessionWav(tail,tailOutput,error))
+    throw std::runtime_error("tail bounce: "+error.toStdString());
+ auto tailReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(tailOutput.createInputStream().release(),true));
+ if(!tailReader)throw std::runtime_error("tail reader");
+ juce::AudioBuffer<float> tailAudio(2,4410);
+ if(!tailReader->read(&tailAudio,0,4410,0,true,true))
+    throw std::runtime_error("tail read");
+ if(std::abs(tailAudio.getSample(0,100)-0.2f)>0.01f ||
+    std::abs(tailAudio.getSample(0,2000))>0.0001f)
+    throw std::runtime_error("end-of-source padding incorrect");
+ tailReader.reset();
  // Cancellation must return failure without leaving an incomplete WAV behind.
  const auto canceledOutput=root.getChildFile("canceled.wav");
  std::atomic<float> progress{0.0f};
