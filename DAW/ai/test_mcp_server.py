@@ -17,6 +17,12 @@ with tempfile.TemporaryDirectory() as folder:
                     "solo": False, "gain": 1.0, "pan": 0.0,
                     "clips": [{"sourcePath": "/private/do-not-expose.wav", "startBeat": 0, "lengthBeats": 4}]}]
     }), encoding="utf-8")
+    status_path = Path(folder) / "status.json"
+    status_path.write_text(json.dumps({"format": "idw-ai-status-v1", "bpm": 133,
+        "numerator": 4, "denominator": 4, "playing": False, "recording": False,
+        "tracks": [{"name": "Vocal", "type": "audio", "gain": 0.8, "pan": 0,
+                    "mute": False, "solo": False, "clipCount": 1,
+                    "sourcePath": "/secret/not-for-ai.wav"}]}), encoding="utf-8")
     commands = [
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
         {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
@@ -28,15 +34,16 @@ with tempfile.TemporaryDirectory() as folder:
         {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "idw_preview_tempo", "arguments": {"bpm": 500}}},
         {"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "idw_preview_mix", "arguments": {"track_index": 0, "gain": 0.8, "pan": -0.3}}},
         {"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": "idw_preview_mix", "arguments": {"track_index": 0, "gain": 3.0, "pan": 0}}},
-        {"jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": {"name": "idw_analyze_project", "arguments": {}}}
+        {"jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": {"name": "idw_analyze_project", "arguments": {}}},
+        {"jsonrpc": "2.0", "id": 11, "method": "tools/call", "params": {"name": "idw_session_snapshot", "arguments": {}}}
     ]
     proc = subprocess.run([sys.executable, str(server)], input="\n".join(map(json.dumps, commands))+"\n",
                           capture_output=True, text=True, timeout=8,
-                          env={**os.environ, "IDW_PROJECT_FILE": str(path)})
+                          env={**os.environ, "IDW_PROJECT_FILE": str(path), "IDW_STATUS_FILE": str(status_path)})
     assert proc.returncode == 0, proc.stderr
     outputs = [json.loads(line) for line in proc.stdout.splitlines()]
-    assert len(outputs) == 10
-    assert len(outputs[1]["result"]["tools"]) == 6
+    assert len(outputs) == 11
+    assert len(outputs[1]["result"]["tools"]) == 7
     assert '"bpm": 124' in outputs[2]["result"]["content"][0]["text"]
     assert "/private/do-not-expose.wav" not in proc.stdout
     assert '"applied": false' in outputs[4]["result"]["content"][0]["text"]
@@ -56,5 +63,8 @@ with tempfile.TemporaryDirectory() as folder:
     analysis = json.loads(outputs[9]["result"]["content"][0]["text"])
     assert analysis["track_count"] == 1 and analysis["warnings"] == []
     assert analysis["live"] is False and analysis["applied"] is False
+    snapshot = json.loads(outputs[10]["result"]["content"][0]["text"])
+    assert snapshot["bpm"] == 133 and snapshot["live"] is False
+    assert "/secret/not-for-ai.wav" not in proc.stdout
     assert '"bpm": 124' in path.read_text(encoding="utf-8")
     print("IDW MCP protocol smoke tests: PASS")
