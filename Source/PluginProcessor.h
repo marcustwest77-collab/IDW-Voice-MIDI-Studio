@@ -11,6 +11,7 @@
 #include "TakeArchive.h"
 #include "StudioSynth.h"
 #include "RetrospectiveCapture.h"
+#include "MidiNoteLedger.h"
 class IDWVoiceMIDIStudioAudioProcessor : public juce::AudioProcessor {
 public:
     IDWVoiceMIDIStudioAudioProcessor();
@@ -65,6 +66,7 @@ private:
     void updateHarmony(juce::MidiBuffer&,int);
     void stopHarmony(juce::MidiBuffer&,int);
     idw::HarmonyNotes heldHarmony;
+    idw::MidiNoteLedger midiLedger;
     void allOff(juce::MidiBuffer&,int);
     void negotiateBend(juce::MidiBuffer&,int,int,int);
     idw::StudioSynth studioSynth;
