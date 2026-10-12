@@ -18,3 +18,5 @@ jobs:
         run: cmake --build build-v14 --config Release --target IDWDAW IDWDAWSessionTests IDWDAWTimelineTests IDWDAWPersistenceTests IDWDAWBounceTests --parallel 2
       - name: Test session model
         run: ctest --test-dir build-v14 -C Release -R IDWDAW --output-on-failure
+      - name: Test local AI MCP protocol
+        run: python DAW/ai/test_mcp_server.py
