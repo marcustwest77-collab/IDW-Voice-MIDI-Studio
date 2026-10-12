@@ -279,6 +279,30 @@ int main(){
     std::abs(stressSamples.getSample(0,atSeconds(4.25))-0.25f)>0.01f)
     throw std::runtime_error("stress multitrack timing or level mismatch");
  stressReader.reset();
+ // A 30-second export exercises sustained processing with multiple clips.
+ // Keep this bounded for CI while testing substantially more blocks.
+ Session extended;extended.setTempo(120);
+ for(int track=0;track<4;++track){
+    if(!extended.addTrack(TrackType::audio))
+        throw std::runtime_error("extended track");
+    for(int beat=0;beat<56;beat+=4)
+        if(!extended.addClip((size_t)track,{
+           longInput.getFullPathName().toStdString(),
+           (double)(beat+track),2.0,0.0}))
+            throw std::runtime_error("extended clip");
+ }
+ std::atomic<float> extendedProgress{0.0f};
+ const auto extendedOutput=root.getChildFile("extended-export.wav");
+ if(!renderSessionWav(extended,extendedOutput,error,44100,1.0f,-0.1f,
+                      0.0f,0.0f,&extendedProgress))
+    throw std::runtime_error("extended bounce: "+error.toStdString());
+ auto extendedReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(extendedOutput.createInputStream().release(),true));
+ // Final track begins at beat 55, ending at beat 57 = 28.5 seconds.
+ if(!extendedReader || extendedReader->lengthInSamples!=1256850 ||
+    std::abs(extendedProgress.load()-1.0f)>0.00001f)
+    throw std::runtime_error("extended export duration or progress");
+ extendedReader.reset();
  // The two-band master tone must modify low-frequency content predictably.
  const auto bassOutput=root.getChildFile("bass-boost.wav");
  if(!renderSessionWav(stereoSession,bassOutput,error,44100,1.0f,-0.1f,6.0f,0.0f))
