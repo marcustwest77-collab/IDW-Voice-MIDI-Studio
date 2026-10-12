@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory() as folder:
         "numerator": 4, "denominator": 4,
         "tracks": [{"name": "Vocal", "type": "audio", "mute": False,
                     "solo": False, "gain": 1.0, "pan": 0.0,
-                    "clips": [{"sourcePath": "/private/do-not-expose.wav"}]}]
+                    "clips": [{"sourcePath": "/private/do-not-expose.wav", "startBeat": 0, "lengthBeats": 4}]}]
     }), encoding="utf-8")
     commands = [
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
