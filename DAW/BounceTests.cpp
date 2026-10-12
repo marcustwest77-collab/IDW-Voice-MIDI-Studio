@@ -10,13 +10,13 @@ int main(){
  juce::WavAudioFormat wav;
  auto stream=std::unique_ptr<juce::FileOutputStream>(input.createOutputStream());
  if(!stream)throw std::runtime_error("input stream");
- auto writer=std::unique_ptr<juce::AudioFormatWriter>(wav.createWriterFor(stream.get(),44100.0,1,16,{},0));
+ auto writer=std::unique_ptr<juce::AudioFormatWriter>(wav.createWriterFor(stream.get(),48000.0,1,16,{},0));
  if(!writer)throw std::runtime_error("input writer");
  stream.release();
- juce::AudioBuffer<float> audio(1,4410);audio.clear();
- for(int i=0;i<4410;++i)audio.setSample(0,i,0.25f);
+ juce::AudioBuffer<float> audio(1,4800);audio.clear();
+ for(int i=0;i<4800;++i)audio.setSample(0,i,0.25f);
  const float* ptrs[]{audio.getReadPointer(0)};
- if(!writer->writeFromFloatArrays(ptrs,1,4410))throw std::runtime_error("write input");
+ if(!writer->writeFromFloatArrays(ptrs,1,4800))throw std::runtime_error("write input");
  writer.reset();
  Session session;session.setTempo(120);session.addTrack(TrackType::audio);
  if(!session.addClip(0,{input.getFullPathName().toStdString(),1.0,0.2,0.0}))
