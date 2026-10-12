@@ -39,7 +39,13 @@ public:
         paste.setButtonText("PASTE JSON");
         addAndMakeVisible(paste);
         paste.onClick=[this]{
-            editor.setText(juce::SystemClipboard::getTextFromClipboard());
+            const auto incoming=juce::SystemClipboard::getTextFromClipboard();
+            if(incoming.length()>4096){
+                apply.setEnabled(false);
+                feedback.setText("Clipboard proposal exceeds 4 KB limit.",juce::dontSendNotification);
+                return;
+            }
+            editor.setText(incoming);
             apply.setEnabled(false);
         };
         review.setButtonText("REVIEW PROPOSAL");
@@ -53,6 +59,11 @@ public:
         editor.onTextChange=[this]{apply.setEnabled(false);feedback.setText(
             "Review the updated proposal before approval.",juce::dontSendNotification);};
         review.onClick=[this]{
+            if(editor.getText().length()>4096){
+                apply.setEnabled(false);
+                feedback.setText("Proposal exceeds 4 KB limit.",juce::dontSendNotification);
+                return;
+            }
             idw::daw::AIProposal parsed{idw::daw::AIProposal::Kind::tempo};
             if(!idw::daw::parseAIProposal(juce::JSON::parse(editor.getText()),parsed)){
                 apply.setEnabled(false);
