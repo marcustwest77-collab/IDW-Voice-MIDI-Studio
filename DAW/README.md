@@ -147,3 +147,5 @@ MIDI note selection: click an existing note to highlight it gold and focus the p
 ### Audible MIDI preview (experimental)
 
 The built-in sine oscillator now renders piano-roll MIDI notes through the DAW audio callback during PLAY, including MIDI-only sessions. Notes follow pitch, duration, velocity and track gain/pan/mute/solo. This is a basic sound preview, **not yet VST3/AU hosting, MIDI device output, or a full polyphonic synth**. The prototype uses direct note rendering without allocation, and still needs latency, CPU-load and real hardware testing.
+
+Synth renderer safety: MIDI note times are checked before conversion to absolute sample-frame indices so malformed or extremely long note data cannot overflow those conversions. The synth still requires hardware and performance testing.
