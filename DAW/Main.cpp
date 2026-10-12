@@ -2,6 +2,7 @@
 #include "SessionModel.h"
 #include "TimelineMath.h"
 #include "TakeRecorder.h"
+#include "SessionPersistence.h"
 #include <atomic>
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
 public:
@@ -14,14 +15,16 @@ public:
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
-        for(auto* b:{&play,&stop,&audio,&midi,&open,&record}) addAndMakeVisible(*b);
+        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
+        saveProject.setButtonText("SAVE PROJECT");
         record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
         play.onClick=[this]{if(loadedCount()>0){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
         stop.onClick=[this]{if(recorder.isRecording())toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;repaint();};
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
+        saveProject.onClick=[this]{saveProjectFile();};
         audio.onClick=[this]{addAudioTrack();refreshMixer();repaint();};
         midi.onClick=[this]{if(!playing.load())session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
@@ -68,6 +71,7 @@ public:
         midi.setBounds(controls.removeFromLeft(160).reduced(3));
         open.setBounds(controls.removeFromLeft(180).reduced(3));
         record.setBounds(controls.removeFromLeft(165).reduced(3));
+        saveProject.setBounds(controls.removeFromLeft(150).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(185));
@@ -203,6 +207,17 @@ private:
         int count=0;for(auto& slot:sources)if(slot->reader)++count;
         return count;
     }
+    void saveProjectFile(){
+        if(recorder.isRecording())return;
+        projectChooser=std::make_unique<juce::FileChooser>("Save IDW DAW Project",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW Session.idwproj"),"*.idwproj");
+        projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+            [this](const juce::FileChooser& picker){
+                const auto file=picker.getResult();
+                if(file==juce::File{})return;
+                if(!idw::daw::saveSession(session,file.withFileExtension(".idwproj")))
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save failed","Could not write IDW project.");
+            });
+    }
     bool importTake(const juce::File& take){
         if(!take.existsAsFile() || playing.load())return false;
         std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(take));
@@ -272,14 +287,14 @@ private:
     juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject;
     IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
     double deviceRate=48000.0;
     int preparedBlockSize=0;
     std::vector<std::unique_ptr<AudioSlot>> sources;
-    std::unique_ptr<juce::FileChooser> chooser;
+    std::unique_ptr<juce::FileChooser> chooser,projectChooser;
     juce::Slider tempo;
 };
 class DAWApplication final : public juce::JUCEApplication {
