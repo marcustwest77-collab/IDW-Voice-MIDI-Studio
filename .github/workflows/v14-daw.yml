@@ -1,0 +1,20 @@
+name: V14 DAW Foundation Build
+on:
+  push:
+    branches: [v14-daw-foundation]
+  workflow_dispatch:
+jobs:
+  foundation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure V14 DAW
+        run: cmake -S . -B build-v14 -DIDW_BUILD_DAW=ON -DBUILD_TESTING=ON
+      - name: Build workstation and test
+        run: cmake --build build-v14 --config Release --target IDWDAW IDWDAWSessionTests --parallel 2
+      - name: Test session model
+        run: ctest --test-dir build-v14 -C Release -R IDWDAWSession --output-on-failure
