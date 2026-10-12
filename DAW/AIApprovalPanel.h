@@ -51,6 +51,16 @@ public:
         };
         apply.onClick=[this]{
             apply.setEnabled(false); // Single use; cannot be executed twice.
+            // Reparse the exact text at approval time: never execute a stale
+            // proposal if the editor was changed after review.
+            idw::daw::AIProposal current{idw::daw::AIProposal::Kind::tempo};
+            if(!idw::daw::parseAIProposal(juce::JSON::parse(editor.getText()),current)
+               || current.kind!=pending.kind || current.bpm!=pending.bpm
+               || current.trackIndex!=pending.trackIndex
+               || current.gain!=pending.gain || current.pan!=pending.pan){
+                feedback.setText("Proposal changed: review again.",juce::dontSendNotification);
+                return;
+            }
             const bool applied=onApproved && onApproved(pending);
             feedback.setText(applied?"Applied to this session.":"Action rejected: stop playback/recording or check track capacity.",
                              juce::dontSendNotification);
