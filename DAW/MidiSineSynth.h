@@ -11,8 +11,8 @@ inline float synthWave(SynthPreset preset,double phase,double fundamentalHz,doub
     // unrelated lower pitches on devices with lower sample rates.
     const double nyquist=sampleRate*0.5;
     const float fundamental=(float)std::sin(phase);
-    const bool second=2.0*fundamentalHz<nyquist;
-    const bool third=3.0*fundamentalHz<nyquist;
+    const bool second=fundamentalHz<nyquist/2.0;
+    const bool third=fundamentalHz<nyquist/3.0;
     if(preset==SynthPreset::bass)
         return (second?0.8f:1.0f)*fundamental+
                (second?0.2f*(float)std::sin(2.0*phase):0.0f);
