@@ -62,6 +62,13 @@ public:
         addAndMakeVisible(previousTrack);addAndMakeVisible(nextTrack);
         previousTrack.onClick=[this]{selectTrack(-1);};
         nextTrack.onClick=[this]{selectTrack(1);};
+        masterLabel.setText("MASTER VOL",juce::dontSendNotification);
+        addAndMakeVisible(masterLabel);
+        masterGain.setRange(0.0,1.5,0.01);
+        masterGain.setValue(1.0);
+        masterGain.setTextBoxStyle(juce::Slider::TextBoxRight,false,55,25);
+        addAndMakeVisible(masterGain);
+        masterGain.onValueChange=[this]{masterLevel.store((float)masterGain.getValue(),std::memory_order_relaxed);};
         refreshMixer();
     }
     void resized() override {
@@ -89,11 +96,14 @@ public:
         soloControl.setBounds(mixRow.removeFromLeft(75));
         previousTrack.setBounds(mixRow.removeFromLeft(100));
         nextTrack.setBounds(mixRow.removeFromLeft(100));
+        auto masterRow=area.removeFromTop(38);
+        masterLabel.setBounds(masterRow.removeFromLeft(115));
+        masterGain.setBounds(masterRow.removeFromLeft(260));
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
         const auto rect=getLocalBounds().reduced(20);
-        const int top=215, trackHeight=70, left=205;
+        const int top=255, trackHeight=70, left=205;
         g.setColour(juce::Colour(0xff1b222b));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
@@ -164,6 +174,7 @@ private:
             for(int channel=0;channel<info.buffer->getNumChannels();++channel)
                 info.buffer->addFrom(channel,info.startSample+window.offset,slot->scratch,channel,0,window.frames,channel==0?leftGain:rightGain);
         }
+        info.buffer->applyGain(info.startSample,info.numSamples,masterLevel.load(std::memory_order_relaxed));
         sessionFrames.fetch_add(info.numSamples,std::memory_order_relaxed);
     }
     void releaseResources() override {
@@ -367,7 +378,9 @@ private:
     double playheadBeats=0;
     double takeStartBeat=0.0;
     juce::Label title,tempoLabel,gainLabel,panLabel;
-    juce::Slider gainControl,panControl;
+    juce::Slider gainControl,panControl,masterGain;
+    juce::Label masterLabel;
+    std::atomic<float> masterLevel{1.0f};
     juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
