@@ -56,6 +56,15 @@ public:
             g.fillRect(20,y,5,trackHeight-2);
             g.setColour(juce::Colours::white);
             g.drawText(juce::String(track.name),35,y+10,155,35,juce::Justification::centredLeft);
+            for(const auto& clip:track.clips){
+                const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
+                const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*12.0));
+                if(clipX>=getWidth()-25)continue;
+                g.setColour(juce::Colour(0xff89551e));
+                g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
+                g.setColour(juce::Colours::white);
+                g.drawFittedText(juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
+            }
             y+=trackHeight;
             if(y>getHeight()-60)break;
         }
@@ -82,10 +91,12 @@ private:
         juce::AudioTransportSource transport;
         std::unique_ptr<juce::AudioFormatReaderSource> reader;
         juce::File file;
+        size_t trackIndex=0;
     };
     void addAudioTrack(){
         if(!session.addTrack(idw::daw::TrackType::audio))return;
         auto slot=std::make_unique<AudioSlot>();
+        slot->trackIndex=session.tracks.size()-1;
         mixer.addInputSource(&slot->transport,false);
         sources.push_back(std::move(slot));
     }
@@ -106,6 +117,8 @@ private:
             const auto sourceRate=source->getAudioFormatReader()->sampleRate;
             target->transport.setSource(source.get(),0,nullptr,sourceRate);
             target->file=file;target->reader=std::move(source);
+            session.addClip(target->trackIndex,{file.getFullPathName().toStdString(),0.0,
+                sourceRate>0 ? (double)target->reader->getAudioFormatReader()->lengthInSamples/sourceRate*session.bpm/60.0 : 0.0,0.0});
             playing=false;playheadBeats=0;repaint();
         });
     }
