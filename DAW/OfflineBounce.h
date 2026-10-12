@@ -48,7 +48,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 formats.createReaderFor(juce::File(juce::String(clip.sourcePath))));
             if(!reader){error="Missing or unsupported audio: "+juce::String(clip.sourcePath);writer.reset();destination.deleteFile();return false;}
             if(std::abs(reader->sampleRate-sampleRate)>0.001){
-                error="Bounce currently requires source audio at the export sample rate.";
+                error="Bounce requires 44.1 kHz source audio; resampling is not available yet.";
                 writer.reset();destination.deleteFile();return false;
             }
             const int64_t start=(int64_t)std::llround(clip.startBeat*60.0/session.bpm*sampleRate);
