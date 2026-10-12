@@ -6,10 +6,20 @@
 namespace idw::daw {
 // Three lightweight oscillator timbres. MIDI note timing stays unchanged.
 enum class SynthPreset { keys, bass, lead };
-inline float synthWave(SynthPreset preset,double phase){
+inline float synthWave(SynthPreset preset,double phase,double fundamentalHz,double sampleRate){
+    // Exclude overtones at or above Nyquist to avoid their folding into
+    // unrelated lower pitches on devices with lower sample rates.
+    const double nyquist=sampleRate*0.5;
     const float fundamental=(float)std::sin(phase);
-    if(preset==SynthPreset::bass)return 0.8f*fundamental+0.2f*(float)std::sin(phase*2.0);
-    if(preset==SynthPreset::lead)return 0.6f*fundamental+0.3f*(float)std::sin(phase*2.0)+0.1f*(float)std::sin(phase*3.0);
+    const bool second=2.0*fundamentalHz<nyquist;
+    const bool third=3.0*fundamentalHz<nyquist;
+    if(preset==SynthPreset::bass)
+        return (second?0.8f:1.0f)*fundamental+
+               (second?0.2f*(float)std::sin(2.0*phase):0.0f);
+    if(preset==SynthPreset::lead)
+        return (third?0.6f:(second?0.75f:1.0f))*fundamental+
+               (second?(third?0.3f:0.25f)*(float)std::sin(2.0*phase):0.0f)+
+               (third?0.1f*(float)std::sin(3.0*phase):0.0f);
     return fundamental;
 }
 
@@ -73,7 +83,7 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
                 const auto offset=(startFrame+i-noteStart);
                 const float fade=std::clamp(std::min((double)offset/attackFrames,
                                          (double)(total-1-offset)/releaseFrames),0.0,1.0);
-                const float wave=synthWave(preset,(double)offset*increment)*velocity*std::max(0.0f,fade);
+                const float wave=synthWave(preset,(double)offset*increment,freq,sampleRate)*velocity*std::max(0.0f,fade);
                 left[i]+=wave*l;
                 if(right)right[i]+=wave*r;
             }
