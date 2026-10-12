@@ -19,7 +19,7 @@ public:
         stop.onClick=[this]{for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;repaint();};
         open.onClick=[this]{loadAudio();};
         audio.onClick=[this]{addAudioTrack();repaint();};
-        midi.onClick=[this]{session.addTrack(idw::daw::TrackType::midi);repaint();};
+        midi.onClick=[this]{if(!playing.load())session.addTrack(idw::daw::TrackType::midi);repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
         tempo.onValueChange=[this]{session.setTempo(tempo.getValue());};addAndMakeVisible(tempo);
         tempoLabel.setText("BPM",juce::dontSendNotification);addAndMakeVisible(tempoLabel);
@@ -81,11 +81,17 @@ public:
 private:
     void prepareToPlay(int samplesPerBlockExpected,double sampleRate) override {
         deviceRate=sampleRate;
-        for(auto& slot:sources)slot->transport.prepareToPlay(samplesPerBlockExpected,sampleRate);
+        preparedBlockSize=juce::jmax(1,samplesPerBlockExpected);
+        for(auto& slot:sources){
+            slot->scratch.setSize(2,preparedBlockSize,false,true,false);
+            slot->transport.prepareToPlay(samplesPerBlockExpected,sampleRate);
+        }
     }
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& info) override {
         info.clearActiveBufferRegion();
-        if(!playing || deviceRate<=0)return;
+        if(!playing.load(std::memory_order_relaxed) || deviceRate<=0)return;
+        // Never resize heap buffers in the real-time audio callback.
+        if(info.numSamples>preparedBlockSize || info.buffer->getNumChannels()>2)return;
         const auto blockStart=sessionFrames.load(std::memory_order_relaxed);
         for(auto& slot:sources) {
             if(!slot->reader || slot->trackIndex>=session.tracks.size())continue;
@@ -95,8 +101,7 @@ private:
             const auto window=idw::daw::overlap(blockStart,info.numSamples,deviceRate,
                     session.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
             if(window.frames<=0)continue;
-            slot->scratch.setSize(info.buffer->getNumChannels(),window.frames,false,false,true);
-            slot->scratch.clear();
+            slot->scratch.clear(0,window.frames);
             juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
             slot->transport.getNextAudioBlock(readInfo);
             for(int channel=0;channel<info.buffer->getNumChannels();++channel)
@@ -121,9 +126,11 @@ private:
         juce::AudioBuffer<float> scratch;
     };
     void addAudioTrack(){
+        if(playing.load())return; // Avoid mutating the audio graph during playback.
         if(!session.addTrack(idw::daw::TrackType::audio))return;
         auto slot=std::make_unique<AudioSlot>();
         slot->trackIndex=session.tracks.size()-1;
+        if(preparedBlockSize>0){slot->scratch.setSize(2,preparedBlockSize,false,true,false);slot->transport.prepareToPlay(preparedBlockSize,deviceRate);}
         sources.push_back(std::move(slot));
     }
     double lastClipEndBeat() const {double end=0;for(const auto& track:session.tracks)for(const auto& clip:track.clips)end=juce::jmax(end,clip.startBeat+clip.lengthBeats);return end;}
@@ -134,7 +141,7 @@ private:
     void loadAudio(){
         chooser=std::make_unique<juce::FileChooser>("Select WAV or AIFF audio file",juce::File{},"*.wav;*.aiff;*.aif");
         chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& picker){
-            auto file=picker.getResult();if(!file.existsAsFile())return;
+            auto file=picker.getResult();if(!file.existsAsFile() || playing.load())return;
             std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
             if(!reader)return;
             AudioSlot* target=nullptr;
@@ -151,13 +158,14 @@ private:
     }
     ~Workstation() override {shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     idw::daw::Session session;
-    bool playing=false;
+    std::atomic<bool> playing{false};
     double playheadBeats=0;
     juce::Label title,tempoLabel;
     juce::TextButton play,stop,audio,midi,open;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
     double deviceRate=48000.0;
+    int preparedBlockSize=0;
     std::vector<std::unique_ptr<AudioSlot>> sources;
     std::unique_ptr<juce::FileChooser> chooser;
     juce::Slider tempo;
