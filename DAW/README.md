@@ -91,3 +91,5 @@ AI approval safety: immediately before execution, IDW AI STUDIO reparses the edi
 ### Current-session status for AI assistants
 
 The **COPY STATUS** button in IDW AI STUDIO copies a sanitized snapshot of the **running DAW** to the system clipboard, including tempo, transport/recording flags, and track mix settings/counts. It deliberately excludes media locations and audio content. Copying is opt-in; no data is uploaded automatically. Pasting the status into a third-party AI application shares its metadata with that provider. This is not yet a live streaming MCP connection.
+
+For **COPY STATUS**, V14 now presents a confirmation dialog explaining that track names and mixer metadata will be placed on the system clipboard; **CANCEL** leaves the clipboard unchanged. This remains a manual opt-in transfer rather than an automatic AI connection.
