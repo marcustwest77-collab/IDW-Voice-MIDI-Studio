@@ -3,12 +3,14 @@
 #include "SessionModel.h"
 #include <algorithm>
 #include <cmath>
+#include <atomic>
 namespace idw::daw {
 // Offline stereo bounce. Reads source files into small blocks and sums against
 // the shared beat clock. Intended for PCM WAV/AIFF project clips, not MIDI yet.
 // Call only from a non-audio thread. Returns false and a readable error.
 inline bool renderSessionWav(const Session& session,const juce::File& destination,
-                            juce::String& error,int sampleRate=44100,float masterGain=1.0f,float ceilingDb=-1.0f,float lowDb=0.0f,float highDb=0.0f){
+                            juce::String& error,int sampleRate=44100,float masterGain=1.0f,float ceilingDb=-1.0f,float lowDb=0.0f,float highDb=0.0f,
+                            std::atomic<float>* progress=nullptr,std::atomic<bool>* cancel=nullptr){
     if(session.bpm<=0 || sampleRate<8000 || sampleRate>192000 || !std::isfinite(masterGain) || !std::isfinite(ceilingDb) || !std::isfinite(lowDb) || !std::isfinite(highDb)){
         error="Invalid bounce rate or tempo.";return false;
     }
@@ -64,7 +66,11 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
     const float bassGain=std::pow(10.0f,std::clamp(lowDb,-12.0f,12.0f)/20.0f);
     const float trebleGain=std::pow(10.0f,std::clamp(highDb,-12.0f,12.0f)/20.0f);
     float filterState[2]{0.0f,0.0f};
+    if(progress)progress->store(0.0f,std::memory_order_relaxed);
     for(int64_t pos=0;pos<frames;pos+=block){
+        if(cancel && cancel->load(std::memory_order_relaxed)){
+            error="Export canceled.";writer.reset();destination.deleteFile();return false;
+        }
         const int count=(int)std::min<int64_t>(block,frames-pos);
         mix.clear();
         for(auto& clip:clips){
@@ -108,6 +114,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
         if(!writer->writeFromFloatArrays(channels,2,count)){
             error="Failed while writing WAV samples.";writer.reset();destination.deleteFile();return false;
         }
+        if(progress)progress->store((float)(pos+count)/(float)frames,std::memory_order_relaxed);
     }
     writer.reset();return true;
 }
