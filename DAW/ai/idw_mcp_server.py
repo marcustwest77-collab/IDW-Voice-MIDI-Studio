@@ -72,6 +72,9 @@ def dispatch(name, args):
         if index >= len(data["tracks"]):
             raise ValueError("Track index outside project.")
         return {"proposal": "set_track_mix", "track_index": index,
+                "approval_json": {"format": "idw-ai-proposal-v1",
+                                  "action": {"type": "set_track_mix", "track_index": index,
+                                             "gain": gain, "pan": pan}},
                 "track_name": str(data["tracks"][index].get("name", ""))[:128],
                 "gain": gain, "pan": pan, "applied": False,
                 "note": "Confirm and adjust track controls manually in V14."}
