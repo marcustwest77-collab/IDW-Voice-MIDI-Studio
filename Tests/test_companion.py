@@ -107,6 +107,23 @@ class RouterTests(unittest.TestCase):
     def test_duplicate_suppresses_route(self):
         self.names.append('IDW Chords');self.router.OnRefresh(0);self.event(1,0x90)
         self.assertEqual(self.sent, [])
+    def test_channel_all_notes_off_is_isolated(self):
+        self.event(0, 0x90, 60)
+        self.event(9, 0x90, 36)
+        self.event(9, 0xB0, 123, 0)
+        self.assertEqual(self.sent, [(0, 60, 100), (3, 36, 100), (3, 36, 0)])
+        self.assertEqual(self.router.held, {(0, 60): 0})
+        self.event(0, 0x80, 60)
+        self.assertEqual(self.sent[-1], (0, 60, 0))
+        self.assertFalse(self.router.held)
+
+    def test_global_panic_releases_all_layers(self):
+        self.event(0, 0x90, 62)
+        self.event(9, 0x90, 38)
+        self.router.panic()
+        self.assertEqual(self.sent[-2:], [(0, 62, 0), (3, 38, 0)])
+        self.assertFalse(self.router.held)
+
     def test_panic_and_other_channel(self):
         self.event(2,0x90);self.event(2,0xb0,123,0)
         self.assertEqual(self.sent[-1], (2,60,0));self.assertFalse(self.event(5,0x90).handled)
