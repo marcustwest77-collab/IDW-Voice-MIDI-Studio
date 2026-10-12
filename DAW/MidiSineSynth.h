@@ -23,9 +23,22 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
     if(!std::isfinite(framesPerBeat) || framesPerBeat<=0)return;
     bool anySolo=false;
     for(const auto& t:s.tracks)if(t.solo)anySolo=true;
+    // Normalize active MIDI voices so stacked notes do not overwhelm the mix.
+    // Count only notes overlapping the current buffer; no allocations.
+    std::size_t activeVoices=0;
+    const double bufferEndBeat=(double)(startFrame+samples)/framesPerBeat;
+    const double bufferStartBeat=(double)startFrame/framesPerBeat;
+    for(const auto& track:s.tracks){
+        if(track.type!=TrackType::midi || track.mute || (anySolo && !track.solo))continue;
+        for(const auto& note:track.notes)
+            if(std::isfinite(note.startBeat) && std::isfinite(note.lengthBeats) &&
+               note.lengthBeats>0 && note.startBeat<bufferEndBeat &&
+               note.startBeat+note.lengthBeats>bufferStartBeat)++activeVoices;
+    }
+    const float voiceScale=1.0f/std::sqrt((float)std::max<std::size_t>(1,activeVoices));
     for(const auto& t:s.tracks){
         if(t.type!=TrackType::midi || t.mute || (anySolo && !t.solo))continue;
-        const float gain=std::clamp(t.gain,0.0f,2.0f)*0.12f;
+        const float gain=std::clamp(t.gain,0.0f,2.0f)*0.12f*voiceScale;
         const float l=gain*(t.pan>0.0f?1.0f-t.pan:1.0f);
         const float r=gain*(t.pan<0.0f?1.0f+t.pan:1.0f);
         for(const auto& n:t.notes){
