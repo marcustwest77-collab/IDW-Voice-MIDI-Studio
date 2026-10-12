@@ -1,4 +1,4 @@
-param([string]$JucePath = "", [string]$BuildDirectory = "build-win-6")
+param([string]$JucePath = "", [string]$BuildDirectory = "build-win-v13")
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $cmake = Get-Command cmake -ErrorAction SilentlyContinue
@@ -25,7 +25,7 @@ $artefacts = Join-Path $BuildDirectory 'IDWVoiceMIDIStudio_artefacts\Release'
 $exe = Join-Path $artefacts 'Standalone\IDW Voice MIDI Studio.exe'
 $vst = Join-Path $artefacts 'VST3\IDW Voice MIDI Studio.vst3'
 if (-not (Test-Path $exe) -or -not (Test-Path $vst)) { throw 'Build outputs missing.' }
-$release = Join-Path (Get-Location) ('IDW-V6-Windows-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$release = Join-Path (Get-Location) ('IDW-V13-DEV-Windows-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path "$release\Windows\Standalone", "$release\Windows\VST3" | Out-Null
 Copy-Item $exe "$release\Windows\Standalone"
 Copy-Item $vst "$release\Windows\VST3" -Recurse
@@ -35,13 +35,16 @@ Copy-Item 'docs' "$release\docs" -Recurse
 Copy-Item 'START-HERE.html' $release
 Copy-Item 'START-HERE.txt' $release
 New-Item -ItemType Directory -Path "$release\Previews" | Out-Null
-Get-ChildItem "$BuildDirectory\IDW-V6-*.png" | Copy-Item -Destination "$release\Previews"
+Get-ChildItem -Path $BuildDirectory -Filter "IDW-*.png" -File -ErrorAction SilentlyContinue | Copy-Item -Destination "$release\Previews"
 New-Item -ItemType Directory -Path "$release\ThirdPartyNotices" | Out-Null
 $juceLicense = if ($JucePath) { Join-Path $JucePath 'LICENSE.md' } elseif (Test-Path 'ThirdParty/JUCE/LICENSE.md') { 'ThirdParty/JUCE/LICENSE.md' } else { Join-Path $BuildDirectory '_deps/juce-src/LICENSE.md' }
+if (-not (Test-Path $juceLicense)) { throw "JUCE license missing: $juceLicense; release package not created." }
 Copy-Item $juceLicense "$release\ThirdPartyNotices\JUCE-LICENSE.md"
-Copy-Item "$BuildDirectory\Testing\Temporary\LastTest.log" "$release\Build-Tests.log"
-'@echo off', 'start "IDW V6" "%~dp0Windows\Standalone\IDW Voice MIDI Studio.exe"' | Set-Content "$release\Run-IDW.cmd"
+ $testLog = Join-Path $BuildDirectory "Testing\Temporary\LastTest.log"
+if (Test-Path $testLog) { Copy-Item $testLog "$release\Build-Tests.log" }
+else { "CTest passed but LastTest.log was not generated." | Set-Content "$release\Build-Tests.log" }
+'@echo off', 'start "IDW V13 DEV" "%~dp0Windows\Standalone\IDW Voice MIDI Studio.exe"' | Set-Content "$release\Run-IDW.cmd"
 Compress-Archive -Path $release -DestinationPath "$release.zip"
-Write-Host "SUCCESS: $release.zip"
+Write-Host "DEVELOPMENT BUILD (NOT CERTIFIED RELEASE): $release.zip"
 Write-Host "Run: $release\Run-IDW.cmd"
 Write-Host 'No installed plugin has been replaced. Follow the guide for installation and a live microphone test.'
