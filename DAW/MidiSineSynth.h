@@ -4,11 +4,20 @@
 #include <cmath>
 #include <cstdint>
 namespace idw::daw {
+// Three lightweight oscillator timbres. MIDI note timing stays unchanged.
+enum class SynthPreset { keys, bass, lead };
+inline float synthWave(SynthPreset preset,double phase){
+    const float fundamental=(float)std::sin(phase);
+    if(preset==SynthPreset::bass)return 0.8f*fundamental+0.2f*(float)std::sin(phase*2.0);
+    if(preset==SynthPreset::lead)return 0.6f*fundamental+0.3f*(float)std::sin(phase*2.0)+0.1f*(float)std::sin(phase*3.0);
+    return fundamental;
+}
+
 // Stateless prototype sine synthesizer: renders notes by absolute timeline sample
 // position so output is deterministic across block sizes and does not allocate.
 // Call only when the session is not being modified by the UI.
 inline void renderMidiSine(const Session& s,float* left,float* right,int samples,
-                           std::int64_t startFrame,double sampleRate) {
+                           std::int64_t startFrame,double sampleRate,SynthPreset preset=SynthPreset::keys) {
     if(!left || !right || samples<=0 || sampleRate<=0 || !std::isfinite(sampleRate))return;
     const double framesPerBeat=sampleRate*60.0/s.bpm;
     if(!std::isfinite(framesPerBeat) || framesPerBeat<=0)return;
@@ -41,7 +50,7 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
                 const float fade=(float)std::min<std::int64_t>(std::min(offset,total-1-offset),
                                          (std::int64_t)(sampleRate*0.005)) /
                                  (float)std::max<std::int64_t>(1,(std::int64_t)(sampleRate*0.005));
-                const float wave=(float)std::sin((double)offset*increment)*velocity*std::max(0.0f,fade);
+                const float wave=synthWave(preset,(double)offset*increment)*velocity*std::max(0.0f,fade);
                 left[i]+=wave*l;
                 if(right)right[i]+=wave*r;
             }
