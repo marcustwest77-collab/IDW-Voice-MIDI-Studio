@@ -18,6 +18,7 @@ inline juce::var sessionToJson(const Session& s) {
         track->setProperty("solo",t.solo);
         track->setProperty("gain",t.gain);
         track->setProperty("pan",t.pan);
+        if(t.type==TrackType::midi)track->setProperty("synthPreset",t.synthPreset);
         juce::Array<juce::var> clips;
         for(const auto& c:t.clips){
             auto clip=std::make_unique<juce::DynamicObject>();
@@ -65,6 +66,8 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
         target.mute=(bool)obj->getProperty("mute");
         target.solo=(bool)obj->getProperty("solo");
         if(!next.setTrackMix(next.tracks.size()-1,(float)(double)obj->getProperty("gain"),(float)(double)obj->getProperty("pan")))return false;
+        const auto preset=obj->getProperty("synthPreset");
+        if(!preset.isVoid() && (!preset.isInt() || !next.setTrackSynthPreset(next.tracks.size()-1,(int)preset)))return false;
         const auto clips=obj->getProperty("clips");
         if(!clips.isArray())return false;
         for(const auto& c:*clips.getArray()){
