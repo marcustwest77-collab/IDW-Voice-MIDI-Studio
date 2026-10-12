@@ -100,3 +100,23 @@ endif()
 target_sources(IDWVoiceMIDIStudio_Standalone PRIVATE Source/StandaloneApp.cpp)
 target_compile_definitions(IDWVoiceMIDIStudio_Standalone PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
 
+
+# V14 DAW prototype is opt-in and does not modify the existing plugin formats.
+option(IDW_BUILD_DAW "Build experimental V14 DAW shell" OFF)
+if(IDW_BUILD_DAW)
+    juce_add_gui_app(IDWDAW
+        PRODUCT_NAME "IDW DAW V14 Foundation"
+        COMPANY_NAME "In Da Wind Entertainment"
+        BUNDLE_ID "com.idwent.idwdaw")
+    juce_generate_juce_header(IDWDAW)
+    target_sources(IDWDAW PRIVATE DAW/Main.cpp DAW/SessionModel.h)
+    target_include_directories(IDWDAW PRIVATE DAW)
+    target_link_libraries(IDWDAW PRIVATE juce::juce_gui_extra juce::juce_audio_utils
+        juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+    target_compile_definitions(IDWDAW PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    if(BUILD_TESTING)
+        add_executable(IDWDAWSessionTests DAW/SessionTests.cpp)
+        target_include_directories(IDWDAWSessionTests PRIVATE DAW)
+        add_test(NAME IDWDAWSession COMMAND IDWDAWSessionTests)
+    endif()
+endif()
