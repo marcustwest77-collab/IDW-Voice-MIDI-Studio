@@ -38,6 +38,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
     struct ActiveClip {
         std::unique_ptr<juce::AudioFormatReader> reader;
         int64_t start=0,end=0,offset=0;
+        double sourceRate=44100.0;
         float left=1,right=1;
     };
     std::vector<ActiveClip> clips;
@@ -47,15 +48,13 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             auto reader=std::unique_ptr<juce::AudioFormatReader>(
                 formats.createReaderFor(juce::File(juce::String(clip.sourcePath))));
             if(!reader){error="Missing or unsupported audio: "+juce::String(clip.sourcePath);writer.reset();destination.deleteFile();return false;}
-            if(std::abs(reader->sampleRate-sampleRate)>0.001){
-                error="Bounce requires 44.1 kHz source audio; resampling is not available yet.";
-                writer.reset();destination.deleteFile();return false;
-            }
+
             const int64_t start=(int64_t)std::llround(clip.startBeat*60.0/session.bpm*sampleRate);
             const int64_t length=(int64_t)std::llround(clip.lengthBeats*60.0/session.bpm*sampleRate);
             const float pan=std::clamp(track.pan,-1.0f,1.0f),gain=std::clamp(track.gain,0.0f,2.0f);
+            const double sourceRate=reader->sampleRate;
             clips.push_back({std::move(reader),start,start+length,
-                (int64_t)std::llround(clip.sourceOffsetSeconds*sampleRate),
+                (int64_t)std::llround(clip.sourceOffsetSeconds*sourceRate),sourceRate,
                 gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1)});
         }
     }
@@ -72,10 +71,25 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             const int64_t begin=std::max(pos,clip.start),end=std::min(pos+count,clip.end);
             if(end<=begin)continue;
             const int offset=(int)(begin-pos),number=(int)(end-begin);
-            scratch.clear();
-            clip.reader->read(&scratch,0,number,clip.offset+begin-clip.start,true,true);
-            mix.addFrom(0,offset,scratch,0,0,number,clip.left);
-            mix.addFrom(1,offset,scratch,clip.reader->numChannels>1?1:0,0,number,clip.right);
+            // Linear interpolation at the source sample rate, with one extra frame
+            // to interpolate across export block boundaries.
+            const double ratio=clip.sourceRate/sampleRate;
+            const double first=clip.offset+(begin-clip.start)*ratio;
+            const int64_t sourceStart=(int64_t)std::floor(first);
+            const int sourceCount=(int)std::ceil(first-sourceStart+(number-1)*ratio)+2;
+            juce::AudioBuffer<float> resample(2,sourceCount);
+            resample.clear();
+            clip.reader->read(&resample,0,sourceCount,sourceStart,true,true);
+            for(int i=0;i<number;++i){
+                const double at=first-sourceStart+i*ratio;
+                const int index=(int)std::floor(at);
+                const float fraction=(float)(at-index);
+                const float l=resample.getSample(0,index)*(1.0f-fraction)+resample.getSample(0,index+1)*fraction;
+                const int right=clip.reader->numChannels>1?1:0;
+                const float r=resample.getSample(right,index)*(1.0f-fraction)+resample.getSample(right,index+1)*fraction;
+                mix.addSample(0,offset+i,l*clip.left);
+                mix.addSample(1,offset+i,r*clip.right);
+            }
         }
         for(int ch=0;ch<2;++ch){
             auto* p=mix.getWritePointer(ch);
