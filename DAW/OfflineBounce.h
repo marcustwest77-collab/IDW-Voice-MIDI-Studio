@@ -88,7 +88,11 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             if(scratch.getNumSamples()<sourceCount)
                 scratch.setSize(2,sourceCount,false,false,true);
             scratch.clear(0,sourceCount);
-            clip.reader->read(&scratch,0,sourceCount,sourceStart,true,true);
+            // Readers may not safely accept negative source positions.
+            const int64_t safeStart=std::max<int64_t>(0,sourceStart);
+            const int leading=(int)(safeStart-sourceStart);
+            if(leading<sourceCount)
+                clip.reader->read(&scratch,leading,sourceCount-leading,safeStart,true,true);
             for(int i=0;i<number;++i){
                 const double at=first-sourceStart+i*ratio;
                 const int index=(int)std::floor(at);
