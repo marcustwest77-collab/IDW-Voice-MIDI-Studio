@@ -153,3 +153,7 @@ Synth renderer safety: MIDI note times are checked before conversion to absolute
 ### Synth presets (prototype)
 
 The MIDI preview synth now has a **Keys / Bass / Lead** selector. Keys is a sine tone; Bass and Lead blend harmonics for different timbres. The preset is currently global to the audio preview and is not saved per track or per project. Automated tests check that the oscillators produce different sample output. Sound quality and live hardware operation are not yet certified.
+
+### Per-track synth presets
+
+Keys, Bass, and Lead are now saved separately on each MIDI track in V14 session JSON. Select a MIDI track with the track navigation controls, then choose its sound using the preset selector while stopped. Audio preview uses each MIDI track's chosen preset. Older session files default to Keys. Preset assignment is still a basic oscillator setting rather than VST/AU instrument support.
