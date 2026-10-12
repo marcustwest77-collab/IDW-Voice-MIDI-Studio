@@ -20,6 +20,15 @@ int main(){
  if(!parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"add_track","track_type":"midi"}})"),action)
      || !applyApprovedAIProposal(approved,action) || approved.tracks.size()!=1)
      throw std::runtime_error("approved MIDI track");
+ Session mixSession;mixSession.addTrack(TrackType::audio);
+ if(!parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_track_mix","track_index":0,"gain":0.75,"pan":-0.25}})"),action)
+    || !applyApprovedAIProposal(mixSession,action) ||
+    mixSession.tracks[0].gain!=0.75f || mixSession.tracks[0].pan!=-0.25f)
+    throw std::runtime_error("AI approved mix");
+ if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_track_mix","track_index":0,"gain":5,"pan":0}})"),action))
+    throw std::runtime_error("accepted unsafe AI mix");
+ if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_track_mix","track_index":-1,"gain":1,"pan":0}})"),action))
+    throw std::runtime_error("accepted negative track index");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
