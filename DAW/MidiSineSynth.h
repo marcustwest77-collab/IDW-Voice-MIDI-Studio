@@ -17,7 +17,7 @@ inline float synthWave(SynthPreset preset,double phase){
 // position so output is deterministic across block sizes and does not allocate.
 // Call only when the session is not being modified by the UI.
 inline void renderMidiSine(const Session& s,float* left,float* right,int samples,
-                           std::int64_t startFrame,double sampleRate,SynthPreset preset=SynthPreset::keys) {
+                           std::int64_t startFrame,double sampleRate) {
     if(!left || !right || samples<=0 || sampleRate<=0 || !std::isfinite(sampleRate))return;
     const double framesPerBeat=sampleRate*60.0/s.bpm;
     if(!std::isfinite(framesPerBeat) || framesPerBeat<=0)return;
@@ -50,7 +50,7 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
                 const float fade=(float)std::min<std::int64_t>(std::min(offset,total-1-offset),
                                          (std::int64_t)(sampleRate*0.005)) /
                                  (float)std::max<std::int64_t>(1,(std::int64_t)(sampleRate*0.005));
-                const float wave=synthWave(preset,(double)offset*increment)*velocity*std::max(0.0f,fade);
+                const float wave=synthWave(static_cast<SynthPreset>(std::clamp(t.synthPreset,0,2)),(double)offset*increment)*velocity*std::max(0.0f,fade);
                 left[i]+=wave*l;
                 if(right)right[i]+=wave*r;
             }
