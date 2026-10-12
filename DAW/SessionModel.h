@@ -44,6 +44,20 @@ public:
         tracks[trackIndex].clips.push_back(std::move(clip));
         return true;
     }
+    // Timeline edit primitive used by future drag/snap controls.
+    // Validate before mutating so failed edits leave the session unchanged.
+    bool moveClip(size_t trackIndex,size_t clipIndex,double newStartBeat) {
+        if(trackIndex>=tracks.size() || clipIndex>=tracks[trackIndex].clips.size() ||
+           !std::isfinite(newStartBeat) || newStartBeat<0.0)return false;
+        tracks[trackIndex].clips[clipIndex].startBeat=newStartBeat;
+        return true;
+    }
+    bool resizeClip(size_t trackIndex,size_t clipIndex,double newLengthBeats) {
+        if(trackIndex>=tracks.size() || clipIndex>=tracks[trackIndex].clips.size() ||
+           !std::isfinite(newLengthBeats) || newLengthBeats<=0.0)return false;
+        tracks[trackIndex].clips[clipIndex].lengthBeats=newLengthBeats;
+        return true;
+    }
     bool setTrackMix(size_t index,float gain,float pan) {
         if(index>=tracks.size() || !std::isfinite(gain) || !std::isfinite(pan))return false;
         tracks[index].gain=std::clamp(gain,0.0f,2.0f);
