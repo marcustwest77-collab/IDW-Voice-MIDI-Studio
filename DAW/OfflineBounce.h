@@ -85,8 +85,8 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 writer.reset();destination.deleteFile();return false;
             }
             const double first=clip.offset+(begin-clip.start)*ratio;
-            const int64_t sourceStart=(int64_t)std::floor(first);
-            const int sourceCount=(int)std::ceil(first-sourceStart+(number-1)*ratio)+2;
+            const int64_t sourceStart=(int64_t)std::floor(first)-(ratio>1.0?12:0);
+            const int sourceCount=(int)std::ceil(first-sourceStart+(number-1)*ratio)+2+(ratio>1.0?12:0);
             // Reuse the scratch buffer across clips and blocks rather than allocating
             // a temporary AudioBuffer for every overlap.
             if(sourceCount<=0 || sourceCount>1000000){
@@ -104,9 +104,32 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 const double at=first-sourceStart+i*ratio;
                 const int index=(int)std::floor(at);
                 const float fraction=(float)(at-index);
-                const float l=scratch.getSample(0,index)*(1.0f-fraction)+scratch.getSample(0,index+1)*fraction;
+                // A short windowed-sinc kernel suppresses out-of-band energy
+                // during downsampling; linear interpolation remains for upsampling.
                 const int right=clip.reader->numChannels>1?1:0;
-                const float r=scratch.getSample(right,index)*(1.0f-fraction)+scratch.getSample(right,index+1)*fraction;
+                const auto sampleAt=[&](int channel)->float {
+                    if(ratio<=1.0)
+                        return scratch.getSample(channel,index)*(1.0f-fraction)
+                             +scratch.getSample(channel,index+1)*fraction;
+                    constexpr int radius=12;
+                    const double cutoff=0.5/ratio;
+                    double value=0.0,weight=0.0;
+                    for(int tap=-radius+1;tap<=radius;++tap){
+                        const int position=index+tap;
+                        if(position<0 || position>=sourceCount)continue;
+                        const double distance=at-position;
+                        const double sincArg=2.0*cutoff*distance;
+                        const double sinc=std::abs(sincArg)<1.0e-10?1.0:std::sin(juce::MathConstants<double>::pi*sincArg)/(juce::MathConstants<double>::pi*sincArg);
+                        const double window=0.5+0.5*std::cos(juce::MathConstants<double>::pi*distance/radius);
+                        if(std::abs(distance)>=radius)continue;
+                        const double coefficient=2.0*cutoff*sinc*window;
+                        value+=coefficient*scratch.getSample(channel,position);
+                        weight+=coefficient;
+                    }
+                    return std::abs(weight)>1.0e-10?(float)(value/weight):0.0f;
+                };
+                const float l=sampleAt(0);
+                const float r=sampleAt(right);
                 mix.addSample(0,offset+i,l*clip.left);
                 mix.addSample(1,offset+i,r*clip.right);
             }
