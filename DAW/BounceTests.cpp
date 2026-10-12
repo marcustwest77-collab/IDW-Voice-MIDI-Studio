@@ -216,9 +216,9 @@ int main(){
  if(!std::isfinite(hfRms) || hfRms>0.08f)
     throw std::runtime_error("HF alias rejection inadequate");
  hfReader.reset();
- // A ten-second multitrack stress case detects incorrect output duration,
+ // A 4.5-second multitrack stress case detects incorrect output duration,
  // misaligned start times, and progress regressions across many blocks.
- const auto stressOutput=root.getChildFile("stress-ten-seconds.wav");
+ const auto stressOutput=root.getChildFile("stress-multitrack.wav");
  Session stress;stress.setTempo(120);
  for(int track=0;track<8;++track){
     if(!stress.addTrack(TrackType::audio))throw std::runtime_error("stress track");
