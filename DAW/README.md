@@ -171,3 +171,7 @@ Synth performance refinement: attack/release sample counts and preset selection 
 ### Polyphonic preview protection
 
 The built-in synth now applies conservative per-buffer voice-count normalization for overlapping MIDI notes, helping limit summed chord levels. A three-note chord regression test checks for finite, bounded output. This is a prototype safety measure, not a limiter or guaranteed clipping prevention; hardware and dense-arrangement testing remain necessary.
+
+### Sample-rate-aware MIDI sound generation
+
+The internal oscillator now skips MIDI fundamentals at or above half the current audio sample rate (Nyquist limit). This prevents invalid high-frequency fundamentals on low-rate devices, but the harmonic Bass/Lead sounds are not yet fully band-limited and can still alias. A regression test covers an extreme high MIDI note at 8 kHz sample rate.
