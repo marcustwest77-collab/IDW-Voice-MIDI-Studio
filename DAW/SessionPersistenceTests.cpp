@@ -124,6 +124,11 @@ int main(){
  if(synthWave(SynthPreset::bass,phase,440.0,48000.0)==expected ||
     synthWave(SynthPreset::lead,phase,440.0,48000.0)==expected)
     throw std::runtime_error("Synth lost safe harmonics");
+ // Harmonic boundary: second harmonic exactly at Nyquist must be omitted.
+ const double edgePhase=0.83;
+ const float edgeFundamental=(float)std::sin(edgePhase);
+ if(std::abs(synthWave(SynthPreset::bass,edgePhase,2000.0,8000.0)-edgeFundamental)>1e-6f)
+    throw std::runtime_error("Nyquist boundary harmonic not filtered");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
