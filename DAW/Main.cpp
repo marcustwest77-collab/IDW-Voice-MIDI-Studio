@@ -143,10 +143,35 @@ private:
         int count=0;for(auto& slot:sources)if(slot->reader)++count;
         return count;
     }
+    bool importTake(const juce::File& take){
+        if(!take.existsAsFile() || playing.load())return false;
+        std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(take));
+        if(!reader || reader->sampleRate<=0 || reader->lengthInSamples<=0)return false;
+        AudioSlot* target=nullptr;
+        for(auto& slot:sources)if(!slot->reader){target=slot.get();break;}
+        if(!target){
+            addAudioTrack();
+            if(!sources.empty() && !sources.back()->reader)target=sources.back().get();
+        }
+        if(!target)return false;
+        auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
+        const double rate=source->getAudioFormatReader()->sampleRate;
+        const double duration=(double)source->getAudioFormatReader()->lengthInSamples/rate;
+        const double beatLength=duration*session.bpm/60.0;
+        if(!session.addClip(target->trackIndex,{take.getFullPathName().toStdString(),0.0,beatLength,0.0}))return false;
+        target->transport.setSource(source.get(),0,nullptr,rate);
+        target->file=take;target->reader=std::move(source);
+        repaint();return true;
+    }
     void toggleRecording(){
         if(recorder.isRecording()){
             recorder.stop();record.setButtonText("RECORD VOCAL");
-            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,"Take saved",recorder.file().getFullPathName());
+            // Stop the transport before changing the audio graph.
+            for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(0);}
+            playing.store(false);stopTimer();sessionFrames.store(0);playheadBeats=0;
+            const auto take=recorder.file();
+            if(!importTake(take))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Take saved, import failed",take.getFullPathName());
             return;
         }
         const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
