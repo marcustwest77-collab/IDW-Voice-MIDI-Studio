@@ -7,6 +7,7 @@
 #include "OfflineBounce.h"
 #include "IDWConnectPanel.h"
 #include "AIApprovalPanel.h"
+#include "AIStatusSnapshot.h"
 #include <atomic>
 #include <thread>
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
@@ -38,6 +39,10 @@ public:
         aiButton.onClick=[this]{
             aiPanel.setVisible(!aiPanel.isVisible());
             if(aiPanel.isVisible()){connectPanel.setVisible(false);aiPanel.toFront(false);}
+        };
+        aiPanel.getSanitizedStatus=[this]{
+            return juce::JSON::toString(idw::daw::aiSessionStatus(
+                session,playing.load(),recorder.isRecording()),true);
         };
         aiPanel.onApproved=[this](const idw::daw::AIProposal& proposal){
             if(playing.load() || recorder.isRecording() || exportRunning.load())return false;
