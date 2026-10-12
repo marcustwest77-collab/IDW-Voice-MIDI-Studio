@@ -93,6 +93,8 @@ public:
                 return;
             }
             const auto contents=inboxFile.loadFileAsString();
+            // A checked inbox is only a preview, never an authorization.
+            // Do not replace an editor draft unless it is a valid action.
             idw::daw::AIProposal candidate{idw::daw::AIProposal::Kind::tempo};
             if(!idw::daw::parseAIProposal(juce::JSON::parse(contents),candidate)){
                 feedback.setText("Inbox contains an invalid proposal.",juce::dontSendNotification);
@@ -100,7 +102,7 @@ public:
             }
             editor.setText(contents);
             apply.setEnabled(false);
-            feedback.setText("Pending inbox proposal loaded. Review before applying.",
+            feedback.setText("Inbox command loaded. Review details, then approve manually.",
                              juce::dontSendNotification);
         };
         // Import a proposal from a local JSON file chosen by the user. No polling
