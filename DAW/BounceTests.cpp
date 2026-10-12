@@ -211,8 +211,10 @@ int main(){
  if(!hfReader->read(&hfResult,0,4410,0,true,true))
     throw std::runtime_error("HF output read");
  const float hfRms=hfResult.getRMSLevel(0,128,4096);
- if(!std::isfinite(hfRms) || hfRms>0.5f)
-    throw std::runtime_error("HF resampling unstable");
+ // 24 kHz is above the 22.05 kHz output Nyquist frequency: the
+ // downsampler should attenuate this alternating input substantially.
+ if(!std::isfinite(hfRms) || hfRms>0.08f)
+    throw std::runtime_error("HF alias rejection inadequate");
  hfReader.reset();
  // The two-band master tone must modify low-frequency content predictably.
  const auto bassOutput=root.getChildFile("bass-boost.wav");
