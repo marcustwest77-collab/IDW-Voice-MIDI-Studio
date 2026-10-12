@@ -63,6 +63,46 @@ public:
                         });
                 }));
         };
+        inboxPath.setText("AI inbox path",juce::dontSendNotification);
+        inboxPath.setTooltip("Choose your configured local MCP proposal inbox once.");
+        addAndMakeVisible(inboxPath);
+        chooseInbox.setButtonText("SET INBOX");
+        addAndMakeVisible(chooseInbox);
+        chooseInbox.onClick=[this]{
+            inboxChooser=std::make_unique<juce::FileChooser>(
+                "Choose the local MCP proposal inbox",juce::File{},"*.json");
+            inboxChooser->launchAsync(juce::FileBrowserComponent::openMode |
+                                       juce::FileBrowserComponent::canSelectFiles,
+                [this](const juce::FileChooser& picked){
+                    const auto file=picked.getResult();
+                    if(file.existsAsFile() && file.hasFileExtension("json")){
+                        inboxFile=file;
+                        inboxPath.setText(file.getFileName(),juce::dontSendNotification);
+                    }
+                });
+        };
+        checkInbox.setButtonText("CHECK INBOX");
+        addAndMakeVisible(checkInbox);
+        checkInbox.onClick=[this]{
+            if(!inboxFile.existsAsFile()){
+                feedback.setText("Choose an existing inbox JSON file first.",juce::dontSendNotification);
+                return;
+            }
+            if(inboxFile.getSize()>4096){
+                feedback.setText("Inbox proposal exceeds 4 KB limit.",juce::dontSendNotification);
+                return;
+            }
+            const auto contents=inboxFile.loadFileAsString();
+            idw::daw::AIProposal candidate{idw::daw::AIProposal::Kind::tempo};
+            if(!idw::daw::parseAIProposal(juce::JSON::parse(contents),candidate)){
+                feedback.setText("Inbox contains an invalid proposal.",juce::dontSendNotification);
+                return;
+            }
+            editor.setText(contents);
+            apply.setEnabled(false);
+            feedback.setText("Pending inbox proposal loaded. Review before applying.",
+                             juce::dontSendNotification);
+        };
         // Import a proposal from a local JSON file chosen by the user. No polling
         // or background filesystem access: the user explicitly selects the file.
         importFile.setButtonText("IMPORT JSON");
@@ -155,6 +195,10 @@ public:
         heading.setBounds(a.removeFromTop(28));
         editor.setBounds(a.removeFromTop(94));
         a.removeFromTop(8);
+        auto inboxRow=a.removeFromTop(28);
+        inboxPath.setBounds(inboxRow.removeFromLeft(160).reduced(2));
+        chooseInbox.setBounds(inboxRow.removeFromLeft(110).reduced(2));
+        checkInbox.setBounds(inboxRow.removeFromLeft(125).reduced(2));
         auto row=a.removeFromTop(34);
         saveStatus.setBounds(row.removeFromLeft(100).reduced(2));
         importFile.setBounds(row.removeFromLeft(96).reduced(2));
@@ -172,6 +216,8 @@ private:
     idw::daw::AIProposal pending{idw::daw::AIProposal::Kind::tempo};
     juce::Label heading,feedback;
     juce::TextEditor editor;
-    juce::TextButton saveStatus,importFile,copyStatus,paste,review,apply;
-    std::unique_ptr<juce::FileChooser> chooser,statusChooser;
+    juce::TextButton saveStatus,importFile,copyStatus,paste,review,apply,chooseInbox,checkInbox;
+    juce::Label inboxPath;
+    juce::File inboxFile;
+    std::unique_ptr<juce::FileChooser> chooser,statusChooser,inboxChooser;
 };
