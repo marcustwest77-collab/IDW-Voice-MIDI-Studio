@@ -21,6 +21,7 @@ struct Track {
     float gain=1.0f;
     float pan=0.0f;
     int synthPreset=0; // Keys=0, Bass=1, Lead=2
+    float synthAttackMs=5.0f,synthReleaseMs=5.0f;
     std::vector<Clip> clips;
     std::vector<MidiNote> notes;
 };
@@ -87,6 +88,14 @@ public:
         if(trackIndex>=tracks.size() || noteIndex>=tracks[trackIndex].notes.size() ||
            !std::isfinite(lengthBeats) || lengthBeats<=0)return false;
         tracks[trackIndex].notes[noteIndex].lengthBeats=lengthBeats;
+        return true;
+    }
+    bool setTrackSynthEnvelope(size_t index,float attackMs,float releaseMs) {
+        if(index>=tracks.size() || tracks[index].type!=TrackType::midi ||
+           !std::isfinite(attackMs) || !std::isfinite(releaseMs) ||
+           attackMs<0 || attackMs>2000 || releaseMs<0 || releaseMs>2000)return false;
+        tracks[index].synthAttackMs=attackMs;
+        tracks[index].synthReleaseMs=releaseMs;
         return true;
     }
     bool setTrackSynthPreset(size_t index,int preset) {
