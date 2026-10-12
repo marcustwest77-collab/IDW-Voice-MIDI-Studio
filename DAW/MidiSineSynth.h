@@ -59,6 +59,9 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
             const auto last=(std::int64_t)std::min((double)samples,(double)noteEnd-(double)startFrame);
             if(first>=last)continue;
             const double freq=440.0*std::pow(2.0,(n.pitch-69)/12.0);
+            // Skip inaudible / aliased notes rather than generating frequencies
+            // above the Nyquist limit (particularly on low sample-rate devices).
+            if(!std::isfinite(freq) || freq>=sampleRate*0.5)continue;
             const double increment=6.283185307179586*freq/sampleRate;
             const float velocity=n.velocity/127.0f;
             // Calculate per-note constants outside the sample loop.
