@@ -17,6 +17,8 @@ struct Track {
     TrackType type;
     bool mute=false;
     bool solo=false;
+    float gain=1.0f;
+    float pan=0.0f;
     std::vector<Clip> clips;
 };
 class Session {
@@ -40,6 +42,12 @@ public:
             !std::isfinite(clip.lengthBeats) || !std::isfinite(clip.sourceOffsetSeconds) ||
             clip.startBeat<0 || clip.lengthBeats<=0 || clip.sourceOffsetSeconds<0) return false;
         tracks[trackIndex].clips.push_back(std::move(clip));
+        return true;
+    }
+    bool setTrackMix(size_t index,float gain,float pan) {
+        if(index>=tracks.size() || !std::isfinite(gain) || !std::isfinite(pan))return false;
+        tracks[index].gain=std::clamp(gain,0.0f,2.0f);
+        tracks[index].pan=std::clamp(pan,-1.0f,1.0f);
         return true;
     }
     void setTempo(double value) { if (std::isfinite(value)) bpm=std::clamp(value,20.0,300.0); }
