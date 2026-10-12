@@ -127,3 +127,7 @@ With transport stopped, drag the body of an existing audio clip to move it horiz
 ### Selected clip keyboard editing
 
 Click an audio clip on the main timeline to select it and focus the editor. Press **Left/Right Arrow** to nudge its start position by ¼ beat; hold **Shift** while pressing Left/Right to shorten or lengthen the clip by ¼ beat (minimum ¼ beat). This is disabled during playback, recording, and export. Keyboard shortcuts work when the main timeline has focus.
+
+### MIDI piano-roll data foundation
+
+MIDI tracks now store validated note events (MIDI pitch 0–127, velocity 1–127, start beat, positive duration). The session model supports adding, moving, transposing and resizing notes, and session JSON saves/loads the notes while continuing to accept older projects without a `notes` field. This is the **data/persistence foundation only**; there is not yet a visible piano-roll editor or scheduled MIDI note playback.
