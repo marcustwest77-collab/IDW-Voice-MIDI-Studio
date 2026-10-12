@@ -279,7 +279,7 @@ int main(){
     std::abs(stressSamples.getSample(0,atSeconds(4.25))-0.25f)>0.01f)
     throw std::runtime_error("stress multitrack timing or level mismatch");
  stressReader.reset();
- // A 30-second export exercises sustained processing with multiple clips.
+ // A 28.5-second export exercises sustained processing with multiple clips.
  // Keep this bounded for CI while testing substantially more blocks.
  Session extended;extended.setTempo(120);
  for(int track=0;track<4;++track){
