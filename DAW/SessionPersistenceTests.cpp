@@ -108,6 +108,12 @@ int main(){
  renderMidiSine(distantSession,distantBuffer.data(),nullptr,256,0,48000.0);
  if(std::any_of(distantBuffer.begin(),distantBuffer.end(),[](float sample){return sample!=0.0f;}))
     throw std::runtime_error("Distant MIDI notes produced audio outside active block");
+ Session nyquistSession;nyquistSession.addTrack(TrackType::midi);
+ nyquistSession.addMidiNote(0,{127,0.0,1.0,127});
+ std::vector<float> lowRateSamples(256,0.0f);
+ renderMidiSine(nyquistSession,lowRateSamples.data(),nullptr,256,0,8000.0);
+ if(std::any_of(lowRateSamples.begin(),lowRateSamples.end(),[](float sample){return sample!=0.0f;}))
+    throw std::runtime_error("Nyquist-unsafe note rendered at low sample rate");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
