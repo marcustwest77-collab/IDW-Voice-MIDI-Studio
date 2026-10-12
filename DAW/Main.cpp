@@ -3,6 +3,7 @@
 #include "TimelineMath.h"
 #include "TakeRecorder.h"
 #include "SessionPersistence.h"
+#include "ProjectPackaging.h"
 #include <atomic>
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
 public:
@@ -15,10 +16,11 @@ public:
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
-        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject}) addAndMakeVisible(*b);
+        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN PROJECT");
+        exportProject.setButtonText("EXPORT PORTABLE");
         record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
         play.onClick=[this]{if(loadedCount()>0){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
@@ -27,6 +29,7 @@ public:
         record.onClick=[this]{toggleRecording();};
         saveProject.onClick=[this]{saveProjectFile();};
         openProject.onClick=[this]{openProjectFile();};
+        exportProject.onClick=[this]{exportProjectFile();};
         audio.onClick=[this]{addAudioTrack();refreshMixer();repaint();};
         midi.onClick=[this]{if(!playing.load())session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
@@ -76,6 +79,7 @@ public:
         auto projectRow=area.removeFromTop(40);
         saveProject.setBounds(projectRow.removeFromLeft(165).reduced(3));
         openProject.setBounds(projectRow.removeFromLeft(165).reduced(3));
+        exportProject.setBounds(projectRow.removeFromLeft(180).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(185));
@@ -224,7 +228,8 @@ private:
             slot->trackIndex=index;
             if(!restored.tracks[index].clips.empty()){
                 const auto& clip=restored.tracks[index].clips.front();
-                auto file=juce::File(juce::String(clip.sourcePath));
+                const auto savedPath=juce::String(clip.sourcePath);
+                auto file=juce::File::isAbsolutePath(savedPath) ? juce::File(savedPath) : project.getParentDirectory().getChildFile(savedPath);
                 // Portable-project fallback: look beside the project and in its Audio subfolder.
                 if(!file.existsAsFile()){
                     const auto name=file.getFileName();
@@ -271,6 +276,19 @@ private:
                 if(project.existsAsFile() && !restoreProject(project))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Open failed",
                         "The project is invalid or cannot be opened during playback.");
+            });
+    }
+    void exportProjectFile(){
+        if(playing.load() || recorder.isRecording())return;
+        projectChooser=std::make_unique<juce::FileChooser>("Export portable IDW Project",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*");
+        projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+            [this](const juce::FileChooser& picker){
+                const auto folder=picker.getResult();
+                if(folder==juce::File{})return;
+                juce::String error;
+                if(!idw::daw::exportPortableProject(session,folder,error))
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Export failed",error);
             });
     }
     void saveProjectFile(){
@@ -353,7 +371,7 @@ private:
     juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject;
     IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
