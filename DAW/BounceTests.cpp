@@ -46,6 +46,34 @@ int main(){
  if(!reader->read(&rendered,0,26460,0,true,true))throw std::runtime_error("read output");
  if(std::abs(rendered.getSample(0,100))>0.00001f || std::abs(rendered.getSample(0,23000)-0.375f)>0.01f)
   throw std::runtime_error("timeline alignment or signal level");
+ // Verify a stereo source survives export without channel collapse.
+ const auto stereo=root.getChildFile("stereo.wav"),stereoOutput=root.getChildFile("stereo-out.wav");
+ auto stereoStream=std::unique_ptr<juce::FileOutputStream>(stereo.createOutputStream());
+ if(!stereoStream)throw std::runtime_error("stereo stream");
+ auto stereoWriter=std::unique_ptr<juce::AudioFormatWriter>(
+    wav.createWriterFor(stereoStream.get(),44100.0,2,16,{},0));
+ if(!stereoWriter)throw std::runtime_error("stereo writer");
+ stereoStream.release();
+ juce::AudioBuffer<float> stereoAudio(2,4410);
+ for(int i=0;i<4410;++i){stereoAudio.setSample(0,i,0.2f);stereoAudio.setSample(1,i,-0.2f);}
+ const float* stereoPtrs[]{stereoAudio.getReadPointer(0),stereoAudio.getReadPointer(1)};
+ if(!stereoWriter->writeFromFloatArrays(stereoPtrs,2,4410))throw std::runtime_error("stereo write");
+ stereoWriter.reset();
+ Session stereoSession;stereoSession.setTempo(120);stereoSession.addTrack(TrackType::audio);
+ if(!stereoSession.addClip(0,{stereo.getFullPathName().toStdString(),0.0,0.2,0.0}))
+    throw std::runtime_error("stereo clip");
+ if(!renderSessionWav(stereoSession,stereoOutput,error))
+    throw std::runtime_error("stereo bounce: "+error.toStdString());
+ auto stereoReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(stereoOutput.createInputStream().release(),true));
+ if(!stereoReader)throw std::runtime_error("stereo output reader");
+ juce::AudioBuffer<float> stereoResult(2,4410);
+ if(!stereoReader->read(&stereoResult,0,4410,0,true,true))
+    throw std::runtime_error("stereo output read");
+ if(std::abs(stereoResult.getSample(0,100)-0.2f)>0.01f ||
+    std::abs(stereoResult.getSample(1,100)+0.2f)>0.01f)
+    throw std::runtime_error("stereo channel mismatch");
+ stereoReader.reset();
  reader.reset();root.deleteRecursively();
  std::cout<<"PASS: stereo WAV bounce timeline and signal test\n";
 }
