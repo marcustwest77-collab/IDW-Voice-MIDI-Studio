@@ -175,3 +175,7 @@ The built-in synth now applies conservative per-buffer voice-count normalization
 ### Sample-rate-aware MIDI sound generation
 
 The internal oscillator now skips MIDI fundamentals at or above half the current audio sample rate (Nyquist limit). This prevents invalid high-frequency fundamentals on low-rate devices, but the harmonic Bass/Lead sounds are not yet fully band-limited and can still alias. A regression test covers an extreme high MIDI note at 8 kHz sample rate.
+
+### Harmonic filtering for Bass and Lead
+
+The Bass and Lead preview oscillators now omit second/third harmonics whenever those partials meet or exceed the current audio device's Nyquist frequency. The remaining partial weights are adjusted to keep the sound audible. This prevents aliasing from these explicit overtones, but it is not a fully band-limited general synthesizer. Regression tests cover both low and normal sample rates.
