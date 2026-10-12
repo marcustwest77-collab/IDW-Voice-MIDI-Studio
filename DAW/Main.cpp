@@ -80,6 +80,11 @@ public:
         }
         lowEq.onValueChange=[this]{lowDb.store((float)lowEq.getValue());};
         highEq.onValueChange=[this]{highDb.store((float)highEq.getValue());};
+        limitLabel.setText("OUTPUT CEILING",juce::dontSendNotification);addAndMakeVisible(limitLabel);
+        ceilingControl.setRange(-12.0,-0.1,0.1);ceilingControl.setValue(-1.0);
+        ceilingControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,60,24);
+        addAndMakeVisible(ceilingControl);
+        ceilingControl.onValueChange=[this]{ceilingDb.store((float)ceilingControl.getValue(),std::memory_order_relaxed);};
         refreshMixer();
     }
     void resized() override {
@@ -115,11 +120,14 @@ public:
         eqLabel.setBounds(eqRow.removeFromLeft(115));
         lowEq.setBounds(eqRow.removeFromLeft(180));
         highEq.setBounds(eqRow.removeFromLeft(180));
+        auto ceilingRow=area.removeFromTop(35);
+        limitLabel.setBounds(ceilingRow.removeFromLeft(145));
+        ceilingControl.setBounds(ceilingRow.removeFromLeft(220));
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
         const auto rect=getLocalBounds().reduced(20);
-        const int top=295, trackHeight=70, left=205;
+        const int top=330, trackHeight=70, left=205;
         g.setColour(juce::Colour(0xff1b222b));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
@@ -218,6 +226,12 @@ private:
             eqState[channel]=state;
         }
         info.buffer->applyGain(info.startSample,info.numSamples,masterLevel.load(std::memory_order_relaxed));
+        // Basic peak-ceiling safety clamp; not a look-ahead mastering limiter.
+        const float ceiling=std::pow(10.0f,ceilingDb.load(std::memory_order_relaxed)/20.0f);
+        for(int ch=0;ch<info.buffer->getNumChannels();++ch){
+            auto* samples=info.buffer->getWritePointer(ch,info.startSample);
+            for(int i=0;i<info.numSamples;++i)samples[i]=juce::jlimit(-ceiling,ceiling,samples[i]);
+        }
         if(info.buffer->getNumChannels()>0){
             const float peak=info.buffer->getMagnitude(0,info.startSample,info.numSamples);
             peakLeft.store(peak,std::memory_order_relaxed);
@@ -432,7 +446,9 @@ private:
     double takeStartBeat=0.0;
     juce::Label title,tempoLabel,gainLabel,panLabel;
     juce::Slider gainControl,panControl,masterGain;
-    juce::Label masterLabel,eqLabel;
+    juce::Label masterLabel,eqLabel,limitLabel;
+    juce::Slider ceilingControl;
+    std::atomic<float> ceilingDb{-1.0f};
     juce::Slider lowEq,highEq;
     std::atomic<float> lowDb{0.0f},highDb{0.0f};
     float eqState[2]{0.0f,0.0f};
