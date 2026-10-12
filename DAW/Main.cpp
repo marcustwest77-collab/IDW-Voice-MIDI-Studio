@@ -1,5 +1,7 @@
 #include <JuceHeader.h>
 #include "SessionModel.h"
+#include "TimelineMath.h"
+#include <atomic>
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
 public:
     Workstation() {
@@ -13,8 +15,8 @@ public:
         for(auto* b:{&play,&stop,&audio,&midi,&open}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
-        play.onClick=[this]{if(!sources.empty()){for(auto& slot:sources)slot->transport.start();playing=true;startTimerHz(30);repaint();}};
-        stop.onClick=[this]{for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(0);}playing=false;stopTimer();playheadBeats=0;repaint();};
+        play.onClick=[this]{if(loadedCount()>0){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
+        stop.onClick=[this]{for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;repaint();};
         open.onClick=[this]{loadAudio();};
         audio.onClick=[this]{addAudioTrack();repaint();};
         midi.onClick=[this]{session.addTrack(idw::daw::TrackType::midi);repaint();};
@@ -74,17 +76,40 @@ public:
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
         }
         g.setColour(juce::Colours::grey);
-        g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Recording, editing and timeline scheduling not implemented." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
+        g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline-scheduled playback prototype; recording and clip editing unavailable." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
     }
 private:
-    void prepareToPlay(int samplesPerBlockExpected,double sampleRate) override { mixer.prepareToPlay(samplesPerBlockExpected,sampleRate); }
-    void getNextAudioBlock(const juce::AudioSourceChannelInfo& info) override {mixer.getNextAudioBlock(info);}
-    void releaseResources() override {mixer.releaseResources();}
+    void prepareToPlay(int samplesPerBlockExpected,double sampleRate) override {
+        deviceRate=sampleRate;
+        for(auto& slot:sources)slot->transport.prepareToPlay(samplesPerBlockExpected,sampleRate);
+    }
+    void getNextAudioBlock(const juce::AudioSourceChannelInfo& info) override {
+        info.clearActiveBufferRegion();
+        if(!playing || deviceRate<=0)return;
+        const auto blockStart=sessionFrames.load(std::memory_order_relaxed);
+        for(auto& slot:sources) {
+            if(!slot->reader || slot->trackIndex>=session.tracks.size())continue;
+            const auto& track=session.tracks[slot->trackIndex];
+            if(track.mute || track.clips.empty())continue;
+            const auto& clip=track.clips.front();
+            const auto window=idw::daw::overlap(blockStart,info.numSamples,deviceRate,
+                    session.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
+            if(window.frames<=0)continue;
+            slot->scratch.setSize(info.buffer->getNumChannels(),window.frames,false,false,true);
+            slot->scratch.clear();
+            juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
+            slot->transport.getNextAudioBlock(readInfo);
+            for(int channel=0;channel<info.buffer->getNumChannels();++channel)
+                info.buffer->addFrom(channel,info.startSample+window.offset,slot->scratch,channel,0,window.frames);
+        }
+        sessionFrames.fetch_add(info.numSamples,std::memory_order_relaxed);
+    }
+    void releaseResources() override {
+        for(auto& slot:sources)slot->transport.releaseResources();
+    }
     void timerCallback() override {
-        bool anyPlaying=false;double seconds=0;
-        for(auto& slot:sources){if(slot->reader){seconds=juce::jmax(seconds,slot->transport.getCurrentPosition());anyPlaying|=slot->transport.isPlaying();}}
-        playheadBeats=seconds*session.bpm/60.0;
-        if(!anyPlaying){playing=false;stopTimer();}
+        playheadBeats=deviceRate>0?(double)sessionFrames.load()*session.bpm/(deviceRate*60.0):0.0;
+        if(playing && playheadBeats>=lastClipEndBeat()){playing=false;stopTimer();for(auto& slot:sources)slot->transport.stop();}
         repaint();
     }
     struct AudioSlot {
@@ -92,14 +117,16 @@ private:
         std::unique_ptr<juce::AudioFormatReaderSource> reader;
         juce::File file;
         size_t trackIndex=0;
+        double sourceOffsetSeconds=0.0;
+        juce::AudioBuffer<float> scratch;
     };
     void addAudioTrack(){
         if(!session.addTrack(idw::daw::TrackType::audio))return;
         auto slot=std::make_unique<AudioSlot>();
         slot->trackIndex=session.tracks.size()-1;
-        mixer.addInputSource(&slot->transport,false);
         sources.push_back(std::move(slot));
     }
+    double lastClipEndBeat() const {double end=0;for(const auto& track:session.tracks)for(const auto& clip:track.clips)end=juce::jmax(end,clip.startBeat+clip.lengthBeats);return end;}
     int loadedCount() const {
         int count=0;for(auto& slot:sources)if(slot->reader)++count;
         return count;
@@ -119,17 +146,18 @@ private:
             target->file=file;target->reader=std::move(source);
             session.addClip(target->trackIndex,{file.getFullPathName().toStdString(),0.0,
                 sourceRate>0 ? (double)target->reader->getAudioFormatReader()->lengthInSamples/sourceRate*session.bpm/60.0 : 0.0,0.0});
-            playing=false;playheadBeats=0;repaint();
+            sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {shutdownAudio();for(auto& slot:sources){slot->transport.setSource(nullptr);mixer.removeInputSource(&slot->transport);}sources.clear();}
+    ~Workstation() override {shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     idw::daw::Session session;
     bool playing=false;
     double playheadBeats=0;
     juce::Label title,tempoLabel;
     juce::TextButton play,stop,audio,midi,open;
     juce::AudioFormatManager formats;
-    juce::MixerAudioSource mixer;
+    std::atomic<int64_t> sessionFrames{0};
+    double deviceRate=48000.0;
     std::vector<std::unique_ptr<AudioSlot>> sources;
     std::unique_ptr<juce::FileChooser> chooser;
     juce::Slider tempo;
