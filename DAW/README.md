@@ -95,3 +95,7 @@ The **COPY STATUS** button in IDW AI STUDIO copies a sanitized snapshot of the *
 For **COPY STATUS**, V14 now presents a confirmation dialog explaining that track names and mixer metadata will be placed on the system clipboard; **CANCEL** leaves the clipboard unchanged. This remains a manual opt-in transfer rather than an automatic AI connection.
 
 The AI approval panel now refuses pasted proposals larger than 4 KB before parsing; it also enforces this size limit during manual review. This is a defensive bound, not a replacement for explicit user approval.
+
+### Importing AI proposals from files
+
+The IDW AI STUDIO panel now supports **IMPORT JSON**. It opens a local file picker and reads a JSON proposal of at most 4 KB. The user must still click **REVIEW PROPOSAL** and **APPROVE & APPLY**; importing cannot execute a command. This is a user-initiated file handoff, not a running MCP socket or automatic message bridge.
