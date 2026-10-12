@@ -39,7 +39,13 @@ int main(){
  if(!session.addClip(1,{second.getFullPathName().toStdString(),1.0,0.2,0.0}))
   throw std::runtime_error("second clip");
  juce::String error;
- if(!renderSessionWav(session,output,error))throw std::runtime_error(error.toStdString());
+ std::atomic<float> completedProgress{0.0f};
+ std::atomic<bool> notCanceled{false};
+ if(!renderSessionWav(session,output,error,44100,1.0f,-1.0f,0.0f,0.0f,
+                      &completedProgress,&notCanceled))
+    throw std::runtime_error(error.toStdString());
+ if(std::abs(completedProgress.load()-1.0f)>0.00001f)
+    throw std::runtime_error("export did not report 100 percent progress");
  auto reader=std::unique_ptr<juce::AudioFormatReader>(wav.createReaderFor(output.createInputStream().release(),true));
  if(!reader || reader->numChannels!=2 || reader->sampleRate!=44100 || reader->lengthInSamples!=26460)
   throw std::runtime_error("output metadata");
