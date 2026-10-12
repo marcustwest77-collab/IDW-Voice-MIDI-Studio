@@ -8,8 +8,8 @@ namespace idw::daw {
 // the shared beat clock. Intended for PCM WAV/AIFF project clips, not MIDI yet.
 // Call only from a non-audio thread. Returns false and a readable error.
 inline bool renderSessionWav(const Session& session,const juce::File& destination,
-                            juce::String& error,int sampleRate=44100,float masterGain=1.0f,float ceilingDb=-1.0f){
-    if(session.bpm<=0 || sampleRate<8000 || sampleRate>192000 || !std::isfinite(masterGain) || !std::isfinite(ceilingDb)){
+                            juce::String& error,int sampleRate=44100,float masterGain=1.0f,float ceilingDb=-1.0f,float lowDb=0.0f,float highDb=0.0f){
+    if(session.bpm<=0 || sampleRate<8000 || sampleRate>192000 || !std::isfinite(masterGain) || !std::isfinite(ceilingDb) || !std::isfinite(lowDb) || !std::isfinite(highDb)){
         error="Invalid bounce rate or tempo.";return false;
     }
     double lastBeat=0.0;
@@ -61,6 +61,10 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
     }
     const float outputCeiling=std::pow(10.0f,std::clamp(ceilingDb,-12.0f,-0.1f)/20.0f);
     const float outputGain=std::clamp(masterGain,0.0f,1.5f);
+    const float alpha=(float)std::exp(-2.0*juce::MathConstants<double>::pi*500.0/sampleRate);
+    const float bassGain=std::pow(10.0f,std::clamp(lowDb,-12.0f,12.0f)/20.0f);
+    const float trebleGain=std::pow(10.0f,std::clamp(highDb,-12.0f,12.0f)/20.0f);
+    float filterState[2]{0.0f,0.0f};
     for(int64_t pos=0;pos<frames;pos+=block){
         const int count=(int)std::min<int64_t>(block,frames-pos);
         mix.clear();
@@ -75,7 +79,14 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
         }
         for(int ch=0;ch<2;++ch){
             auto* p=mix.getWritePointer(ch);
-            for(int i=0;i<count;++i)p[i]=std::clamp(p[i]*outputGain,-outputCeiling,outputCeiling);
+            float state=filterState[ch];
+            for(int i=0;i<count;++i){
+                const float input=p[i];
+                state=alpha*state+(1.0f-alpha)*input;
+                const float shaped=bassGain*state+trebleGain*(input-state);
+                p[i]=std::clamp(shaped*outputGain,-outputCeiling,outputCeiling);
+            }
+            filterState[ch]=state;
         }
         if(!writer->writeFromFloatArrays(channels,2,count)){
             error="Failed while writing WAV samples.";writer.reset();destination.deleteFile();return false;
