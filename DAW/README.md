@@ -123,3 +123,7 @@ The session model now exposes validated `moveClip(trackIndex, clipIndex, newStar
 ### Interactive audio clip timeline (experimental)
 
 With transport stopped, drag the body of an existing audio clip to move it horizontally, or drag its rightmost 10 pixels to resize the duration. Positions and duration snap to quarter-beat increments. Edits are disabled during playback, recording or export. Dragging edits the in-memory session; use **SAVE PROJECT** to persist it. Clip overlap and crossfades are not yet managed by this interface.
+
+### Selected clip keyboard editing
+
+Click an audio clip on the main timeline to select it and focus the editor. Press **Left/Right Arrow** to nudge its start position by ¼ beat; hold **Shift** while pressing Left/Right to shorten or lengthen the clip by ¼ beat (minimum ¼ beat). This is disabled during playback, recording, and export. Keyboard shortcuts work when the main timeline has focus.
