@@ -83,6 +83,10 @@ public:
         };
         apply.onClick=[this]{
             apply.setEnabled(false); // Single use; cannot be executed twice.
+            if(editor.getText().length()>4096){
+                feedback.setText("Proposal exceeds 4 KB limit.",juce::dontSendNotification);
+                return;
+            }
             // Reparse the exact text at approval time: never execute a stale
             // proposal if the editor was changed after review.
             idw::daw::AIProposal current{idw::daw::AIProposal::Kind::tempo};
