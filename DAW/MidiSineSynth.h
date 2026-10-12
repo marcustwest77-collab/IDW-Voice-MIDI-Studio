@@ -23,8 +23,12 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
             if(n.pitch<0 || n.pitch>127 || n.velocity<1 || n.velocity>127 ||
                !std::isfinite(n.startBeat) || !std::isfinite(n.lengthBeats) ||
                n.startBeat<0 || n.lengthBeats<=0)continue;
-            const auto noteStart=(std::int64_t)std::llround(n.startBeat*framesPerBeat);
-            const auto noteEnd=(std::int64_t)std::llround((n.startBeat+n.lengthBeats)*framesPerBeat);
+            const double noteStartDouble=n.startBeat*framesPerBeat;
+            const double noteEndDouble=(n.startBeat+n.lengthBeats)*framesPerBeat;
+            if(!std::isfinite(noteStartDouble) || !std::isfinite(noteEndDouble) ||
+               noteStartDouble<0 || noteEndDouble>9e15)continue;
+            const auto noteStart=(std::int64_t)std::llround(noteStartDouble);
+            const auto noteEnd=(std::int64_t)std::llround(noteEndDouble);
             const auto first=std::max<std::int64_t>(0,noteStart-startFrame);
             const auto last=std::min<std::int64_t>(samples,noteEnd-startFrame);
             if(first>=last)continue;
