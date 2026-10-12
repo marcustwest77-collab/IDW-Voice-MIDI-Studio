@@ -181,6 +181,39 @@ int main(){
        std::abs(longResult.getSample(1,i)-0.25f)>0.01f)
         throw std::runtime_error("resampling continuity across blocks");
  longReader.reset();
+ // Test downsampling a high-frequency alternating waveform. A basic
+ // linear resampler may alias; this test records the output RMS so future
+ // anti-alias improvements have an explicit quality target.
+ const auto hfInput=root.getChildFile("high-frequency.wav");
+ auto hfStream=std::unique_ptr<juce::FileOutputStream>(hfInput.createOutputStream());
+ if(!hfStream)throw std::runtime_error("HF input stream");
+ auto hfWriter=std::unique_ptr<juce::AudioFormatWriter>(
+    wav.createWriterFor(hfStream.get(),48000.0,1,16,{},0));
+ if(!hfWriter)throw std::runtime_error("HF writer");
+ hfStream.release();
+ juce::AudioBuffer<float> hfSignal(1,4800);
+ for(int i=0;i<4800;++i)hfSignal.setSample(0,i,(i%2==0)?0.4f:-0.4f);
+ const float* hfChannels[]{hfSignal.getReadPointer(0)};
+ if(!hfWriter->writeFromFloatArrays(hfChannels,1,4800))
+    throw std::runtime_error("HF write");
+ hfWriter.reset();
+ Session hfSession;hfSession.setTempo(120);hfSession.addTrack(TrackType::audio);
+ if(!hfSession.addClip(0,{hfInput.getFullPathName().toStdString(),0.0,0.2,0.0}))
+    throw std::runtime_error("HF clip");
+ const auto hfOutput=root.getChildFile("high-frequency-out.wav");
+ if(!renderSessionWav(hfSession,hfOutput,error))
+    throw std::runtime_error("HF bounce: "+error.toStdString());
+ auto hfReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(hfOutput.createInputStream().release(),true));
+ if(!hfReader || hfReader->lengthInSamples!=4410)
+    throw std::runtime_error("HF output duration");
+ juce::AudioBuffer<float> hfResult(2,4410);
+ if(!hfReader->read(&hfResult,0,4410,0,true,true))
+    throw std::runtime_error("HF output read");
+ const float hfRms=hfResult.getRMSLevel(0,128,4096);
+ if(!std::isfinite(hfRms) || hfRms>0.5f)
+    throw std::runtime_error("HF resampling unstable");
+ hfReader.reset();
  // The two-band master tone must modify low-frequency content predictably.
  const auto bassOutput=root.getChildFile("bass-boost.wav");
  if(!renderSessionWav(stereoSession,bassOutput,error,44100,1.0f,-0.1f,6.0f,0.0f))
