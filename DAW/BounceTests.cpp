@@ -216,6 +216,26 @@ int main(){
  if(!std::isfinite(hfRms) || hfRms>0.08f)
     throw std::runtime_error("HF alias rejection inadequate");
  hfReader.reset();
+ // A ten-second multitrack stress case detects incorrect output duration,
+ // misaligned start times, and progress regressions across many blocks.
+ const auto stressOutput=root.getChildFile("stress-ten-seconds.wav");
+ Session stress;stress.setTempo(120);
+ for(int track=0;track<8;++track){
+    if(!stress.addTrack(TrackType::audio))throw std::runtime_error("stress track");
+    if(!stress.addClip((size_t)track,{longInput.getFullPathName().toStdString(),
+          (double)track,2.0,0.0}))throw std::runtime_error("stress clip");
+ }
+ std::atomic<float> stressProgress{0.0f};
+ std::atomic<bool> stressCancel{false};
+ if(!renderSessionWav(stress,stressOutput,error,44100,1.0f,-0.1f,0.0f,0.0f,
+                      &stressProgress,&stressCancel))
+    throw std::runtime_error("stress bounce: "+error.toStdString());
+ auto stressReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(stressOutput.createInputStream().release(),true));
+ if(!stressReader || stressReader->lengthInSamples!=198450 ||
+    std::abs(stressProgress.load()-1.0f)>0.00001f)
+    throw std::runtime_error("stress duration or progress");
+ stressReader.reset();
  // The two-band master tone must modify low-frequency content predictably.
  const auto bassOutput=root.getChildFile("bass-boost.wav");
  if(!renderSessionWav(stereoSession,bassOutput,error,44100,1.0f,-0.1f,6.0f,0.0f))
