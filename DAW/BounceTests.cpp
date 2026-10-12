@@ -235,6 +235,16 @@ int main(){
  if(!stressReader || stressReader->lengthInSamples!=198450 ||
     std::abs(stressProgress.load()-1.0f)>0.00001f)
     throw std::runtime_error("stress duration or progress");
+ // Check actual audio around staggered clip arrivals and their overlap.
+ juce::AudioBuffer<float> stressSamples(2,198450);
+ if(!stressReader->read(&stressSamples,0,198450,0,true,true))
+    throw std::runtime_error("stress sample read");
+ const auto atSeconds=[](double seconds){return (int)std::llround(seconds*44100.0);};
+ if(std::abs(stressSamples.getSample(0,atSeconds(0.25))-0.25f)>0.01f ||
+    std::abs(stressSamples.getSample(0,atSeconds(0.75))-0.50f)>0.01f ||
+    std::abs(stressSamples.getSample(0,atSeconds(1.25))-0.50f)>0.01f ||
+    std::abs(stressSamples.getSample(0,atSeconds(4.25))-0.25f)>0.01f)
+    throw std::runtime_error("stress multitrack timing or level mismatch");
  stressReader.reset();
  // The two-band master tone must modify low-frequency content predictably.
  const auto bassOutput=root.getChildFile("bass-boost.wav");
