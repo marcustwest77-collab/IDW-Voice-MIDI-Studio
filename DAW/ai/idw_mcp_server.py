@@ -11,6 +11,8 @@ from pathlib import Path
 
 PROTOCOL = "2025-03-26"
 TOOLS = [
+    {"name": "idw_session_snapshot", "description": "Read an explicitly exported sanitized DAW status JSON snapshot; not a live stream.",
+     "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "idw_project_status", "description": "Read BPM, meter, and track count from the configured saved IDW project (read-only).",
      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "idw_list_tracks", "description": "List track names, types, and mix settings; never exposes source paths or audio content.",
@@ -46,7 +48,32 @@ def project():
         raise ValueError("Project tracks malformed.")
     return data
 
+def session_snapshot():
+    configured = os.environ.get("IDW_STATUS_FILE")
+    if not configured:
+        raise ValueError("Set IDW_STATUS_FILE to an explicitly exported IDW status JSON file.")
+    path = Path(configured).expanduser()
+    if not path.is_file() or path.stat().st_size > 131072:
+        raise ValueError("Status snapshot not found or exceeds 128 KB limit.")
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    if (not isinstance(data, dict) or data.get("format") != "idw-ai-status-v1"
+        or not isinstance(data.get("tracks"), list) or len(data["tracks"]) > 128):
+        raise ValueError("Unsupported IDW status snapshot.")
+    tracks = []
+    for t in data["tracks"]:
+        if not isinstance(t, dict):
+            raise ValueError("Malformed track metadata.")
+        tracks.append({k: t.get(k) for k in (
+            "name", "type", "gain", "pan", "mute", "solo", "clipCount")})
+    return {"bpm": data.get("bpm"), "numerator": data.get("numerator"),
+            "denominator": data.get("denominator"),
+            "playing": data.get("playing"), "recording": data.get("recording"),
+            "tracks": tracks, "source": "explicitly-exported-status", "live": False}
+
 def dispatch(name, args):
+    if name == "idw_session_snapshot":
+        return session_snapshot()
     if name == "idw_preview_tempo":
         bpm = args.get("bpm")
         if isinstance(bpm, bool) or not isinstance(bpm, (int, float)) or not (20 <= bpm <= 300):
