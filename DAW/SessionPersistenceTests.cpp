@@ -129,6 +129,13 @@ int main(){
  const float edgeFundamental=(float)std::sin(edgePhase);
  if(std::abs(synthWave(SynthPreset::bass,edgePhase,2000.0,8000.0)-edgeFundamental)>1e-6f)
     throw std::runtime_error("Nyquist boundary harmonic not filtered");
+ // Rendering a block in two segments must match one contiguous render.
+ std::vector<float> fullBlock(512,0.0f),splitBlock(512,0.0f);
+ renderMidiSine(sineSession,fullBlock.data(),nullptr,512,0,48000.0);
+ renderMidiSine(sineSession,splitBlock.data(),nullptr,256,0,48000.0);
+ renderMidiSine(sineSession,splitBlock.data()+256,nullptr,256,256,48000.0);
+ if(fullBlock!=splitBlock)
+    throw std::runtime_error("MIDI audio differs across block boundaries");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
