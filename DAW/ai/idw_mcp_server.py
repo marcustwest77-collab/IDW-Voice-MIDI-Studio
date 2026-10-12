@@ -20,7 +20,13 @@ TOOLS = [
                      "required": ["bpm"], "additionalProperties": False}},
     {"name": "idw_preview_track", "description": "Preview adding one audio or MIDI track without modifying the project.",
      "inputSchema": {"type": "object", "properties": {"type": {"type": "string", "enum": ["audio", "midi"]}},
-                     "required": ["type"], "additionalProperties": False}}
+                     "required": ["type"], "additionalProperties": False}},
+    {"name": "idw_preview_mix", "description": "Preview a track gain and pan change using a saved project; does not modify files.",
+     "inputSchema": {"type": "object", "properties": {
+         "track_index": {"type": "integer", "minimum": 0},
+         "gain": {"type": "number", "minimum": 0, "maximum": 2},
+         "pan": {"type": "number", "minimum": -1, "maximum": 1}},
+         "required": ["track_index", "gain", "pan"], "additionalProperties": False}}
 ]
 
 def project():
@@ -50,6 +56,20 @@ def dispatch(name, args):
             raise ValueError("Track type must be audio or midi.")
         return {"proposal": "add_track", "type": kind, "applied": False,
                 "note": "Confirm and add the track manually in V14."}
+    if name == "idw_preview_mix":
+        import math
+        index, gain, pan = (args.get(k) for k in ("track_index", "gain", "pan"))
+        if (type(index) is not int or index < 0 or
+            any(type(x) not in (int, float) or not math.isfinite(x) for x in (gain, pan)) or
+            not (0 <= gain <= 2 and -1 <= pan <= 1)):
+            raise ValueError("Invalid track index, gain, or pan.")
+        data = project()
+        if index >= len(data["tracks"]):
+            raise ValueError("Track index outside project.")
+        return {"proposal": "set_track_mix", "track_index": index,
+                "track_name": str(data["tracks"][index].get("name", ""))[:128],
+                "gain": gain, "pan": pan, "applied": False,
+                "note": "Confirm and adjust track controls manually in V14."}
     data = project()
     if name == "idw_project_status":
         return {"bpm": data.get("bpm"), "numerator": data.get("numerator"),
