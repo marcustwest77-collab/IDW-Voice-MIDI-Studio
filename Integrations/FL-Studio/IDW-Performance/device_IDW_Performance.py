@@ -9,14 +9,16 @@ TARGET_NAMES = {0: 'IDW Lead', 1: 'IDW Chords', 2: 'IDW Bass', 9: 'IDW Drums'}
 targets = {}
 held = {}
 
-def panic():
+def panic(midi_channel=None):
     for (channel, note), target in list(held.items()):
+        if midi_channel is not None and channel != midi_channel:
+            continue
         try:
             if channels.getChannelName(target, True) == TARGET_NAMES[channel]:
                 channels.midiNoteOn(target, note, 0)
         except Exception:
             pass
-    held.clear()
+        held.pop((channel, note), None)
 
 def mapping():
     found_targets = {}
@@ -55,7 +57,7 @@ def OnMidiMsg(event):
         return
     kind = event.status & 0xF0
     if kind == 0xB0 and event.data1 in (120, 123):
-        panic()
+        panic(c)
         event.handled = True
         return
     if kind not in (0x80, 0x90):

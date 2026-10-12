@@ -63,6 +63,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout IDWVoiceMIDIStudioAudioProce
 
 
 void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
+    midiLedger = {};
     retrospective.resetAudio();
     studioSynth.prepare(sr);incomingMidi.clear();synthWasEnabled=false;
     heldHarmony={};
@@ -75,7 +76,7 @@ void IDWVoiceMIDIStudioAudioProcessor::prepareToPlay(double sr,int block){
     previousMpe=value("mpe")>0.5f;previousFirst=(int)value("mpeFirst");previousLast=(int)value("mpeLast");phase=0;previewGain=0;
     setLatencySamples(0); // Live tracking is causal; no artificial delay is added.
 }
-void IDWVoiceMIDIStudioAudioProcessor::releaseResources(){pitch.reset();capture.resetAudio();}
+void IDWVoiceMIDIStudioAudioProcessor::releaseResources(){pitch.reset();capture.resetAudio();midiLedger = {}; }
 bool IDWVoiceMIDIStudioAudioProcessor::isBusesLayoutSupported(const BusesLayout& b) const{
     const auto i=b.getMainInputChannelSet(),o=b.getMainOutputChannelSet();
     return (i==juce::AudioChannelSet::mono()||i==juce::AudioChannelSet::stereo())
@@ -100,6 +101,8 @@ void IDWVoiceMIDIStudioAudioProcessor::endVoice(juce::MidiBuffer& out,int at){
     active=candidate=-1;candidateSamples=0;midi.store(-1);lastWheel=-1;lastCC=-1;displayedBend.store(0);
 }
 void IDWVoiceMIDIStudioAudioProcessor::allOff(juce::MidiBuffer& out,int at){
+    // Release every previously emitted voice, including orphaned notes.
+    midiLedger.flush([&](int channel,int note){out.addEvent(juce::MidiMessage::noteOff(channel,note),at);});
     endVoice(out,at);
     for(int n=0;n<128;++n)if(drumRemaining[(size_t)n]>=0)out.addEvent(juce::MidiMessage::noteOff(10,n),at);
     if(testRemaining>0)out.addEvent(juce::MidiMessage::noteOff(1,60),at);
@@ -234,7 +237,16 @@ void IDWVoiceMIDIStudioAudioProcessor::processBlock(juce::AudioBuffer<float>& bu
     }
     inputPeak.store(juce::jmax(blockPeak,inputPeak.load()*(float)std::exp(-count/(sampleRateHz*0.5))));
     int notes=0,events=0;
-    for(const auto event:out){++events;if(event.getMessage().isNoteOn())++notes;}
+    for(const auto event:out){
+        ++events;
+        const auto message=event.getMessage();
+        if(message.isNoteOn()){++notes;midiLedger.noteOn(message.getChannel(),message.getNoteNumber());}
+        else if(message.isNoteOff())midiLedger.noteOff(message.getChannel(),message.getNoteNumber());
+        else if(message.isAllNotesOff() || message.isAllSoundOff()){
+            // Channel-mode cleanup also invalidates locally recorded active notes.
+            for(int note=0;note<128;++note)midiLedger.noteOff(message.getChannel(),note);
+        }
+    }
     emittedNotes.fetch_add(notes);emittedEvents.fetch_add(events);
     capture.finishBlock(out,count);
     retrospective.finishBlock(out,count,sampleRateHz,value("retroEnabled")>0.5f);
