@@ -4,6 +4,7 @@
 #include "TakeRecorder.h"
 #include "SessionPersistence.h"
 #include "ProjectPackaging.h"
+#include "OfflineBounce.h"
 #include <atomic>
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
 public:
@@ -16,11 +17,12 @@ public:
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
-        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject}) addAndMakeVisible(*b);
+        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject,&bounce}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN PROJECT");
         exportProject.setButtonText("EXPORT PORTABLE");
+        bounce.setButtonText("BOUNCE WAV");
         record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
         play.onClick=[this]{if(loadedCount()>0){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
@@ -30,6 +32,7 @@ public:
         saveProject.onClick=[this]{saveProjectFile();};
         openProject.onClick=[this]{openProjectFile();};
         exportProject.onClick=[this]{exportProjectFile();};
+        bounce.onClick=[this]{bounceMix();};
         audio.onClick=[this]{addAudioTrack();refreshMixer();repaint();};
         midi.onClick=[this]{if(!playing.load())session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
@@ -103,6 +106,7 @@ public:
         saveProject.setBounds(projectRow.removeFromLeft(165).reduced(3));
         openProject.setBounds(projectRow.removeFromLeft(165).reduced(3));
         exportProject.setBounds(projectRow.removeFromLeft(180).reduced(3));
+        bounce.setBounds(projectRow.removeFromLeft(145).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(185));
@@ -356,6 +360,19 @@ private:
                         "The project is invalid or cannot be opened during playback.");
             });
     }
+    void bounceMix(){
+        if(playing.load() || recorder.isRecording())return;
+        projectChooser=std::make_unique<juce::FileChooser>("Export stereo WAV",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW Mix.wav"),"*.wav");
+        projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+            [this](const juce::FileChooser& picker){
+                auto output=picker.getResult();if(output==juce::File{})return;
+                output=output.withFileExtension(".wav");
+                juce::String error;
+                if(!idw::daw::renderSessionWav(session,output,error,44100))
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"WAV bounce unavailable",error);
+            });
+    }
     void exportProjectFile(){
         if(playing.load() || recorder.isRecording())return;
         projectChooser=std::make_unique<juce::FileChooser>("Export portable IDW Project",
@@ -459,7 +476,7 @@ private:
     juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce;
     IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
