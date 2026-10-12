@@ -93,6 +93,13 @@ public:
                 return;
             }
             const auto contents=inboxFile.loadFileAsString();
+            // Recheck bytes after reading: the MCP writer or another process
+            // could change the file between the size check and the read.
+            if(contents.getNumBytesAsUTF8()>4096){
+                apply.setEnabled(false);
+                feedback.setText("Inbox content exceeds 4 KB limit.",juce::dontSendNotification);
+                return;
+            }
             // A checked inbox is only a preview, never an authorization.
             // Do not replace an editor draft unless it is a valid action.
             idw::daw::AIProposal candidate{idw::daw::AIProposal::Kind::tempo};
