@@ -16,6 +16,10 @@ int main(){
     throw std::runtime_error("approved tempo");
  if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":999}})"),action))
     throw std::runtime_error("accepted unsafe AI tempo");
+ if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":145,"extra":"unexpected"}})"),action))
+    throw std::runtime_error("accepted unexpected AI parameter");
+ if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_track_mix","track_index":0,"gain":0.5,"pan":0,"file":"secret.wav"}})"),action))
+    throw std::runtime_error("accepted extra file field");
  if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"delete_recordings","path":"all"}})"),action))
     throw std::runtime_error("accepted unsafe AI command");
  if(!parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"add_track","track_type":"midi"}})"),action)
