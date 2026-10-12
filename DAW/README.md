@@ -107,3 +107,7 @@ The IDW AI STUDIO panel now supports **IMPORT JSON**. It opens a local file pick
 ### MCP-to-DAW proposal inbox (opt-in staging)
 
 Set `IDW_PROPOSAL_INBOX` to a dedicated absolute filename ending in `.json`, in an existing directory. An MCP client can call `idw_stage_proposal` to write **one** validated tempo, track-addition, or track-mix proposal to that filename. The server refuses to overwrite an existing inbox file, never executes the proposal, and requires explicit configuration before writing. In the DAW, choose **IDW AI STUDIO → IMPORT JSON**, select the staged file, then **REVIEW PROPOSAL → APPROVE & APPLY**. Delete or archive the inbox file after handling it to allow a new proposal. This is a **file-based bridge, not a continuous live MCP connection**; it never auto-imports or applies changes. Keep the configured directory private and accessible only to your user account.
+
+### Checking a pending AI inbox proposal
+
+In IDW AI STUDIO, click **SET INBOX** and select the existing local JSON file configured as `IDW_PROPOSAL_INBOX` for your MCP client. Click **CHECK INBOX** whenever you want to read it. The DAW validates the format and loads it into the editor, but does not apply it; use **REVIEW PROPOSAL** followed by **APPROVE & APPLY**. This is user-initiated checking, not background monitoring, and it does not automatically remove the inbox file.
