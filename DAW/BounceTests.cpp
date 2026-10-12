@@ -74,6 +74,26 @@ int main(){
     std::abs(stereoResult.getSample(1,100)+0.2f)>0.01f)
     throw std::runtime_error("stereo channel mismatch");
  stereoReader.reset();
+ // Check the last sample before a clip and the first sample of the clip,
+ // including a transition that lands inside an export processing block.
+ const auto boundaryOutput=root.getChildFile("boundary.wav");
+ Session boundary;boundary.setTempo(120);boundary.addTrack(TrackType::audio);
+ const double startBeat=1025.0/22050.0; // sample 1025 at 44.1kHz, 120 BPM
+ if(!boundary.addClip(0,{stereo.getFullPathName().toStdString(),startBeat,0.2,0.0}))
+    throw std::runtime_error("boundary clip");
+ if(!renderSessionWav(boundary,boundaryOutput,error))
+    throw std::runtime_error("boundary bounce: "+error.toStdString());
+ auto boundaryReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(boundaryOutput.createInputStream().release(),true));
+ if(!boundaryReader)throw std::runtime_error("boundary reader");
+ juce::AudioBuffer<float> boundaryAudio(2,1030);
+ if(!boundaryReader->read(&boundaryAudio,0,1030,0,true,true))
+    throw std::runtime_error("boundary read");
+ if(std::abs(boundaryAudio.getSample(0,1024))>0.00001f ||
+    std::abs(boundaryAudio.getSample(0,1025)-0.2f)>0.01f ||
+    std::abs(boundaryAudio.getSample(1,1025)+0.2f)>0.01f)
+    throw std::runtime_error("clip entry not sample aligned");
+ boundaryReader.reset();
  reader.reset();root.deleteRecursively();
  std::cout<<"PASS: stereo WAV bounce timeline and signal test\n";
 }
