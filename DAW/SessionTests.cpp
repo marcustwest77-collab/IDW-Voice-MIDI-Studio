@@ -5,6 +5,9 @@ int main() {
     if(s.tracks.size()!=0 || s.bpm!=120.0)throw std::runtime_error("initial session");
     if(!s.addTrack(idw::daw::TrackType::audio)||!s.addTrack(idw::daw::TrackType::midi))throw std::runtime_error("add");
     if(s.tracks[0].name!="Audio 1" || s.tracks[1].name!="MIDI 2")throw std::runtime_error("names");
+    if(!s.setTrackMix(0,1.5f,-0.5f) || s.tracks[0].gain!=1.5f || s.tracks[0].pan!=-0.5f)throw std::runtime_error("track mix");
+    if(!s.setTrackMix(0,5.0f,-5.0f) || s.tracks[0].gain!=2.0f || s.tracks[0].pan!=-1.0f)throw std::runtime_error("mix clamp");
+    if(s.setTrackMix(99,1.0f,0.0f))throw std::runtime_error("invalid track accepted");
     s.setTempo(0);if(s.bpm!=20)throw std::runtime_error("low bpm");
     s.setTempo(500);if(s.bpm!=300)throw std::runtime_error("high bpm");
     if(!s.addClip(0, {"demo.wav",4.0,8.0,0.0}))throw std::runtime_error("add audio clip");
