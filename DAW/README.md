@@ -143,3 +143,7 @@ MIDI note selection: click an existing note to highlight it gold and focus the p
 ### MIDI playback scheduler foundation
 
 `MidiScheduler.h` converts saved piano-roll notes to chronologically ordered MIDI note-on/note-off events and respects track mute/solo settings. Same-beat note-offs are ordered before note-ons. Tests cover timing and mute behavior. This is **event scheduling only**: the live audio callback does not yet emit MIDI and there is still no built-in synthesizer or plugin host to make the notes audible.
+
+### Audible MIDI preview (experimental)
+
+The built-in sine oscillator now renders piano-roll MIDI notes through the DAW audio callback during PLAY, including MIDI-only sessions. Notes follow pitch, duration, velocity and track gain/pan/mute/solo. This is a basic sound preview, **not yet VST3/AU hosting, MIDI device output, or a full polyphonic synth**. The prototype uses direct note rendering without allocation, and still needs latency, CPU-load and real hardware testing.
