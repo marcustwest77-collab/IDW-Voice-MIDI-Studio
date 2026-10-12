@@ -18,12 +18,13 @@ public:
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
-        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject,&bounce}) addAndMakeVisible(*b);
+        for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject,&bounce,&cancelBounce}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN PROJECT");
         exportProject.setButtonText("EXPORT PORTABLE");
         bounce.setButtonText("BOUNCE WAV");
+        cancelBounce.setButtonText("CANCEL EXPORT");cancelBounce.setEnabled(false);
         record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
         play.onClick=[this]{if(loadedCount()>0){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
@@ -34,6 +35,7 @@ public:
         openProject.onClick=[this]{openProjectFile();};
         exportProject.onClick=[this]{exportProjectFile();};
         bounce.onClick=[this]{bounceMix();};
+        cancelBounce.onClick=[this]{exportCancel.store(true);};
         audio.onClick=[this]{addAudioTrack();refreshMixer();repaint();};
         midi.onClick=[this]{if(!playing.load())session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
@@ -108,6 +110,7 @@ public:
         openProject.setBounds(projectRow.removeFromLeft(165).reduced(3));
         exportProject.setBounds(projectRow.removeFromLeft(180).reduced(3));
         bounce.setBounds(projectRow.removeFromLeft(145).reduced(3));
+        cancelBounce.setBounds(projectRow.removeFromLeft(150).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(185));
@@ -176,6 +179,10 @@ public:
             g.setColour(clipped?juce::Colours::red:juce::Colours::limegreen);
             g.fillRect(meterLeft,y,juce::roundToInt(meterWidth*juce::jlimit(0.0f,1.0f,peak)),11);
             g.setColour(juce::Colours::white);g.drawText(ch==0?"L":"R",meterLeft-20,y,18,11,juce::Justification::centred);
+        }
+        if(exportRunning.load()){
+            g.setColour(juce::Colours::gold);
+            g.drawText("Export: "+juce::String((int)(exportProgress.load()*100.0f))+"%",getWidth()-230,80,205,24,juce::Justification::centredRight);
         }
         g.setColour(juce::Colours::grey);
         g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline-scheduled playback prototype; recording and clip editing unavailable." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
@@ -274,7 +281,7 @@ private:
     }
     void timerCallback() override {
         playheadBeats=deviceRate>0?(double)sessionFrames.load()*session.bpm/(deviceRate*60.0):0.0;
-        if(playing && playheadBeats>=lastClipEndBeat()){playing=false;stopTimer();for(auto& slot:sources)slot->transport.stop();}
+        if(playing && playheadBeats>=lastClipEndBeat()){playing=false;if(!exportRunning.load())stopTimer();for(auto& slot:sources)slot->transport.stop();}
         repaint();
     }
     struct AudioSlot {
@@ -373,15 +380,22 @@ private:
                 const auto snapshot=session;
                 const float gain=masterLevel.load(),ceiling=ceilingDb.load(),bass=lowDb.load(),treble=highDb.load();
                 bounce.setEnabled(false);
+                cancelBounce.setEnabled(true);
+                exportCancel.store(false);
+                exportProgress.store(0.0f);
                 exportRunning.store(true);
+                startTimerHz(10);
                 const juce::Component::SafePointer<Workstation> safeThis(this);
                 exportThread=std::thread([this,safeThis,snapshot,output,gain,ceiling,bass,treble]{
                     juce::String error;
-                    const bool ok=idw::daw::renderSessionWav(snapshot,output,error,44100,gain,ceiling,bass,treble);
+                    const bool ok=idw::daw::renderSessionWav(snapshot,output,error,44100,gain,ceiling,bass,treble,&exportProgress,&exportCancel);
                     juce::MessageManager::callAsync([safeThis,ok,error]{
                         if(!safeThis)return;
                         safeThis->exportRunning.store(false);
                         safeThis->bounce.setEnabled(true);
+                        safeThis->cancelBounce.setEnabled(false);
+                        if(!safeThis->playing.load())safeThis->stopTimer();
+                        safeThis->repaint();
                         juce::AlertWindow::showMessageBoxAsync(ok?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
                             ok?"WAV export complete":"WAV bounce unavailable",ok?"Stereo WAV written successfully.":error);
                     });
@@ -474,6 +488,8 @@ private:
     ~Workstation() override {if(exportThread.joinable())exportThread.join();recorder.stop();deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
+    std::atomic<bool> exportCancel{false};
+    std::atomic<float> exportProgress{0.0f};
     idw::daw::Session session;
     std::atomic<bool> playing{false};
     double playheadBeats=0;
@@ -493,7 +509,7 @@ private:
     juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce;
     IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
