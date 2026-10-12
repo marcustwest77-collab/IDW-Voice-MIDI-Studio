@@ -369,7 +369,7 @@ private:
                 auto output=picker.getResult();if(output==juce::File{})return;
                 output=output.withFileExtension(".wav");
                 juce::String error;
-                if(!idw::daw::renderSessionWav(session,output,error,44100,masterLevel.load(),ceilingDb.load()))
+                if(!idw::daw::renderSessionWav(session,output,error,44100,masterLevel.load(),ceilingDb.load(),lowDb.load(),highDb.load()))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"WAV bounce unavailable",error);
             });
     }
