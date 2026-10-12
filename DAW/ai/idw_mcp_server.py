@@ -51,13 +51,16 @@ def dispatch(name, args):
         bpm = args.get("bpm")
         if isinstance(bpm, bool) or not isinstance(bpm, (int, float)) or not (20 <= bpm <= 300):
             raise ValueError("BPM must be between 20 and 300.")
-        return {"proposal": "set_tempo", "bpm": bpm, "applied": False, "note": "Confirm and set tempo manually in V14."}
+        return {"proposal": "set_tempo", "bpm": bpm, "applied": False,
+                "approval_json": {"format": "idw-ai-proposal-v1", "action": {"type": "set_tempo", "bpm": bpm}},
+                "note": "Copy approval_json into IDW AI STUDIO, review and approve manually."}
     if name == "idw_preview_track":
         kind = args.get("type")
         if kind not in ("audio", "midi"):
             raise ValueError("Track type must be audio or midi.")
         return {"proposal": "add_track", "type": kind, "applied": False,
-                "note": "Confirm and add the track manually in V14."}
+                "approval_json": {"format": "idw-ai-proposal-v1", "action": {"type": "add_track", "track_type": kind}},
+                "note": "Copy approval_json into IDW AI STUDIO, review and approve manually."}
     if name == "idw_preview_mix":
         import math
         index, gain, pan = (args.get(k) for k in ("track_index", "gain", "pan"))
