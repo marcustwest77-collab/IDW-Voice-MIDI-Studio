@@ -61,3 +61,15 @@ These operate on an explicit saved **snapshot**, not the live JUCE timeline. **R
 Run `python3 DAW/ai/test_mcp_server.py` for protocol and no-write safety tests.
 
 Later milestones: live DAW command bridge with explicit approval, embedded AI panel, provider credentials and secure external connectivity. These are not yet implemented.
+
+## AI command approval foundation
+
+The new `DAW/AIProposal.h` defines a strict `idw-ai-proposal-v1` JSON contract for three non-destructive actions: set tempo, add audio track, or add MIDI track. It rejects extra keys, unknown action types, and out-of-range BPM before a caller can apply anything.
+
+Example proposed change (NOT applied automatically):
+
+```json
+{"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":145}}
+```
+
+The JUCE parser and action helper are covered by `IDWDAWPersistenceTests`. They are **not yet connected to an interactive approval window, live MCP bridge, or in-DAW AI chat**. Continue to use the DAW's manual controls. No recording or project destruction is permitted through this proposal interface.
