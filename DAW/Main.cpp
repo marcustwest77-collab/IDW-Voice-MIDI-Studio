@@ -67,7 +67,7 @@ public:
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
         const auto rect=getLocalBounds().reduced(20);
-        const int top=120, trackHeight=70, left=205;
+        const int top=170, trackHeight=70, left=205;
         g.setColour(juce::Colour(0xff1b222b));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
