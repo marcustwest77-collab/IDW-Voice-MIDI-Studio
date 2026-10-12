@@ -99,3 +99,7 @@ The AI approval panel now refuses pasted proposals larger than 4 KB before parsi
 ### Importing AI proposals from files
 
 The IDW AI STUDIO panel now supports **IMPORT JSON**. It opens a local file picker and reads a JSON proposal of at most 4 KB. The user must still click **REVIEW PROPOSAL** and **APPROVE & APPLY**; importing cannot execute a command. This is a user-initiated file handoff, not a running MCP socket or automatic message bridge.
+
+### Opt-in session snapshot handoff to MCP
+
+**SAVE STATUS** inside IDW AI STUDIO asks for confirmation, then writes a sanitized JSON snapshot to a file you select. In your local MCP configuration, set `IDW_STATUS_FILE` to that saved file and call `idw_session_snapshot` from the AI client. This tool reads only the explicitly exported snapshot and excludes source paths even when a malformed file includes them. Export again to refresh the snapshot; there is no file watcher or live connection. Track names and mix information can still be sensitive, so save and share only when appropriate. This does not authorize AI to apply commands automatically.
