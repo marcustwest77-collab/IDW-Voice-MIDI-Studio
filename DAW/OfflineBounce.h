@@ -107,29 +107,37 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 // A short windowed-sinc kernel suppresses out-of-band energy
                 // during downsampling; linear interpolation remains for upsampling.
                 const int right=clip.reader->numChannels>1?1:0;
-                const auto sampleAt=[&](int channel)->float {
-                    if(ratio<=1.0)
-                        return scratch.getSample(channel,index)*(1.0f-fraction)
-                             +scratch.getSample(channel,index+1)*fraction;
+                float l=0.0f,r=0.0f;
+                if(ratio<=1.0){
+                    l=scratch.getSample(0,index)*(1.0f-fraction)+scratch.getSample(0,index+1)*fraction;
+                    r=scratch.getSample(right,index)*(1.0f-fraction)+scratch.getSample(right,index+1)*fraction;
+                }else{
+                    // Compute sinc/window coefficients once and use the same
+                    // kernel for both channels, avoiding duplicate trig work.
                     constexpr int radius=12;
                     const double cutoff=0.5/ratio;
-                    double value=0.0,weight=0.0;
+                    double leftValue=0.0,rightValue=0.0,weight=0.0;
                     for(int tap=-radius+1;tap<=radius;++tap){
                         const int position=index+tap;
                         if(position<0 || position>=sourceCount)continue;
                         const double distance=at-position;
-                        const double sincArg=2.0*cutoff*distance;
-                        const double sinc=std::abs(sincArg)<1.0e-10?1.0:std::sin(juce::MathConstants<double>::pi*sincArg)/(juce::MathConstants<double>::pi*sincArg);
-                        const double window=0.5+0.5*std::cos(juce::MathConstants<double>::pi*distance/radius);
                         if(std::abs(distance)>=radius)continue;
+                        const double sincArg=2.0*cutoff*distance;
+                        const double sinc=std::abs(sincArg)<1.0e-10?1.0:
+                            std::sin(juce::MathConstants<double>::pi*sincArg)/
+                            (juce::MathConstants<double>::pi*sincArg);
+                        const double window=0.5+0.5*std::cos(
+                            juce::MathConstants<double>::pi*distance/radius);
                         const double coefficient=2.0*cutoff*sinc*window;
-                        value+=coefficient*scratch.getSample(channel,position);
+                        leftValue+=coefficient*scratch.getSample(0,position);
+                        rightValue+=coefficient*scratch.getSample(right,position);
                         weight+=coefficient;
                     }
-                    return std::abs(weight)>1.0e-10?(float)(value/weight):0.0f;
-                };
-                const float l=sampleAt(0);
-                const float r=sampleAt(right);
+                    if(std::abs(weight)>1.0e-10){
+                        l=(float)(leftValue/weight);
+                        r=(float)(rightValue/weight);
+                    }
+                }
                 mix.addSample(0,offset+i,l*clip.left);
                 mix.addSample(1,offset+i,r*clip.right);
             }
