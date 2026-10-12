@@ -167,3 +167,7 @@ Each MIDI track now stores attack and release durations in milliseconds (0–200
 Select a MIDI track and use the **ATTACK ms** and **RELEASE ms** sliders to set that track's envelope (0–2000 ms). The controls load the selected track's saved values and edits are refused during playback, recording and export. Save the session to persist changes. These sliders remain subject to hardware validation; playback-time editing is disabled.
 
 Synth performance refinement: attack/release sample counts and preset selection are now computed once per MIDI note render rather than recalculated for every audio sample. Real-time CPU usage still requires profiling.
+
+### Polyphonic preview protection
+
+The built-in synth now applies conservative per-buffer voice-count normalization for overlapping MIDI notes, helping limit summed chord levels. A three-note chord regression test checks for finite, bounded output. This is a prototype safety measure, not a limiter or guaranteed clipping prevention; hardware and dense-arrangement testing remain necessary.
