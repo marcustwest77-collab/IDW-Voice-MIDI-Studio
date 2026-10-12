@@ -41,7 +41,10 @@ public:
         synthPreset.addItem("Lead",3);
         synthPreset.setSelectedId(1,juce::dontSendNotification);
         addAndMakeVisible(synthPreset);
-        synthPreset.onChange=[this]{selectedSynthPreset.store(synthPreset.getSelectedId()-1);};
+        synthPreset.onChange=[this]{
+            if(playing.load() || selectedTrack>=session.tracks.size())return;
+            session.setTrackSynthPreset(selectedTrack,synthPreset.getSelectedId()-1);
+        };
         pianoButton.setButtonText("PIANO ROLL");
         addAndMakeVisible(pianoButton);
         addChildComponent(pianoRoll);
@@ -369,8 +372,7 @@ private:
                 info.buffer->getWritePointer(0,info.startSample),
                 info.buffer->getNumChannels()>1
                     ?info.buffer->getWritePointer(1,info.startSample):nullptr,
-                info.numSamples,blockStart,deviceRate,
-                static_cast<idw::daw::SynthPreset>(selectedSynthPreset.load(std::memory_order_relaxed)));
+                info.numSamples,blockStart,deviceRate);
         }
         // Two-band master tone: one-pole low/high crossover at 500 Hz.
         // The filter's persistent state is owned exclusively by the audio callback.
@@ -413,6 +415,8 @@ private:
         if(session.tracks.empty())return;
         if(selectedTrack>=session.tracks.size())selectedTrack=0;
         const auto& track=session.tracks[selectedTrack];
+        synthPreset.setEnabled(track.type==idw::daw::TrackType::midi);
+        synthPreset.setSelectedId(track.synthPreset+1,juce::dontSendNotification);
         gainLabel.setText(juce::String(track.name)+" VOL",juce::dontSendNotification);
         gainControl.setValue(track.gain,juce::dontSendNotification);
         panControl.setValue(track.pan,juce::dontSendNotification);
@@ -661,7 +665,6 @@ private:
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton;
     juce::ComboBox synthPreset;
-    std::atomic<int> selectedSynthPreset{0};
     IDWPianoRoll pianoRoll;
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
