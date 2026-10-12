@@ -119,6 +119,35 @@ int main(){
     std::abs(tailAudio.getSample(0,2000))>0.0001f)
     throw std::runtime_error("end-of-source padding incorrect");
  tailReader.reset();
+ // Verify master gain and output ceiling are applied to the exported samples.
+ const auto controlledOutput=root.getChildFile("master-controlled.wav");
+ if(!renderSessionWav(stereoSession,controlledOutput,error,44100,0.5f,-6.0f,0.0f,0.0f))
+    throw std::runtime_error("master bounce: "+error.toStdString());
+ auto controlledReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(controlledOutput.createInputStream().release(),true));
+ if(!controlledReader)throw std::runtime_error("master reader");
+ juce::AudioBuffer<float> controlledAudio(2,256);
+ if(!controlledReader->read(&controlledAudio,0,256,0,true,true))
+    throw std::runtime_error("master read");
+ if(std::abs(controlledAudio.getSample(0,100)-0.1f)>0.01f ||
+    std::abs(controlledAudio.getSample(1,100)+0.1f)>0.01f)
+    throw std::runtime_error("master gain was not applied");
+ controlledReader.reset();
+ // Verify the output ceiling clamps a louder stereo source.
+ const auto limitedOutput=root.getChildFile("ceiling-controlled.wav");
+ if(!renderSessionWav(stereoSession,limitedOutput,error,44100,5.0f,-12.0f,0.0f,0.0f))
+    throw std::runtime_error("ceiling bounce: "+error.toStdString());
+ auto limitedReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(limitedOutput.createInputStream().release(),true));
+ if(!limitedReader)throw std::runtime_error("ceiling reader");
+ juce::AudioBuffer<float> limitedAudio(2,256);
+ if(!limitedReader->read(&limitedAudio,0,256,0,true,true))
+    throw std::runtime_error("ceiling read");
+ const float ceiling=std::pow(10.0f,-12.0f/20.0f);
+ if(std::abs(limitedAudio.getSample(0,100)-ceiling)>0.01f ||
+    std::abs(limitedAudio.getSample(1,100)+ceiling)>0.01f)
+    throw std::runtime_error("master ceiling was not applied");
+ limitedReader.reset();
  // Cancellation must return failure without leaving an incomplete WAV behind.
  const auto canceledOutput=root.getChildFile("canceled.wav");
  std::atomic<float> progress{0.0f};
