@@ -68,6 +68,13 @@ public:
         tracks[trackIndex].notes.push_back(note);
         return true;
     }
+    bool removeMidiNote(size_t trackIndex,size_t noteIndex) {
+        if(trackIndex>=tracks.size() || tracks[trackIndex].type!=TrackType::midi ||
+           noteIndex>=tracks[trackIndex].notes.size())return false;
+        auto& notes=tracks[trackIndex].notes;
+        notes.erase(notes.begin()+static_cast<std::ptrdiff_t>(noteIndex));
+        return true;
+    }
     bool moveMidiNote(size_t trackIndex,size_t noteIndex,double startBeat,int pitch) {
         if(trackIndex>=tracks.size() || noteIndex>=tracks[trackIndex].notes.size() ||
            !std::isfinite(startBeat) || startBeat<0 || pitch<0 || pitch>127)return false;
