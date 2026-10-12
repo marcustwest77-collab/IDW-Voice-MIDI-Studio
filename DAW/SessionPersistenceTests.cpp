@@ -102,6 +102,12 @@ int main(){
  if(std::all_of(chordLeft.begin(),chordLeft.end(),[](float v){return v==0.0f;}) ||
     std::any_of(chordLeft.begin(),chordLeft.end(),[](float v){return !std::isfinite(v) || std::abs(v)>1.0f;}))
     throw std::runtime_error("polyphonic MIDI output exceeds safe range");
+ Session distantSession;distantSession.addTrack(TrackType::midi);
+ distantSession.addMidiNote(0,{72,1000000.0,1.0,127});
+ std::vector<float> distantBuffer(256,0.0f);
+ renderMidiSine(distantSession,distantBuffer.data(),nullptr,256,0,48000.0);
+ if(std::any_of(distantBuffer.begin(),distantBuffer.end(),[](float sample){return sample!=0.0f;}))
+    throw std::runtime_error("Distant MIDI notes produced audio outside active block");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
