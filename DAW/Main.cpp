@@ -374,13 +374,14 @@ private:
                 const float gain=masterLevel.load(),ceiling=ceilingDb.load(),bass=lowDb.load(),treble=highDb.load();
                 bounce.setEnabled(false);
                 exportRunning.store(true);
-                exportThread=std::thread([this,snapshot,output,gain,ceiling,bass,treble]{
+                const juce::Component::SafePointer<Workstation> safeThis(this);
+                exportThread=std::thread([this,safeThis,snapshot,output,gain,ceiling,bass,treble]{
                     juce::String error;
                     const bool ok=idw::daw::renderSessionWav(snapshot,output,error,44100,gain,ceiling,bass,treble);
-                    juce::MessageManager::callAsync([safe=juce::Component::SafePointer<Workstation>(this),ok,error]{
-                        if(!safe)return;
-                        safe->exportRunning.store(false);
-                        safe->bounce.setEnabled(true);
+                    juce::MessageManager::callAsync([safeThis,ok,error]{
+                        if(!safeThis)return;
+                        safeThis->exportRunning.store(false);
+                        safeThis->bounce.setEnabled(true);
                         juce::AlertWindow::showMessageBoxAsync(ok?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
                             ok?"WAV export complete":"WAV bounce unavailable",ok?"Stereo WAV written successfully.":error);
                     });
