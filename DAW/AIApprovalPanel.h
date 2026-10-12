@@ -15,6 +15,12 @@ public:
         editor.setReturnKeyStartsNewLine(true);
         editor.setText(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":140}})");
         addAndMakeVisible(editor);
+        paste.setButtonText("PASTE JSON");
+        addAndMakeVisible(paste);
+        paste.onClick=[this]{
+            editor.setText(juce::SystemClipboard::getTextFromClipboard());
+            apply.setEnabled(false);
+        };
         review.setButtonText("REVIEW PROPOSAL");
         apply.setButtonText("APPROVE & APPLY");
         apply.setEnabled(false);
@@ -53,6 +59,7 @@ public:
         editor.setBounds(a.removeFromTop(94));
         a.removeFromTop(8);
         auto row=a.removeFromTop(34);
+        paste.setBounds(row.removeFromLeft(120).reduced(2));
         review.setBounds(row.removeFromLeft(185).reduced(2));
         apply.setBounds(row.removeFromLeft(170).reduced(2));
         a.removeFromTop(6);
@@ -65,5 +72,5 @@ private:
     idw::daw::AIProposal pending{idw::daw::AIProposal::Kind::tempo};
     juce::Label heading,feedback;
     juce::TextEditor editor;
-    juce::TextButton review,apply;
+    juce::TextButton paste,review,apply;
 };
