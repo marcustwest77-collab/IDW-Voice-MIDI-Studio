@@ -148,6 +148,39 @@ int main(){
     std::abs(limitedAudio.getSample(1,100)+ceiling)>0.01f)
     throw std::runtime_error("master ceiling was not applied");
  limitedReader.reset();
+ // Regress a 48 kHz source resampled to 44.1 kHz across several
+ // processing blocks, checking the output amplitude and DC stability.
+ const auto longInput=root.getChildFile("long-48k.wav");
+ auto longStream=std::unique_ptr<juce::FileOutputStream>(longInput.createOutputStream());
+ if(!longStream)throw std::runtime_error("long input stream");
+ auto longWriter=std::unique_ptr<juce::AudioFormatWriter>(
+    wav.createWriterFor(longStream.get(),48000.0,1,16,{},0));
+ if(!longWriter)throw std::runtime_error("long input writer");
+ longStream.release();
+ juce::AudioBuffer<float> longSignal(1,48000);
+ for(int i=0;i<48000;++i)longSignal.setSample(0,i,0.25f);
+ const float* longChannels[]{longSignal.getReadPointer(0)};
+ if(!longWriter->writeFromFloatArrays(longChannels,1,48000))
+    throw std::runtime_error("long input write");
+ longWriter.reset();
+ Session longSession;longSession.setTempo(120);longSession.addTrack(TrackType::audio);
+ if(!longSession.addClip(0,{longInput.getFullPathName().toStdString(),0.0,2.0,0.0}))
+    throw std::runtime_error("long clip");
+ const auto longOutput=root.getChildFile("long-resampled.wav");
+ if(!renderSessionWav(longSession,longOutput,error))
+    throw std::runtime_error("long bounce: "+error.toStdString());
+ auto longReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(longOutput.createInputStream().release(),true));
+ if(!longReader || longReader->lengthInSamples!=44100)
+    throw std::runtime_error("resampling duration");
+ juce::AudioBuffer<float> longResult(2,44100);
+ if(!longReader->read(&longResult,0,44100,0,true,true))
+    throw std::runtime_error("long read");
+ for(int i=512;i<43500;i+=997)
+    if(std::abs(longResult.getSample(0,i)-0.25f)>0.01f ||
+       std::abs(longResult.getSample(1,i)-0.25f)>0.01f)
+        throw std::runtime_error("resampling continuity across blocks");
+ longReader.reset();
  // The two-band master tone must modify low-frequency content predictably.
  const auto bassOutput=root.getChildFile("bass-boost.wav");
  if(!renderSessionWav(stereoSession,bassOutput,error,44100,1.0f,-0.1f,6.0f,0.0f))
