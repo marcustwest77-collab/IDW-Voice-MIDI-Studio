@@ -77,7 +77,7 @@ private:
     static bool isValidCode(const juce::String& code) {
         if(code.length()!=36 || !code.startsWith("IDW-"))return false;
         for(int i=4;i<code.length();++i)
-            if(!juce::CharacterFunctions::isHexDigit(code[i]))return false;
+            if(!juce::String("0123456789abcdefABCDEF").containsChar(code[i]))return false;
         return true;
     }
     juce::Label heading,notice;
