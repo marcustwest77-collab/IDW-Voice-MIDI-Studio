@@ -25,7 +25,7 @@ inline bool exportPortableProject(const Session& source,const juce::File& folder
                 folder.deleteRecursively();
                 return false;
             }
-            clip.sourcePath=target.getFullPathName().toStdString();
+            clip.sourcePath=("Audio/"+safeName).toStdString();
         }
     }
     if(!saveSession(portable,folder.getChildFile("Session.idwproj"))){
