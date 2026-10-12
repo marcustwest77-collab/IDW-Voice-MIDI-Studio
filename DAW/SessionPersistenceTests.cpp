@@ -77,6 +77,11 @@ int main(){
  renderMidiSine(sineSession,left.data(),right.data(),256,0,48000.0);
  if(std::all_of(left.begin(),left.end(),[](float x){return x==0.0f;}) ||
     left!=right)throw std::runtime_error("MIDI sine render silent or wrong stereo");
+ std::vector<float> bass(256,0.0f),lead(256,0.0f);
+ renderMidiSine(sineSession,bass.data(),nullptr,256,0,48000.0,SynthPreset::bass);
+ renderMidiSine(sineSession,lead.data(),nullptr,256,0,48000.0,SynthPreset::lead);
+ if(bass==left || lead==left || bass==lead)
+    throw std::runtime_error("synth presets should yield distinct audio");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
