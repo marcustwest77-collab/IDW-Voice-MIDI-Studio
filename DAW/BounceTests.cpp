@@ -216,6 +216,39 @@ int main(){
  if(!std::isfinite(hfRms) || hfRms>0.08f)
     throw std::runtime_error("HF alias rejection inadequate");
  hfReader.reset();
+ // Passband regression: a 1 kHz sine at 48 kHz must survive
+ // downsampling to 44.1 kHz at approximately its original level.
+ const auto toneInput=root.getChildFile("passband-1khz.wav");
+ auto toneStream=std::unique_ptr<juce::FileOutputStream>(toneInput.createOutputStream());
+ if(!toneStream)throw std::runtime_error("tone input stream");
+ auto toneWriter=std::unique_ptr<juce::AudioFormatWriter>(
+    wav.createWriterFor(toneStream.get(),48000.0,1,16,{},0));
+ if(!toneWriter)throw std::runtime_error("tone writer");
+ toneStream.release();
+ juce::AudioBuffer<float> toneSignal(1,4800);
+ for(int i=0;i<4800;++i)
+    toneSignal.setSample(0,i,0.3f*std::sin(2.0*juce::MathConstants<double>::pi*1000.0*i/48000.0));
+ const float* toneChannels[]{toneSignal.getReadPointer(0)};
+ if(!toneWriter->writeFromFloatArrays(toneChannels,1,4800))
+    throw std::runtime_error("tone write");
+ toneWriter.reset();
+ Session toneSession;toneSession.setTempo(120);toneSession.addTrack(TrackType::audio);
+ if(!toneSession.addClip(0,{toneInput.getFullPathName().toStdString(),0.0,0.2,0.0}))
+    throw std::runtime_error("tone clip");
+ const auto toneOutput=root.getChildFile("passband-export.wav");
+ if(!renderSessionWav(toneSession,toneOutput,error))
+    throw std::runtime_error("tone bounce: "+error.toStdString());
+ auto toneReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(toneOutput.createInputStream().release(),true));
+ if(!toneReader || toneReader->lengthInSamples!=4410)
+    throw std::runtime_error("tone output length");
+ juce::AudioBuffer<float> toneResult(2,4410);
+ if(!toneReader->read(&toneResult,0,4410,0,true,true))
+    throw std::runtime_error("tone read");
+ const float toneRms=toneResult.getRMSLevel(0,256,3800);
+ if(!std::isfinite(toneRms) || toneRms<0.19f || toneRms>0.23f)
+    throw std::runtime_error("resampler passband gain outside tolerance");
+ toneReader.reset();
  // A 4.5-second multitrack stress case detects incorrect output duration,
  // misaligned start times, and progress regressions across many blocks.
  const auto stressOutput=root.getChildFile("stress-multitrack.wav");
