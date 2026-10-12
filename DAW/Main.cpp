@@ -37,12 +37,17 @@ public:
         gainControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,56,26);
         panControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,56,26);
         for(auto* slider:{&gainControl,&panControl})addAndMakeVisible(*slider);
-        muteControl.setButtonText("MUTE TRACK 1");addAndMakeVisible(muteControl);
+        muteControl.setButtonText("MUTE");addAndMakeVisible(muteControl);
+        soloControl.setButtonText("SOLO");addAndMakeVisible(soloControl);
         gainControl.onValueChange=[this]{updateFirstTrackMix();};
         panControl.onValueChange=[this]{updateFirstTrackMix();};
         muteControl.onClick=[this]{
             if(playing.load() || session.tracks.empty())return;
             session.tracks[selectedTrack].mute=muteControl.getToggleState();repaint();
+        };
+        soloControl.onClick=[this]{
+            if(playing.load() || session.tracks.empty())return;
+            session.tracks[selectedTrack].solo=soloControl.getToggleState();repaint();
         };
         previousTrack.setButtonText("< TRACK");
         nextTrack.setButtonText("TRACK >");
@@ -68,7 +73,8 @@ public:
         gainControl.setBounds(mixRow.removeFromLeft(185));
         panLabel.setBounds(mixRow.removeFromLeft(45));
         panControl.setBounds(mixRow.removeFromLeft(185));
-        muteControl.setBounds(mixRow.removeFromLeft(150));
+        muteControl.setBounds(mixRow.removeFromLeft(80));
+        soloControl.setBounds(mixRow.removeFromLeft(75));
         previousTrack.setBounds(mixRow.removeFromLeft(100));
         nextTrack.setBounds(mixRow.removeFromLeft(100));
     }
@@ -130,7 +136,8 @@ private:
         for(auto& slot:sources) {
             if(!slot->reader || slot->trackIndex>=session.tracks.size())continue;
             const auto& track=session.tracks[slot->trackIndex];
-            if(track.mute || track.clips.empty())continue;
+            const bool anySolo=std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return t.solo;});
+            if(track.mute || (anySolo && !track.solo) || track.clips.empty())continue;
             const auto& clip=track.clips.front();
             const auto window=idw::daw::overlap(blockStart,info.numSamples,deviceRate,
                     session.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
@@ -158,6 +165,7 @@ private:
         gainControl.setValue(track.gain,juce::dontSendNotification);
         panControl.setValue(track.pan,juce::dontSendNotification);
         muteControl.setToggleState(track.mute,juce::dontSendNotification);
+        soloControl.setToggleState(track.solo,juce::dontSendNotification);
     }
     void selectTrack(int direction){
         if(playing.load() || session.tracks.empty())return;
@@ -261,7 +269,7 @@ private:
     double takeStartBeat=0.0;
     juce::Label title,tempoLabel,gainLabel,panLabel;
     juce::Slider gainControl,panControl;
-    juce::ToggleButton muteControl;
+    juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record;
