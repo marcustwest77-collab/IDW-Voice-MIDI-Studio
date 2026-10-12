@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <cmath>
 #include <iostream>
+#include <atomic>
 int main(){
  using namespace idw::daw;
  auto root=juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("idw-bounce-test","",false);
@@ -94,6 +95,15 @@ int main(){
     std::abs(boundaryAudio.getSample(1,1025)+0.2f)>0.01f)
     throw std::runtime_error("clip entry not sample aligned");
  boundaryReader.reset();
+ // Cancellation must return failure without leaving an incomplete WAV behind.
+ const auto canceledOutput=root.getChildFile("canceled.wav");
+ std::atomic<float> progress{0.0f};
+ std::atomic<bool> cancel{true};
+ error.clear();
+ if(renderSessionWav(session,canceledOutput,error,44100,1.0f,-1.0f,0.0f,0.0f,&progress,&cancel))
+    throw std::runtime_error("accepted canceled bounce");
+ if(canceledOutput.existsAsFile() || error!="Export canceled.")
+    throw std::runtime_error("canceled bounce left an output");
  reader.reset();root.deleteRecursively();
  std::cout<<"PASS: stereo WAV bounce timeline and signal test\n";
 }
