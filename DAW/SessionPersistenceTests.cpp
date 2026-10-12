@@ -52,6 +52,10 @@ int main(){
     midiRestored.tracks[0].notes[0].startBeat!=3 ||
     midiRestored.tracks[0].notes[0].lengthBeats!=0.75)
     throw std::runtime_error("MIDI notes persistence");
+ if(!midiRestored.removeMidiNote(0,0) ||
+    !midiRestored.tracks[0].notes.empty() ||
+    midiRestored.removeMidiNote(0,0))
+    throw std::runtime_error("MIDI note deletion");
  Session statusFixture;statusFixture.addTrack(TrackType::audio);
  statusFixture.addClip(0,{"PRIVATE_RECORDING_PATH_DO_NOT_SHARE.wav",0,4,0});
  const auto statusJson=juce::JSON::toString(aiSessionStatus(statusFixture,true,false));
