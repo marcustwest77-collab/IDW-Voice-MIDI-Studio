@@ -36,6 +36,33 @@ public:
                     feedback.setText("Sanitized session metadata copied.",juce::dontSendNotification);
                 }));
         };
+        saveStatus.setButtonText("SAVE STATUS");
+        addAndMakeVisible(saveStatus);
+        saveStatus.onClick=[this]{
+            if(!getSanitizedStatus)return;
+            const auto snapshot=getSanitizedStatus();
+            juce::AlertWindow::showOkCancelBox(
+                juce::MessageBoxIconType::QuestionIcon,
+                "Export IDW status snapshot?",
+                "Save track names, tempo and mixer settings as JSON? "
+                "No audio file paths are included. Only share this file with trusted AI clients.",
+                "SAVE","CANCEL",this,
+                juce::ModalCallbackFunction::create([this,snapshot](int result){
+                    if(result!=1)return;
+                    statusChooser=std::make_unique<juce::FileChooser>(
+                        "Save sanitized IDW status",juce::File{}.getChildFile("IDW-Status.json"),"*.json");
+                    statusChooser->launchAsync(
+                        juce::FileBrowserComponent::saveMode |
+                        juce::FileBrowserComponent::canSelectFiles,
+                        [this,snapshot](const juce::FileChooser& selected){
+                            const auto file=selected.getResult();
+                            if(file.getFullPathName().isEmpty())return;
+                            const bool ok=file.replaceWithText(snapshot);
+                            feedback.setText(ok?"Sanitized status saved.":"Status export failed.",
+                                             juce::dontSendNotification);
+                        });
+                }));
+        };
         // Import a proposal from a local JSON file chosen by the user. No polling
         // or background filesystem access: the user explicitly selects the file.
         importFile.setButtonText("IMPORT JSON");
@@ -129,11 +156,12 @@ public:
         editor.setBounds(a.removeFromTop(94));
         a.removeFromTop(8);
         auto row=a.removeFromTop(34);
-        importFile.setBounds(row.removeFromLeft(110).reduced(2));
-        copyStatus.setBounds(row.removeFromLeft(94).reduced(2));
-        paste.setBounds(row.removeFromLeft(98).reduced(2));
-        review.setBounds(row.removeFromLeft(142).reduced(2));
-        apply.setBounds(row.removeFromLeft(121).reduced(2));
+        saveStatus.setBounds(row.removeFromLeft(100).reduced(2));
+        importFile.setBounds(row.removeFromLeft(96).reduced(2));
+        copyStatus.setBounds(row.removeFromLeft(90).reduced(2));
+        paste.setBounds(row.removeFromLeft(88).reduced(2));
+        review.setBounds(row.removeFromLeft(113).reduced(2));
+        apply.setBounds(row.removeFromLeft(72).reduced(2));
         a.removeFromTop(6);
         feedback.setBounds(a.removeFromTop(35));
     }
@@ -144,6 +172,6 @@ private:
     idw::daw::AIProposal pending{idw::daw::AIProposal::Kind::tempo};
     juce::Label heading,feedback;
     juce::TextEditor editor;
-    juce::TextButton importFile,copyStatus,paste,review,apply;
-    std::unique_ptr<juce::FileChooser> chooser;
+    juce::TextButton saveStatus,importFile,copyStatus,paste,review,apply;
+    std::unique_ptr<juce::FileChooser> chooser,statusChooser;
 };
