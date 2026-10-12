@@ -133,10 +133,10 @@ private:
         // Never resize heap buffers in the real-time audio callback.
         if(info.numSamples>preparedBlockSize || info.buffer->getNumChannels()>2)return;
         const auto blockStart=sessionFrames.load(std::memory_order_relaxed);
+        const bool anySolo=std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return t.solo;});
         for(auto& slot:sources) {
             if(!slot->reader || slot->trackIndex>=session.tracks.size())continue;
             const auto& track=session.tracks[slot->trackIndex];
-            const bool anySolo=std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return t.solo;});
             if(track.mute || (anySolo && !track.solo) || track.clips.empty())continue;
             const auto& clip=track.clips.front();
             const auto window=idw::daw::overlap(blockStart,info.numSamples,deviceRate,
