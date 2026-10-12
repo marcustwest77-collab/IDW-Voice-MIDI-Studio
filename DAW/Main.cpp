@@ -69,6 +69,8 @@ public:
         masterGain.setTextBoxStyle(juce::Slider::TextBoxRight,false,55,25);
         addAndMakeVisible(masterGain);
         masterGain.onValueChange=[this]{masterLevel.store((float)masterGain.getValue(),std::memory_order_relaxed);};
+        clearClips.setButtonText("RESET CLIP");addAndMakeVisible(clearClips);
+        clearClips.onClick=[this]{peakClipLeft.store(false);peakClipRight.store(false);repaint();};
         refreshMixer();
     }
     void resized() override {
@@ -99,6 +101,7 @@ public:
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
+        clearClips.setBounds(masterRow.removeFromLeft(120).reduced(3));
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
@@ -136,6 +139,17 @@ public:
         if(head<getWidth()-30){
             g.setColour(juce::Colours::gold);
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
+        }
+        // Peak bars are updated from atomics, never directly from the audio thread.
+        const int meterLeft=getWidth()-220,meterTop=215,meterWidth=80;
+        for(int ch=0;ch<2;++ch){
+            const auto peak=ch==0?peakLeft.load():peakRight.load();
+            const auto clipped=ch==0?peakClipLeft.load():peakClipRight.load();
+            const int y=meterTop+ch*17;
+            g.setColour(juce::Colours::darkgrey);g.fillRect(meterLeft,y,meterWidth,11);
+            g.setColour(clipped?juce::Colours::red:juce::Colours::limegreen);
+            g.fillRect(meterLeft,y,juce::roundToInt(meterWidth*juce::jlimit(0.0f,1.0f,peak)),11);
+            g.setColour(juce::Colours::white);g.drawText(ch==0?"L":"R",meterLeft-20,y,18,11,juce::Justification::centred);
         }
         g.setColour(juce::Colours::grey);
         g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline-scheduled playback prototype; recording and clip editing unavailable." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
@@ -175,6 +189,16 @@ private:
                 info.buffer->addFrom(channel,info.startSample+window.offset,slot->scratch,channel,0,window.frames,channel==0?leftGain:rightGain);
         }
         info.buffer->applyGain(info.startSample,info.numSamples,masterLevel.load(std::memory_order_relaxed));
+        if(info.buffer->getNumChannels()>0){
+            const float peak=info.buffer->getMagnitude(0,info.startSample,info.numSamples);
+            peakLeft.store(peak,std::memory_order_relaxed);
+            if(peak>=1.0f)peakClipLeft.store(true,std::memory_order_relaxed);
+        }
+        if(info.buffer->getNumChannels()>1){
+            const float peak=info.buffer->getMagnitude(1,info.startSample,info.numSamples);
+            peakRight.store(peak,std::memory_order_relaxed);
+            if(peak>=1.0f)peakClipRight.store(true,std::memory_order_relaxed);
+        }
         sessionFrames.fetch_add(info.numSamples,std::memory_order_relaxed);
     }
     void releaseResources() override {
@@ -380,6 +404,9 @@ private:
     juce::Label title,tempoLabel,gainLabel,panLabel;
     juce::Slider gainControl,panControl,masterGain;
     juce::Label masterLabel;
+    juce::TextButton clearClips;
+    std::atomic<float> peakLeft{0.0f},peakRight{0.0f};
+    std::atomic<bool> peakClipLeft{false},peakClipRight{false};
     std::atomic<float> masterLevel{1.0f};
     juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
