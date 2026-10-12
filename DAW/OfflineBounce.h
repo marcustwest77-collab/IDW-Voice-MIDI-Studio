@@ -8,8 +8,8 @@ namespace idw::daw {
 // the shared beat clock. Intended for PCM WAV/AIFF project clips, not MIDI yet.
 // Call only from a non-audio thread. Returns false and a readable error.
 inline bool renderSessionWav(const Session& session,const juce::File& destination,
-                            juce::String& error,int sampleRate=44100){
-    if(session.bpm<=0 || sampleRate<8000 || sampleRate>192000){
+                            juce::String& error,int sampleRate=44100,float masterGain=1.0f,float ceilingDb=-1.0f){
+    if(session.bpm<=0 || sampleRate<8000 || sampleRate>192000 || !std::isfinite(masterGain) || !std::isfinite(ceilingDb)){
         error="Invalid bounce rate or tempo.";return false;
     }
     double lastBeat=0.0;
@@ -59,6 +59,8 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1)});
         }
     }
+    const float outputCeiling=std::pow(10.0f,std::clamp(ceilingDb,-12.0f,-0.1f)/20.0f);
+    const float outputGain=std::clamp(masterGain,0.0f,1.5f);
     for(int64_t pos=0;pos<frames;pos+=block){
         const int count=(int)std::min<int64_t>(block,frames-pos);
         mix.clear();
@@ -73,7 +75,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
         }
         for(int ch=0;ch<2;++ch){
             auto* p=mix.getWritePointer(ch);
-            for(int i=0;i<count;++i)p[i]=std::clamp(p[i],-1.0f,1.0f);
+            for(int i=0;i<count;++i)p[i]=std::clamp(p[i]*outputGain,-outputCeiling,outputCeiling);
         }
         if(!writer->writeFromFloatArrays(channels,2,count)){
             error="Failed while writing WAV samples.";writer.reset();destination.deleteFile();return false;
