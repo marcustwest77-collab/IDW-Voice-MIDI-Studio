@@ -85,6 +85,9 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             const int sourceCount=(int)std::ceil(first-sourceStart+(number-1)*ratio)+2;
             // Reuse the scratch buffer across clips and blocks rather than allocating
             // a temporary AudioBuffer for every overlap.
+            if(sourceCount<=0 || sourceCount>1000000){
+                error="Invalid resampling buffer size.";writer.reset();destination.deleteFile();return false;
+            }
             if(scratch.getNumSamples()<sourceCount)
                 scratch.setSize(2,sourceCount,false,false,true);
             scratch.clear(0,sourceCount);
