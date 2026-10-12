@@ -224,7 +224,15 @@ private:
             slot->trackIndex=index;
             if(!restored.tracks[index].clips.empty()){
                 const auto& clip=restored.tracks[index].clips.front();
-                const auto file=juce::File(juce::String(clip.sourcePath));
+                auto file=juce::File(juce::String(clip.sourcePath));
+                // Portable-project fallback: look beside the project and in its Audio subfolder.
+                if(!file.existsAsFile()){
+                    const auto name=file.getFileName();
+                    const auto adjacent=project.getParentDirectory().getChildFile(name);
+                    const auto audioFolder=project.getParentDirectory().getChildFile("Audio").getChildFile(name);
+                    if(adjacent.existsAsFile())file=adjacent;
+                    else if(audioFolder.existsAsFile())file=audioFolder;
+                }
                 std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
                 if(reader && reader->sampleRate>0){
                     auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
@@ -232,6 +240,8 @@ private:
                     slot->transport.setSource(source.get(),0,nullptr,rate);
                     slot->reader=std::move(source);
                     slot->file=file;
+                    // Update restored reference so the next save uses the discovered location.
+                    restored.tracks[index].clips.front().sourcePath=file.getFullPathName().toStdString();
                 }else ++missing;
             }
             if(preparedBlockSize>0){
