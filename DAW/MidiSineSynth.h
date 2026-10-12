@@ -92,9 +92,11 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
                 const auto offset=(startFrame+i-noteStart);
                 const float fade=std::clamp(std::min((double)offset/attackFrames,
                                          (double)(total-1-offset)/releaseFrames),0.0,1.0);
-                const float wave=(fundamentalGain*(float)std::sin((double)offset*increment)+
-                    secondGain*(float)std::sin(2.0*(double)offset*increment)+
-                    thirdGain*(float)std::sin(3.0*(double)offset*increment))*velocity*std::max(0.0f,fade);
+                const double phase=(double)offset*increment;
+                float tone=fundamentalGain*(float)std::sin(phase);
+                if(secondGain>0.0f)tone+=secondGain*(float)std::sin(2.0*phase);
+                if(thirdGain>0.0f)tone+=thirdGain*(float)std::sin(3.0*phase);
+                const float wave=tone*velocity*std::max(0.0f,fade);
                 left[i]+=wave*l;
                 if(right)right[i]+=wave*r;
             }
