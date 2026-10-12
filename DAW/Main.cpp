@@ -29,6 +29,21 @@ public:
         tempoLabel.setText("BPM",juce::dontSendNotification);addAndMakeVisible(tempoLabel);
         addAudioTrack();
         session.addTrack(idw::daw::TrackType::midi);
+        gainLabel.setText("TRACK 1 VOL",juce::dontSendNotification);
+        panLabel.setText("PAN",juce::dontSendNotification);
+        for(auto* label:{&gainLabel,&panLabel})addAndMakeVisible(*label);
+        gainControl.setRange(0.0,2.0,0.01);gainControl.setValue(1.0);
+        panControl.setRange(-1.0,1.0,0.01);panControl.setValue(0.0);
+        gainControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,56,26);
+        panControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,56,26);
+        for(auto* slider:{&gainControl,&panControl})addAndMakeVisible(*slider);
+        muteControl.setButtonText("MUTE TRACK 1");addAndMakeVisible(muteControl);
+        gainControl.onValueChange=[this]{updateFirstTrackMix();};
+        panControl.onValueChange=[this]{updateFirstTrackMix();};
+        muteControl.onClick=[this]{
+            if(playing.load() || session.tracks.empty())return;
+            session.tracks[0].mute=muteControl.getToggleState();repaint();
+        };
     }
     void resized() override {
         auto area=getLocalBounds().reduced(20);
@@ -42,6 +57,12 @@ public:
         midi.setBounds(controls.removeFromLeft(160).reduced(3));
         open.setBounds(controls.removeFromLeft(180).reduced(3));
         record.setBounds(controls.removeFromLeft(165).reduced(3));
+        auto mixRow=area.removeFromTop(42);
+        gainLabel.setBounds(mixRow.removeFromLeft(110));
+        gainControl.setBounds(mixRow.removeFromLeft(185));
+        panLabel.setBounds(mixRow.removeFromLeft(45));
+        panControl.setBounds(mixRow.removeFromLeft(185));
+        muteControl.setBounds(mixRow.removeFromLeft(160));
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
@@ -120,6 +141,10 @@ private:
     }
     void releaseResources() override {
         for(auto& slot:sources)slot->transport.releaseResources();
+    }
+    void updateFirstTrackMix(){
+        if(playing.load() || session.tracks.empty())return;
+        session.setTrackMix(0,(float)gainControl.getValue(),(float)panControl.getValue());
     }
     void timerCallback() override {
         playheadBeats=deviceRate>0?(double)sessionFrames.load()*session.bpm/(deviceRate*60.0):0.0;
@@ -211,7 +236,9 @@ private:
     std::atomic<bool> playing{false};
     double playheadBeats=0;
     double takeStartBeat=0.0;
-    juce::Label title,tempoLabel;
+    juce::Label title,tempoLabel,gainLabel,panLabel;
+    juce::Slider gainControl,panControl;
+    juce::ToggleButton muteControl;
     juce::TextButton play,stop,audio,midi,open,record;
     IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
