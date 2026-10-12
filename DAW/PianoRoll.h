@@ -10,6 +10,7 @@ public:
     idw::daw::Session* session=nullptr;
     size_t trackIndex=0;
     std::function<void()> onChanged;
+    IDWPianoRoll(){setWantsKeyboardFocus(true);}
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff141b24));
         const auto bounds=getLocalBounds();
@@ -30,17 +31,20 @@ public:
             g.drawVerticalLine(x,0,(float)getHeight());
         }
         if(!session || trackIndex>=session->tracks.size())return;
+        size_t noteIndex=0;
         for(const auto& note:session->tracks[trackIndex].notes){
+            ++noteIndex;
             if(note.pitch<48 || note.pitch>84)continue;
             const int y=(84-note.pitch)*rowHeight;
             const int x=keyWidth+juce::roundToInt(note.startBeat*16.0);
             const int w=juce::jmax(3,juce::roundToInt(note.lengthBeats*16.0));
-            g.setColour(juce::Colours::orange);
+            g.setColour(selectedValid && noteIndex-1==selectedIndex ? juce::Colours::gold : juce::Colours::orange);
             g.fillRoundedRectangle((float)x,(float)y+1,(float)w,rowHeight-3,2.0f);
         }
     }
     void mouseDown(const juce::MouseEvent& e) override {
         dragging=false;
+        selectedValid=false;
         if(!session || trackIndex>=session->tracks.size() ||
            session->tracks[trackIndex].type!=idw::daw::TrackType::midi ||
            e.x<54 || e.y<0 || e.y>=37*13)return;
@@ -51,7 +55,8 @@ public:
             const int y=(84-n.pitch)*13;
             const int w=juce::jmax(3,juce::roundToInt(n.lengthBeats*16.0));
             if(e.x>=x && e.x<x+w && e.y>=y && e.y<y+13){
-                activeNote=i-1;dragging=true;resizing=e.x>=x+w-6;
+                activeNote=i-1;selectedIndex=activeNote;selectedValid=true;
+                grabKeyboardFocus();dragging=true;resizing=e.x>=x+w-6;
                 originX=e.x;originY=e.y;original=notes[activeNote];
                 return;
             }
@@ -76,7 +81,17 @@ public:
         if(changed){if(onChanged)onChanged();repaint();}
     }
     void mouseUp(const juce::MouseEvent&) override {dragging=false;}
+    bool keyPressed(const juce::KeyPress& key) override {
+        if(!selectedValid || !session || trackIndex>=session->tracks.size())return false;
+        if(key.getKeyCode()!=juce::KeyPress::deleteKey && key.getKeyCode()!=juce::KeyPress::backspaceKey)return false;
+        const bool removed=session->removeMidiNote(trackIndex,selectedIndex);
+        selectedValid=false;dragging=false;
+        if(removed){if(onChanged)onChanged();repaint();}
+        return removed;
+    }
 private:
+    bool selectedValid=false;
+    size_t selectedIndex=0;
     bool dragging=false,resizing=false;
     size_t activeNote=0;
     int originX=0,originY=0;
