@@ -179,3 +179,5 @@ The internal oscillator now skips MIDI fundamentals at or above half the current
 ### Harmonic filtering for Bass and Lead
 
 The Bass and Lead preview oscillators now omit second/third harmonics whenever those partials meet or exceed the current audio device's Nyquist frequency. The remaining partial weights are adjusted to keep the sound audible. This prevents aliasing from these explicit overtones, but it is not a fully band-limited general synthesizer. Regression tests cover both low and normal sample rates.
+
+Harmonic boundary refinement: comparisons now use the Nyquist frequency divided by harmonic index instead of multiplying fundamental frequencies; an added regression checks that a second harmonic exactly at Nyquist is excluded.
