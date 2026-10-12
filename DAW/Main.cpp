@@ -1,18 +1,21 @@
 #include <JuceHeader.h>
 #include "SessionModel.h"
-class Workstation final : public juce::Component, private juce::Timer {
+class Workstation final : public juce::AudioAppComponent, private juce::Timer {
 public:
     Workstation() {
         setSize(1100,700);
+        formats.registerBasicFormats();
+        setAudioChannels(0,2);
         title.setText("IDW  |  VOICE MIDI STUDIO DAW  |  V14 FOUNDATION",juce::dontSendNotification);
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
-        for(auto* b:{&play,&stop,&audio,&midi}) addAndMakeVisible(*b);
-        play.setButtonText("PLAY"); stop.setButtonText("STOP");
+        for(auto* b:{&play,&stop,&audio,&midi,&open}) addAndMakeVisible(*b);
+        play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
-        play.onClick=[this]{playing=true;startTimerHz(30);repaint();};
-        stop.onClick=[this]{playing=false;stopTimer();playheadBeats=0;repaint();};
+        play.onClick=[this]{if(readerSource){transport.start();playing=true;startTimerHz(30);repaint();}};
+        stop.onClick=[this]{transport.stop();transport.setPosition(0);playing=false;stopTimer();playheadBeats=0;repaint();};
+        open.onClick=[this]{loadAudio();};
         audio.onClick=[this]{session.addTrack(idw::daw::TrackType::audio);repaint();};
         midi.onClick=[this]{session.addTrack(idw::daw::TrackType::midi);repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
@@ -31,6 +34,7 @@ public:
         tempo.setBounds(controls.removeFromLeft(195));
         audio.setBounds(controls.removeFromLeft(160).reduced(3));
         midi.setBounds(controls.removeFromLeft(160).reduced(3));
+        open.setBounds(controls.removeFromLeft(180).reduced(3));
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
@@ -61,15 +65,36 @@ public:
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
         }
         g.setColour(juce::Colours::grey);
-        g.drawFittedText("Foundation prototype: transport preview only. No audio recording, playback or clip editing yet.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
+        g.drawFittedText(readerSource ? "Preview playback: " + loadedFile.getFileName() + "  |  Recording and clips not implemented." : "Open a WAV/AIFF file to preview audio. Recording and multitrack playback not implemented.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
     }
 private:
-    void timerCallback() override {playheadBeats+=session.bpm/(60.0*30.0);repaint();}
+    void prepareToPlay(int samplesPerBlockExpected,double sampleRate) override { transport.prepareToPlay(samplesPerBlockExpected,sampleRate); }
+    void getNextAudioBlock(const juce::AudioSourceChannelInfo& info) override {transport.getNextAudioBlock(info);}
+    void releaseResources() override {transport.releaseResources();}
+    void timerCallback() override {playheadBeats=transport.getCurrentPosition()*session.bpm/60.0;if(!transport.isPlaying()){playing=false;stopTimer();}repaint();}
+    void loadAudio(){
+        chooser=std::make_unique<juce::FileChooser>("Select WAV or AIFF audio file",juce::File{},"*.wav;*.aiff;*.aif");
+        chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& picker){
+            auto file=picker.getResult();if(!file.existsAsFile())return;
+            std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+            if(!reader)return;
+            transport.stop();transport.setSource(nullptr);readerSource.reset();
+            auto* source=new juce::AudioFormatReaderSource(reader.release(),true);
+            readerSource.reset(source);transport.setSource(source,0,nullptr,source->getAudioFormatReader()->sampleRate);
+            loadedFile=file;playing=false;playheadBeats=0;repaint();
+        });
+    }
+    ~Workstation() override {shutdownAudio();transport.setSource(nullptr);readerSource.reset();}
     idw::daw::Session session;
     bool playing=false;
     double playheadBeats=0;
     juce::Label title,tempoLabel;
-    juce::TextButton play,stop,audio,midi;
+    juce::TextButton play,stop,audio,midi,open;
+    juce::AudioFormatManager formats;
+    juce::AudioTransportSource transport;
+    std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
+    std::unique_ptr<juce::FileChooser> chooser;
+    juce::File loadedFile;
     juce::Slider tempo;
 };
 class DAWApplication final : public juce::JUCEApplication {
