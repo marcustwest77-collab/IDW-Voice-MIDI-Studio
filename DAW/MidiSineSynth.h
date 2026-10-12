@@ -18,7 +18,7 @@ inline float synthWave(SynthPreset preset,double phase){
 // Call only when the session is not being modified by the UI.
 inline void renderMidiSine(const Session& s,float* left,float* right,int samples,
                            std::int64_t startFrame,double sampleRate) {
-    if(!left || !right || samples<=0 || sampleRate<=0 || !std::isfinite(sampleRate))return;
+    if(!left || samples<=0 || sampleRate<=0 || !std::isfinite(sampleRate))return;
     const double framesPerBeat=sampleRate*60.0/s.bpm;
     if(!std::isfinite(framesPerBeat) || framesPerBeat<=0)return;
     bool anySolo=false;
