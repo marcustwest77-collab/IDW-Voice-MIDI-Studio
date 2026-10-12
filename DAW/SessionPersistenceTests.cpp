@@ -49,10 +49,15 @@ int main(){
     throw std::runtime_error("Invalid MIDI edit accepted");
  if(!midiFixture.setTrackSynthPreset(0,2) || midiFixture.setTrackSynthPreset(0,3))
     throw std::runtime_error("MIDI preset validation");
+ if(!midiFixture.setTrackSynthEnvelope(0,25.0f,90.0f) ||
+    midiFixture.setTrackSynthEnvelope(0,-1.0f,50.0f))
+    throw std::runtime_error("MIDI envelope validation");
  Session midiRestored;
  if(!sessionFromJson(sessionToJson(midiFixture),midiRestored) ||
     midiRestored.tracks.size()!=1 || midiRestored.tracks[0].notes.size()!=1 ||
     midiRestored.tracks[0].synthPreset!=2 ||
+    midiRestored.tracks[0].synthAttackMs!=25.0f ||
+    midiRestored.tracks[0].synthReleaseMs!=90.0f ||
     midiRestored.tracks[0].notes[0].pitch!=67 ||
     midiRestored.tracks[0].notes[0].startBeat!=3 ||
     midiRestored.tracks[0].notes[0].lengthBeats!=0.75)
