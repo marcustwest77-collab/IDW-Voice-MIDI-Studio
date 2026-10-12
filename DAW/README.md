@@ -113,3 +113,5 @@ Set `IDW_PROPOSAL_INBOX` to a dedicated absolute filename ending in `.json`, in 
 In IDW AI STUDIO, click **SET INBOX** and select the existing local JSON file configured as `IDW_PROPOSAL_INBOX` for your MCP client. Click **CHECK INBOX** whenever you want to read it. The DAW validates the format and loads it into the editor, but does not apply it; use **REVIEW PROPOSAL** followed by **APPROVE & APPLY**. This is user-initiated checking, not background monitoring, and it does not automatically remove the inbox file.
 
 When **CHECK INBOX** loads a valid pending proposal, the panel now displays its action type (tempo, track creation, or mix adjustment) before the mandatory review and approval steps.
+
+Inbox import additionally checks the actual UTF-8 payload size after reading the file, protecting against a file being enlarged between the initial size check and the read. It never auto-executes an imported command.
