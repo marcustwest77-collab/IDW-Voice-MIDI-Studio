@@ -93,6 +93,15 @@ int main(){
  if(std::all_of(bass.begin(),bass.end(),[](float x){return x==0.0f;}) ||
     bass==left || lead==left || bass==lead)
     throw std::runtime_error("synth presets should yield distinct audio");
+ Session chordSession;chordSession.addTrack(TrackType::midi);
+ chordSession.addMidiNote(0,{60,0,1,127});
+ chordSession.addMidiNote(0,{64,0,1,127});
+ chordSession.addMidiNote(0,{67,0,1,127});
+ std::vector<float> chordLeft(2048,0.0f);
+ renderMidiSine(chordSession,chordLeft.data(),nullptr,2048,0,48000.0);
+ if(std::all_of(chordLeft.begin(),chordLeft.end(),[](float v){return v==0.0f;}) ||
+    std::any_of(chordLeft.begin(),chordLeft.end(),[](float v){return !std::isfinite(v) || std::abs(v)>1.0f;}))
+    throw std::runtime_error("polyphonic MIDI output exceeds safe range");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
