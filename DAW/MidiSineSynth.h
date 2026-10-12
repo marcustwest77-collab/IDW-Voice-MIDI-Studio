@@ -79,11 +79,22 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
             const auto attackFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthAttackMs/1000.0));
             const auto releaseFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthReleaseMs/1000.0));
             const auto preset=static_cast<SynthPreset>(std::clamp(t.synthPreset,0,2));
+            // Resolve harmonic eligibility once per note rather than per sample.
+            const double nyquist=sampleRate*0.5;
+            const bool second=freq<nyquist/2.0;
+            const bool third=freq<nyquist/3.0;
+            const float fundamentalGain=preset==SynthPreset::bass?(second?0.8f:1.0f):
+                preset==SynthPreset::lead?(third?0.6f:(second?0.75f:1.0f)):1.0f;
+            const float secondGain=preset==SynthPreset::bass?(second?0.2f:0.0f):
+                preset==SynthPreset::lead&&second?(third?0.3f:0.25f):0.0f;
+            const float thirdGain=preset==SynthPreset::lead&&third?0.1f:0.0f;
             for(auto i=first;i<last;++i){
                 const auto offset=(startFrame+i-noteStart);
                 const float fade=std::clamp(std::min((double)offset/attackFrames,
                                          (double)(total-1-offset)/releaseFrames),0.0,1.0);
-                const float wave=synthWave(preset,(double)offset*increment,freq,sampleRate)*velocity*std::max(0.0f,fade);
+                const float wave=(fundamentalGain*(float)std::sin((double)offset*increment)+
+                    secondGain*(float)std::sin(2.0*(double)offset*increment)+
+                    thirdGain*(float)std::sin(3.0*(double)offset*increment))*velocity*std::max(0.0f,fade);
                 left[i]+=wave*l;
                 if(right)right[i]+=wave*r;
             }
