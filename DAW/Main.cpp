@@ -1,3 +1,4 @@
+#include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
 #include "TimelineMath.h"
@@ -33,6 +34,21 @@ public:
         connectButton.onClick=[this]{
             connectPanel.setVisible(!connectPanel.isVisible());
             connectPanel.toFront(false);
+        };
+        pianoButton.setButtonText("PIANO ROLL");
+        addAndMakeVisible(pianoButton);
+        addChildComponent(pianoRoll);
+        pianoRoll.session=&session;
+        pianoButton.onClick=[this]{
+            if(playing.load() || recorder.isRecording() || exportRunning.load())return;
+            if(selectedTrack>=session.tracks.size() ||
+               session.tracks[selectedTrack].type!=idw::daw::TrackType::midi)return;
+            pianoRoll.trackIndex=selectedTrack;
+            pianoRoll.setVisible(!pianoRoll.isVisible());
+            if(pianoRoll.isVisible()){
+                aiPanel.setVisible(false);connectPanel.setVisible(false);
+                pianoRoll.toFront(false);pianoRoll.repaint();
+            }
         };
         aiButton.setButtonText("IDW AI STUDIO");
         addChildComponent(aiPanel);
@@ -145,6 +161,7 @@ public:
         cancelBounce.setBounds(projectRow.removeFromLeft(135).reduced(3));
         connectButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         aiButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
+        pianoButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(185));
@@ -167,6 +184,7 @@ public:
         ceilingControl.setBounds(ceilingRow.removeFromLeft(220));
         connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
         aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
+        pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
     }
     bool keyPressed(const juce::KeyPress& key) override {
         if(!selectedClipValid || playing.load() || recorder.isRecording() ||
@@ -624,7 +642,8 @@ private:
     juce::ToggleButton muteControl,soloControl;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton;
+    IDWPianoRoll pianoRoll;
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
     IDWTakeRecorder recorder;
