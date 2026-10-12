@@ -139,3 +139,7 @@ Select a MIDI track and click **PIANO ROLL** while playback/record/export is sto
 Piano-roll editor update: drag an existing MIDI note horizontally to change its start beat and vertically to transpose pitch. Drag near the note's right edge to resize its duration. Time adjustments snap to quarter beats. This is still an experimental editor without MIDI playback or instrument hosting.
 
 MIDI note selection: click an existing note to highlight it gold and focus the piano-roll editor. Press Delete or Backspace to remove the selected note. Deleted notes are removed from the in-memory project; save the project to preserve the edit. Automated tests cover valid and invalid note deletion. MIDI playback is not yet available.
+
+### MIDI playback scheduler foundation
+
+`MidiScheduler.h` converts saved piano-roll notes to chronologically ordered MIDI note-on/note-off events and respects track mute/solo settings. Same-beat note-offs are ordered before note-ons. Tests cover timing and mute behavior. This is **event scheduling only**: the live audio callback does not yet emit MIDI and there is still no built-in synthesizer or plugin host to make the notes audible.
