@@ -71,6 +71,15 @@ public:
         masterGain.onValueChange=[this]{masterLevel.store((float)masterGain.getValue(),std::memory_order_relaxed);};
         clearClips.setButtonText("RESET CLIP");addAndMakeVisible(clearClips);
         clearClips.onClick=[this]{peakClipLeft.store(false);peakClipRight.store(false);repaint();};
+        eqLabel.setText("MASTER TONE",juce::dontSendNotification);addAndMakeVisible(eqLabel);
+        lowEq.setRange(-12,12,0.5);lowEq.setValue(0);
+        highEq.setRange(-12,12,0.5);highEq.setValue(0);
+        for(auto* slider:{&lowEq,&highEq}){
+            slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,56,24);
+            addAndMakeVisible(*slider);
+        }
+        lowEq.onValueChange=[this]{lowDb.store((float)lowEq.getValue());};
+        highEq.onValueChange=[this]{highDb.store((float)highEq.getValue());};
         refreshMixer();
     }
     void resized() override {
@@ -102,11 +111,15 @@ public:
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
         clearClips.setBounds(masterRow.removeFromLeft(120).reduced(3));
+        auto eqRow=area.removeFromTop(35);
+        eqLabel.setBounds(eqRow.removeFromLeft(115));
+        lowEq.setBounds(eqRow.removeFromLeft(180));
+        highEq.setBounds(eqRow.removeFromLeft(180));
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
         const auto rect=getLocalBounds().reduced(20);
-        const int top=255, trackHeight=70, left=205;
+        const int top=295, trackHeight=70, left=205;
         g.setColour(juce::Colour(0xff1b222b));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
@@ -157,6 +170,7 @@ public:
 private:
     void prepareToPlay(int samplesPerBlockExpected,double sampleRate) override {
         deviceRate=sampleRate;
+        for(auto& state:eqState)state=0.0f;
         preparedBlockSize=juce::jmax(1,samplesPerBlockExpected);
         for(auto& slot:sources){
             slot->scratch.setSize(2,preparedBlockSize,false,true,false);
@@ -187,6 +201,21 @@ private:
             const float rightGain=gain*(pan<0.0f?1.0f+pan:1.0f);
             for(int channel=0;channel<info.buffer->getNumChannels();++channel)
                 info.buffer->addFrom(channel,info.startSample+window.offset,slot->scratch,channel,0,window.frames,channel==0?leftGain:rightGain);
+        }
+        // Two-band master tone: one-pole low/high crossover at 500 Hz.
+        // The filter's persistent state is owned exclusively by the audio callback.
+        const float alpha=(float)std::exp(-2.0*juce::MathConstants<double>::pi*500.0/deviceRate);
+        const float lowGain=std::pow(10.0f,lowDb.load(std::memory_order_relaxed)/20.0f);
+        const float highGain=std::pow(10.0f,highDb.load(std::memory_order_relaxed)/20.0f);
+        for(int channel=0;channel<juce::jmin(2,info.buffer->getNumChannels());++channel){
+            auto* samples=info.buffer->getWritePointer(channel,info.startSample);
+            float state=eqState[channel];
+            for(int i=0;i<info.numSamples;++i){
+                const float x=samples[i];
+                state=alpha*state+(1.0f-alpha)*x;
+                samples[i]=lowGain*state+highGain*(x-state);
+            }
+            eqState[channel]=state;
         }
         info.buffer->applyGain(info.startSample,info.numSamples,masterLevel.load(std::memory_order_relaxed));
         if(info.buffer->getNumChannels()>0){
@@ -403,7 +432,10 @@ private:
     double takeStartBeat=0.0;
     juce::Label title,tempoLabel,gainLabel,panLabel;
     juce::Slider gainControl,panControl,masterGain;
-    juce::Label masterLabel;
+    juce::Label masterLabel,eqLabel;
+    juce::Slider lowEq,highEq;
+    std::atomic<float> lowDb{0.0f},highDb{0.0f};
+    float eqState[2]{0.0f,0.0f};
     juce::TextButton clearClips;
     std::atomic<float> peakLeft{0.0f},peakRight{0.0f};
     std::atomic<bool> peakClipLeft{false},peakClipRight{false};
