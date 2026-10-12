@@ -36,6 +36,12 @@ public:
             connectPanel.setVisible(!connectPanel.isVisible());
             connectPanel.toFront(false);
         };
+        synthPreset.addItem("Keys",1);
+        synthPreset.addItem("Bass",2);
+        synthPreset.addItem("Lead",3);
+        synthPreset.setSelectedId(1,juce::dontSendNotification);
+        addAndMakeVisible(synthPreset);
+        synthPreset.onChange=[this]{selectedSynthPreset.store(synthPreset.getSelectedId()-1);};
         pianoButton.setButtonText("PIANO ROLL");
         addAndMakeVisible(pianoButton);
         addChildComponent(pianoRoll);
@@ -163,6 +169,7 @@ public:
         connectButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         aiButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         pianoButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
+        synthPreset.setBounds(projectRow.removeFromLeft(100).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(185));
@@ -362,7 +369,8 @@ private:
                 info.buffer->getWritePointer(0,info.startSample),
                 info.buffer->getNumChannels()>1
                     ?info.buffer->getWritePointer(1,info.startSample):nullptr,
-                info.numSamples,blockStart,deviceRate);
+                info.numSamples,blockStart,deviceRate,
+                static_cast<idw::daw::SynthPreset>(selectedSynthPreset.load(std::memory_order_relaxed)));
         }
         // Two-band master tone: one-pole low/high crossover at 500 Hz.
         // The filter's persistent state is owned exclusively by the audio callback.
@@ -652,6 +660,8 @@ private:
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton;
+    juce::ComboBox synthPreset;
+    std::atomic<int> selectedSynthPreset{0};
     IDWPianoRoll pianoRoll;
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
