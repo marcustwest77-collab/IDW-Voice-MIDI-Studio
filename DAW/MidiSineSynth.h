@@ -47,9 +47,10 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
             for(auto i=first;i<last;++i){
                 const auto offset=(startFrame+i-noteStart);
                 const auto total=noteEnd-noteStart;
-                const float fade=(float)std::min<std::int64_t>(std::min(offset,total-1-offset),
-                                         (std::int64_t)(sampleRate*0.005)) /
-                                 (float)std::max<std::int64_t>(1,(std::int64_t)(sampleRate*0.005));
+                const auto attackFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthAttackMs/1000.0));
+                const auto releaseFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthReleaseMs/1000.0));
+                const float fade=std::clamp(std::min((double)offset/attackFrames,
+                                         (double)(total-1-offset)/releaseFrames),0.0,1.0);
                 const float wave=synthWave(static_cast<SynthPreset>(std::clamp(t.synthPreset,0,2)),(double)offset*increment)*velocity*std::max(0.0f,fade);
                 left[i]+=wave*l;
                 if(right)right[i]+=wave*r;
