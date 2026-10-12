@@ -86,12 +86,18 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             }
             const double first=clip.offset+(begin-clip.start)*ratio;
             const int64_t sourceStart=(int64_t)std::floor(first)-(ratio>1.0?12:0);
-            const int sourceCount=(int)std::ceil(first-sourceStart+(number-1)*ratio)+2+(ratio>1.0?12:0);
+            // Validate in floating point before narrowing to int: malformed
+            // source metadata must never trigger an out-of-range conversion.
+            const double requestedCount=std::ceil(first-sourceStart+(number-1)*ratio)
+                                        +2.0+(ratio>1.0?12.0:0.0);
+            if(!std::isfinite(first) || !std::isfinite(requestedCount) ||
+               requestedCount<2.0 || requestedCount>1000000.0){
+                error="Invalid resampling buffer size.";
+                writer.reset();destination.deleteFile();return false;
+            }
+            const int sourceCount=(int)requestedCount;
             // Reuse the scratch buffer across clips and blocks rather than allocating
             // a temporary AudioBuffer for every overlap.
-            if(sourceCount<=0 || sourceCount>1000000){
-                error="Invalid resampling buffer size.";writer.reset();destination.deleteFile();return false;
-            }
             if(scratch.getNumSamples()<sourceCount)
                 scratch.setSize(2,sourceCount,false,false,true);
             scratch.clear(0,sourceCount);
