@@ -54,6 +54,7 @@ Available tools:
 - `idw_preview_tempo` — validate prospective BPM.
 - `idw_preview_track` — propose an audio or MIDI track.
 - `idw_preview_mix` — validate track gain (0–2) and pan (-1 to +1) against a saved project, without applying changes.
+- `idw_analyze_project` — read-only diagnostics for empty audio tracks, mute/solo conflicts and invalid clip timing, without exposing audio file paths.
 
 These operate on an explicit saved **snapshot**, not the live JUCE timeline. **Read-only and preview-only:** nothing changes in the DAW. No audio files are uploaded by this server. Track names and project metadata can be shared with the selected AI provider, so use only trusted AI applications.
 
