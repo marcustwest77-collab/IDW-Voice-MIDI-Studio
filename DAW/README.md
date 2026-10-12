@@ -73,3 +73,7 @@ Example proposed change (NOT applied automatically):
 ```
 
 The JUCE parser and action helper are covered by `IDWDAWPersistenceTests`. They are **not yet connected to an interactive approval window, live MCP bridge, or in-DAW AI chat**. Continue to use the DAW's manual controls. No recording or project destruction is permitted through this proposal interface.
+
+## IDW AI Studio approval panel (V14 experimental)
+
+Choose **IDW AI STUDIO** in the DAW toolbar. Paste an `idw-ai-proposal-v1` JSON action, choose **REVIEW PROPOSAL**, inspect the action description, then click **APPROVE & APPLY** once. Supported actions: set BPM (20–300), add one audio track, add one MIDI track. Requests are rejected while playback, recording, or WAV export is active. Unknown commands and extra parameters are rejected. This panel is **local and manual**: there is still no direct MCP-to-running-DAW connection and no embedded ChatGPT or Claude conversation. The separate MCP server reads saved-project snapshots and produces previews; its output is not auto-executed.
