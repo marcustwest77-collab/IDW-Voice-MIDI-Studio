@@ -51,8 +51,12 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
                noteStartDouble<0 || noteEndDouble>9e15)continue;
             const auto noteStart=(std::int64_t)std::llround(noteStartDouble);
             const auto noteEnd=(std::int64_t)std::llround(noteEndDouble);
-            const auto first=std::max<std::int64_t>(0,noteStart-startFrame);
-            const auto last=std::min<std::int64_t>(samples,noteEnd-startFrame);
+            // Compare absolute frame ranges first to avoid subtraction overflow
+            // for exceptionally distant notes in malformed sessions.
+            const auto blockEnd=(double)startFrame+(double)samples;
+            if((double)noteEnd<=(double)startFrame || (double)noteStart>=blockEnd)continue;
+            const auto first=(std::int64_t)std::max(0.0,(double)noteStart-(double)startFrame);
+            const auto last=(std::int64_t)std::min((double)samples,(double)noteEnd-(double)startFrame);
             if(first>=last)continue;
             const double freq=440.0*std::pow(2.0,(n.pitch-69)/12.0);
             const double increment=6.283185307179586*freq/sampleRate;
