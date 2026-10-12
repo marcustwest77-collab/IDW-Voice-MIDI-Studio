@@ -102,7 +102,11 @@ public:
             }
             editor.setText(contents);
             apply.setEnabled(false);
-            feedback.setText("Inbox command loaded. Review details, then approve manually.",
+            const auto parsed=juce::JSON::parse(contents);
+            const auto action=parsed.getProperty("action",juce::var());
+            auto* details=action.getDynamicObject();
+            const auto type=details?details->getProperty("type").toString():"unknown";
+            feedback.setText("Pending: "+type+" | Review details, then approve manually.",
                              juce::dontSendNotification);
         };
         // Import a proposal from a local JSON file chosen by the user. No polling
