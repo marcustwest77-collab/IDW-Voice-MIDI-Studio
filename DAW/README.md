@@ -135,3 +135,5 @@ MIDI tracks now store validated note events (MIDI pitch 0–127, velocity 1–12
 ### Graphical MIDI piano roll (early prototype)
 
 Select a MIDI track and click **PIANO ROLL** while playback/record/export is stopped. The initial piano-roll window draws a C3–C6 keyboard grid and the saved notes in the selected track; click the grid to add a one-beat note with velocity 100 snapped to quarter beats. Use **SAVE PROJECT** to persist changes. Moving/resizing individual piano-roll notes, scrollable pitches, MIDI playback, and virtual-instrument sound generation are **not yet implemented**. Piano-roll edits should not be made while the transport is running.
+
+Piano-roll editor update: drag an existing MIDI note horizontally to change its start beat and vertically to transpose pitch. Drag near the note's right edge to resize its duration. Time adjustments snap to quarter beats. This is still an experimental editor without MIDI playback or instrument hosting.
