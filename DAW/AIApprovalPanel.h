@@ -19,10 +19,22 @@ public:
         copyStatus.setButtonText("COPY STATUS");
         addAndMakeVisible(copyStatus);
         copyStatus.onClick=[this]{
-            if(getSanitizedStatus){
-                juce::SystemClipboard::copyTextToClipboard(getSanitizedStatus());
-                feedback.setText("Session status copied (no audio paths).",juce::dontSendNotification);
-            }
+            if(!getSanitizedStatus)return;
+            const auto status=getSanitizedStatus();
+            if(status.isEmpty())return;
+            // Require deliberate confirmation before putting project metadata
+            // on the clipboard, where other applications may read it.
+            juce::AlertWindow::showOkCancelBox(
+                juce::MessageBoxIconType::QuestionIcon,
+                "Share IDW session metadata?",
+                "Copy track names, tempo and mixer settings to your clipboard? "
+                "No audio content or file paths are included. Other apps may read clipboard data.",
+                "COPY STATUS","CANCEL",this,
+                juce::ModalCallbackFunction::create([this,status](int result){
+                    if(result!=1)return;
+                    juce::SystemClipboard::copyTextToClipboard(status);
+                    feedback.setText("Sanitized session metadata copied.",juce::dontSendNotification);
+                }));
         };
         paste.setButtonText("PASTE JSON");
         addAndMakeVisible(paste);
