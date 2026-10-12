@@ -40,6 +40,12 @@ with tempfile.TemporaryDirectory() as folder:
     assert '"bpm": 124' in outputs[2]["result"]["content"][0]["text"]
     assert "/private/do-not-expose.wav" not in proc.stdout
     assert '"applied": false' in outputs[4]["result"]["content"][0]["text"]
+    tempo_preview = json.loads(outputs[4]["result"]["content"][0]["text"])
+    track_preview = json.loads(outputs[5]["result"]["content"][0]["text"])
+    assert tempo_preview["approval_json"] == {
+        "format": "idw-ai-proposal-v1", "action": {"type": "set_tempo", "bpm": 145}}
+    assert track_preview["approval_json"] == {
+        "format": "idw-ai-proposal-v1", "action": {"type": "add_track", "track_type": "midi"}}
     assert outputs[6]["result"].get("isError") is True
     assert '"applied": false' in outputs[7]["result"]["content"][0]["text"]
     assert outputs[8]["result"].get("isError") is True
