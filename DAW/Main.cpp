@@ -109,8 +109,12 @@ private:
             slot->scratch.clear(0,window.frames);
             juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
             slot->transport.getNextAudioBlock(readInfo);
+            const float gain=juce::jlimit(0.0f,2.0f,track.gain);
+            const float pan=juce::jlimit(-1.0f,1.0f,track.pan);
+            const float leftGain=gain*(pan>0.0f?1.0f-pan:1.0f);
+            const float rightGain=gain*(pan<0.0f?1.0f+pan:1.0f);
             for(int channel=0;channel<info.buffer->getNumChannels();++channel)
-                info.buffer->addFrom(channel,info.startSample+window.offset,slot->scratch,channel,0,window.frames);
+                info.buffer->addFrom(channel,info.startSample+window.offset,slot->scratch,channel,0,window.frames,channel==0?leftGain:rightGain);
         }
         sessionFrames.fetch_add(info.numSamples,std::memory_order_relaxed);
     }
