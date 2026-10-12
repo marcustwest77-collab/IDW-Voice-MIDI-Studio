@@ -40,9 +40,22 @@ public:
         }
     }
     void mouseDown(const juce::MouseEvent& e) override {
+        dragging=false;
         if(!session || trackIndex>=session->tracks.size() ||
            session->tracks[trackIndex].type!=idw::daw::TrackType::midi ||
            e.x<54 || e.y<0 || e.y>=37*13)return;
+        auto& notes=session->tracks[trackIndex].notes;
+        for(size_t i=notes.size();i>0;--i){
+            const auto& n=notes[i-1];
+            const int x=54+juce::roundToInt(n.startBeat*16.0);
+            const int y=(84-n.pitch)*13;
+            const int w=juce::jmax(3,juce::roundToInt(n.lengthBeats*16.0));
+            if(e.x>=x && e.x<x+w && e.y>=y && e.y<y+13){
+                activeNote=i-1;dragging=true;resizing=e.x>=x+w-6;
+                originX=e.x;originY=e.y;original=notes[activeNote];
+                return;
+            }
+        }
         const int pitch=84-e.y/13;
         const double beat=std::max(0.0,std::round(((double)e.x-54)/16.0*4.0)/4.0);
         if(session->addMidiNote(trackIndex,{pitch,beat,1.0,100})){
@@ -50,4 +63,22 @@ public:
             repaint();
         }
     }
+    void mouseDrag(const juce::MouseEvent& e) override {
+        if(!dragging || !session || trackIndex>=session->tracks.size())return;
+        const double delta=std::round((e.x-originX)/4.0)/4.0;
+        bool changed=false;
+        if(resizing)
+            changed=session->resizeMidiNote(trackIndex,activeNote,std::max(0.25,original.lengthBeats+delta));
+        else
+            changed=session->moveMidiNote(trackIndex,activeNote,
+                std::max(0.0,original.startBeat+delta),
+                juce::jlimit(0,127,original.pitch-(e.y-originY)/13));
+        if(changed){if(onChanged)onChanged();repaint();}
+    }
+    void mouseUp(const juce::MouseEvent&) override {dragging=false;}
+private:
+    bool dragging=false,resizing=false;
+    size_t activeNote=0;
+    int originX=0,originY=0;
+    idw::daw::MidiNote original;
 };
