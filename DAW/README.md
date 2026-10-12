@@ -115,3 +115,7 @@ In IDW AI STUDIO, click **SET INBOX** and select the existing local JSON file co
 When **CHECK INBOX** loads a valid pending proposal, the panel now displays its action type (tempo, track creation, or mix adjustment) before the mandatory review and approval steps.
 
 Inbox import additionally checks the actual UTF-8 payload size after reading the file, protecting against a file being enlarged between the initial size check and the read. It never auto-executes an imported command.
+
+### Timeline editing foundation
+
+The session model now exposes validated `moveClip(trackIndex, clipIndex, newStartBeat)` and `resizeClip(trackIndex, clipIndex, newLengthBeats)` operations. Negative positions, nonpositive durations, nonfinite values, and missing clips are rejected without mutation. Persistence tests cover moving and resizing and saving the results. These are model operations for future timeline editing UI, **not yet drag handles or a complete MIDI piano roll**.
