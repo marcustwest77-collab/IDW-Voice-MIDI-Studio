@@ -131,3 +131,7 @@ Click an audio clip on the main timeline to select it and focus the editor. Pres
 ### MIDI piano-roll data foundation
 
 MIDI tracks now store validated note events (MIDI pitch 0–127, velocity 1–127, start beat, positive duration). The session model supports adding, moving, transposing and resizing notes, and session JSON saves/loads the notes while continuing to accept older projects without a `notes` field. This is the **data/persistence foundation only**; there is not yet a visible piano-roll editor or scheduled MIDI note playback.
+
+### Graphical MIDI piano roll (early prototype)
+
+Select a MIDI track and click **PIANO ROLL** while playback/record/export is stopped. The initial piano-roll window draws a C3–C6 keyboard grid and the saved notes in the selected track; click the grid to add a one-beat note with velocity 100 snapped to quarter beats. Use **SAVE PROJECT** to persist changes. Moving/resizing individual piano-roll notes, scrollable pitches, MIDI playback, and virtual-instrument sound generation are **not yet implemented**. Piano-roll edits should not be made while the transport is running.
