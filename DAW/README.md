@@ -81,3 +81,5 @@ Choose **IDW AI STUDIO** in the DAW toolbar. Paste an `idw-ai-proposal-v1` JSON 
 ### AI preview handoff (manual)
 
 The MCP tools `idw_preview_tempo` and `idw_preview_track` now return `approval_json`. Copy only that JSON object into the DAW's **IDW AI STUDIO** panel, choose **REVIEW PROPOSAL**, then **APPROVE & APPLY**. The DAW validates the JSON again and will not apply it without a click. This is a local/manual handoff, **not live MCP remote control**. Mix changes still return previews only and cannot be applied through the approval panel yet.
+
+The **PASTE JSON** button imports a proposal from the system clipboard. Pasting disables approval until **REVIEW PROPOSAL** is selected again, and changes still require an explicit **APPROVE & APPLY** click.
