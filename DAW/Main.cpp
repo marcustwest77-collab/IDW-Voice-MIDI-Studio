@@ -167,6 +167,42 @@ public:
         connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
         aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
     }
+    void mouseDown(const juce::MouseEvent& e) override {
+        draggingClip=false;
+        if(playing.load() || recorder.isRecording() || exportRunning.load() ||
+           aiPanel.isVisible() || connectPanel.isVisible())return;
+        constexpr int top=366, height=70, left=205;
+        if(e.y<top || e.x<left || session.tracks.empty())return;
+        const auto ti=(size_t)((e.y-top)/height);
+        if(ti>=session.tracks.size())return;
+        const auto& clips=session.tracks[ti].clips;
+        for(size_t i=clips.size();i>0;--i){
+            const auto& c=clips[i-1];
+            const int x=left+juce::roundToInt(c.startBeat*12.0);
+            const int w=juce::jmax(2,juce::roundToInt(c.lengthBeats*12.0));
+            if(e.x>=x && e.x<x+w && e.y>=top+(int)ti*height+8 &&
+               e.y<top+(int)(ti+1)*height-10){
+                dragTrack=ti;dragIndex=i-1;dragOriginX=e.x;
+                dragOriginalStart=c.startBeat;dragOriginalLength=c.lengthBeats;
+                dragResize=e.x>=x+w-10;
+                draggingClip=true;
+                break;
+            }
+        }
+    }
+    void mouseDrag(const juce::MouseEvent& e) override {
+        if(!draggingClip || playing.load() || recorder.isRecording() ||
+           exportRunning.load())return;
+        const auto delta=(double)(e.x-dragOriginX)/12.0;
+        // Quarter-beat snapping on the visible timeline.
+        const auto snap=[](double beats){return std::max(0.0,std::round(beats*4.0)/4.0);};
+        if(dragResize)
+            session.resizeClip(dragTrack,dragIndex,std::max(0.25,snap(dragOriginalLength+delta)));
+        else
+            session.moveClip(dragTrack,dragIndex,snap(dragOriginalStart+delta));
+        repaint();
+    }
+    void mouseUp(const juce::MouseEvent&) override { draggingClip=false; }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
         const auto rect=getLocalBounds().reduced(20);
@@ -220,9 +256,13 @@ public:
             g.drawText("Export: "+juce::String((int)(exportProgress.load()*100.0f))+"%",getWidth()-230,80,205,24,juce::Justification::centredRight);
         }
         g.setColour(juce::Colours::grey);
-        g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline-scheduled playback prototype; recording and clip editing unavailable." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
+        g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline playback prototype; drag clips to move or resize their right edge." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
     }
 private:
+    bool draggingClip=false,dragResize=false;
+    size_t dragTrack=0,dragIndex=0;
+    int dragOriginX=0;
+    double dragOriginalStart=0.0,dragOriginalLength=0.0;
     void prepareToPlay(int samplesPerBlockExpected,double sampleRate) override {
         deviceRate=sampleRate;
         for(auto& state:eqState)state=0.0f;
