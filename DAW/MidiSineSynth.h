@@ -1,6 +1,7 @@
 #pragma once
 #include "SessionModel.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 namespace idw::daw {
@@ -68,7 +69,15 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
             const auto first=(std::int64_t)std::max(0.0,(double)noteStart-(double)startFrame);
             const auto last=(std::int64_t)std::min((double)samples,(double)noteEnd-(double)startFrame);
             if(first>=last)continue;
-            const double freq=440.0*std::pow(2.0,(n.pitch-69)/12.0);
+            // Lookup immutable equal-tempered MIDI pitch frequencies instead of
+            // evaluating pow() separately for each rendered note and buffer.
+            static const auto pitchHz=[]{
+                std::array<double,128> frequencies{};
+                for(int pitch=0;pitch<128;++pitch)
+                    frequencies[(std::size_t)pitch]=440.0*std::pow(2.0,(pitch-69)/12.0);
+                return frequencies;
+            }();
+            const double freq=pitchHz[(std::size_t)n.pitch];
             // Skip inaudible / aliased notes rather than generating frequencies
             // above the Nyquist limit (particularly on low sample-rate devices).
             if(!std::isfinite(freq) || freq>=sampleRate*0.5)continue;
