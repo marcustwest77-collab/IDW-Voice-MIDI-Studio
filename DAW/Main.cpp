@@ -73,8 +73,9 @@ public:
         midi.setBounds(controls.removeFromLeft(160).reduced(3));
         open.setBounds(controls.removeFromLeft(180).reduced(3));
         record.setBounds(controls.removeFromLeft(165).reduced(3));
-        saveProject.setBounds(controls.removeFromLeft(140).reduced(3));
-        openProject.setBounds(controls.removeFromLeft(140).reduced(3));
+        auto projectRow=area.removeFromTop(40);
+        saveProject.setBounds(projectRow.removeFromLeft(165).reduced(3));
+        openProject.setBounds(projectRow.removeFromLeft(165).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(185));
@@ -88,7 +89,7 @@ public:
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
         const auto rect=getLocalBounds().reduced(20);
-        const int top=170, trackHeight=70, left=205;
+        const int top=215, trackHeight=70, left=205;
         g.setColour(juce::Colour(0xff1b222b));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
