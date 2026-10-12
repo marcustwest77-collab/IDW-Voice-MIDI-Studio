@@ -114,6 +114,16 @@ int main(){
  renderMidiSine(nyquistSession,lowRateSamples.data(),nullptr,256,0,8000.0);
  if(std::any_of(lowRateSamples.begin(),lowRateSamples.end(),[](float sample){return sample!=0.0f;}))
     throw std::runtime_error("Nyquist-unsafe note rendered at low sample rate");
+ // At 8 kHz, MIDI A7 (3520 Hz) permits only its fundamental.
+ const double phase=0.47;
+ const float expected=(float)std::sin(phase);
+ if(std::abs(synthWave(SynthPreset::bass,phase,3520.0,8000.0)-expected)>1e-6f ||
+    std::abs(synthWave(SynthPreset::lead,phase,3520.0,8000.0)-expected)>1e-6f)
+    throw std::runtime_error("Synth produced above-Nyquist harmonics");
+ // At 48 kHz, bass and lead retain their intended harmonic character.
+ if(synthWave(SynthPreset::bass,phase,440.0,48000.0)==expected ||
+    synthWave(SynthPreset::lead,phase,440.0,48000.0)==expected)
+    throw std::runtime_error("Synth lost safe harmonics");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
