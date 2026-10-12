@@ -1,3 +1,4 @@
+#include "MidiSineSynth.h"
 #include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
@@ -74,7 +75,7 @@ public:
         };
         record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
-        play.onClick=[this]{if(loadedCount()>0){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
+        play.onClick=[this]{if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
         stop.onClick=[this]{if(recorder.isRecording())toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;repaint();};
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
@@ -355,6 +356,14 @@ private:
             for(int channel=0;channel<info.buffer->getNumChannels();++channel)
                 info.buffer->addFrom(channel,info.startSample+window.offset,slot->scratch,channel,0,window.frames,channel==0?leftGain:rightGain);
         }
+        // Basic audible piano-roll preview. No MIDI device or VST routing yet.
+        if(info.buffer->getNumChannels()>0){
+            idw::daw::renderMidiSine(session,
+                info.buffer->getWritePointer(0,info.startSample),
+                info.buffer->getNumChannels()>1
+                    ?info.buffer->getWritePointer(1,info.startSample):nullptr,
+                info.numSamples,blockStart,deviceRate);
+        }
         // Two-band master tone: one-pole low/high crossover at 500 Hz.
         // The filter's persistent state is owned exclusively by the audio callback.
         const float alpha=(float)std::exp(-2.0*juce::MathConstants<double>::pi*500.0/deviceRate);
@@ -433,7 +442,7 @@ private:
         if(preparedBlockSize>0){slot->scratch.setSize(2,preparedBlockSize,false,true,false);slot->transport.prepareToPlay(preparedBlockSize,deviceRate);}
         sources.push_back(std::move(slot));
     }
-    double lastClipEndBeat() const {double end=0;for(const auto& track:session.tracks)for(const auto& clip:track.clips)end=juce::jmax(end,clip.startBeat+clip.lengthBeats);return end;}
+    double lastClipEndBeat() const {double end=0;for(const auto& track:session.tracks){for(const auto& clip:track.clips)end=juce::jmax(end,clip.startBeat+clip.lengthBeats);for(const auto& note:track.notes)end=juce::jmax(end,note.startBeat+note.lengthBeats);}return end;}
     int loadedCount() const {
         int count=0;for(auto& slot:sources)if(slot->reader)++count;
         return count;
