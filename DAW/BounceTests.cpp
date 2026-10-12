@@ -1,3 +1,5 @@
+#include <chrono>
+#include <iostream>
 #include "OfflineBounce.h"
 #include <stdexcept>
 #include <cmath>
@@ -293,10 +295,16 @@ int main(){
  }
  std::atomic<float> extendedProgress{0.0f};
  const auto extendedOutput=root.getChildFile("extended-export.wav");
+ const auto exportStarted=std::chrono::steady_clock::now();
  if(!renderSessionWav(extended,extendedOutput,error,44100,1.0f,-0.1f,
                       0.0f,0.0f,&extendedProgress))
     throw std::runtime_error("extended bounce: "+error.toStdString());
- auto extendedReader=std::unique_ptr<juce::AudioFormatReader>(
+ const double exportSeconds=std::chrono::duration<double>(
+    std::chrono::steady_clock::now()-exportStarted).count();
+ std::cout<<"V14 export benchmark: 28.5 audio seconds in "<<exportSeconds
+          <<" wall seconds (x"<<(28.5/std::max(0.001,exportSeconds))
+          <<" realtime)"<<std::endl;
+  auto extendedReader=std::unique_ptr<juce::AudioFormatReader>(
     wav.createReaderFor(extendedOutput.createInputStream().release(),true));
  // Final track begins at beat 55, ending at beat 57 = 28.5 seconds.
  if(!extendedReader || extendedReader->lengthInSamples!=1256850 ||
