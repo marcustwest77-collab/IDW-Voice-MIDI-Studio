@@ -21,6 +21,8 @@ TOOLS = [
     {"name": "idw_preview_track", "description": "Preview adding one audio or MIDI track without modifying the project.",
      "inputSchema": {"type": "object", "properties": {"type": {"type": "string", "enum": ["audio", "midi"]}},
                      "required": ["type"], "additionalProperties": False}},
+    {"name": "idw_analyze_project", "description": "Analyze saved session metadata for empty tracks, solo/mute conflicts, and clips extending beyond their timeline; never reads audio or shares file paths.",
+     "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "idw_preview_mix", "description": "Preview a track gain and pan change using a saved project; does not modify files.",
      "inputSchema": {"type": "object", "properties": {
          "track_index": {"type": "integer", "minimum": 0},
@@ -71,6 +73,35 @@ def dispatch(name, args):
                 "gain": gain, "pan": pan, "applied": False,
                 "note": "Confirm and adjust track controls manually in V14."}
     data = project()
+    if name == "idw_analyze_project":
+        tracks = data["tracks"]
+        if len(tracks) > 128:
+            raise ValueError("Project track count exceeds the supported limit.")
+        warnings = []
+        solo_count = sum(t.get("solo") is True for t in tracks if isinstance(t, dict))
+        for i, track in enumerate(tracks):
+            if not isinstance(track, dict):
+                raise ValueError("Malformed track metadata.")
+            clips = track.get("clips", [])
+            if not isinstance(clips, list):
+                raise ValueError("Malformed clip list.")
+            if track.get("type") == "audio" and not clips:
+                warnings.append({"track_index": i, "code": "empty_audio_track"})
+            if track.get("solo") is True and track.get("mute") is True:
+                warnings.append({"track_index": i, "code": "solo_and_mute"})
+            if solo_count and track.get("solo") is not True and track.get("type") == "audio":
+                warnings.append({"track_index": i, "code": "silenced_by_solo"})
+            for clip in clips:
+                if not isinstance(clip, dict):
+                    raise ValueError("Malformed clip metadata.")
+                start, length = clip.get("startBeat"), clip.get("lengthBeats")
+                import math
+                if (type(start) not in (int, float) or type(length) not in (int, float)
+                    or not math.isfinite(start) or not math.isfinite(length)
+                    or start < 0 or length <= 0):
+                    warnings.append({"track_index": i, "code": "invalid_clip_timing"})
+        return {"track_count": len(tracks), "warnings": warnings,
+                "source": "saved-project-snapshot", "live": False, "applied": False}
     if name == "idw_project_status":
         return {"bpm": data.get("bpm"), "numerator": data.get("numerator"),
                 "denominator": data.get("denominator"), "track_count": len(data["tracks"]),
