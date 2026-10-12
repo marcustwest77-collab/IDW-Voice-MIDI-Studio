@@ -87,3 +87,7 @@ The **PASTE JSON** button imports a proposal from the system clipboard. Pasting 
 The MCP `idw_preview_mix` tool now returns compatible `approval_json` for `set_track_mix`. The AI STUDIO panel can review and apply track gain (0–2) and pan (-1 to 1) to an existing track after a user click. Track indices are zero-based; changes are rejected while recording, playing, or exporting. No network control or automatic edits have been enabled.
 
 AI approval safety: immediately before execution, IDW AI STUDIO reparses the editor JSON and checks that the action and all parameters still match the previously reviewed proposal. Changed or invalid proposals must be reviewed again.
+
+### Current-session status for AI assistants
+
+The **COPY STATUS** button in IDW AI STUDIO copies a sanitized snapshot of the **running DAW** to the system clipboard, including tempo, transport/recording flags, and track mix settings/counts. It deliberately excludes media locations and audio content. Copying is opt-in; no data is uploaded automatically. Pasting the status into a third-party AI application shares its metadata with that provider. This is not yet a live streaming MCP connection.
