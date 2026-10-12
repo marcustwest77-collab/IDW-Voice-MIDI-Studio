@@ -1,23 +1,27 @@
 #include <JuceHeader.h>
 #include "SessionModel.h"
 #include "TimelineMath.h"
+#include "TakeRecorder.h"
 #include <atomic>
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
 public:
     Workstation() {
         setSize(1100,700);
         formats.registerBasicFormats();
-        setAudioChannels(0,2);
+        setAudioChannels(1,2);
+        deviceManager.addAudioCallback(&recorder);
         title.setText("IDW  |  VOICE MIDI STUDIO DAW  |  V14 FOUNDATION",juce::dontSendNotification);
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
-        for(auto* b:{&play,&stop,&audio,&midi,&open}) addAndMakeVisible(*b);
+        for(auto* b:{&play,&stop,&audio,&midi,&open,&record}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
+        record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
         play.onClick=[this]{if(loadedCount()>0){sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
         stop.onClick=[this]{for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;repaint();};
         open.onClick=[this]{loadAudio();};
+        record.onClick=[this]{toggleRecording();};
         audio.onClick=[this]{addAudioTrack();repaint();};
         midi.onClick=[this]{if(!playing.load())session.addTrack(idw::daw::TrackType::midi);repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
@@ -37,6 +41,7 @@ public:
         audio.setBounds(controls.removeFromLeft(160).reduced(3));
         midi.setBounds(controls.removeFromLeft(160).reduced(3));
         open.setBounds(controls.removeFromLeft(180).reduced(3));
+        record.setBounds(controls.removeFromLeft(165).reduced(3));
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff101318));
@@ -138,6 +143,19 @@ private:
         int count=0;for(auto& slot:sources)if(slot->reader)++count;
         return count;
     }
+    void toggleRecording(){
+        if(recorder.isRecording()){
+            recorder.stop();record.setButtonText("RECORD VOCAL");
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,"Take saved",recorder.file().getFullPathName());
+            return;
+        }
+        const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+            .getChildFile("IDW DAW").getChildFile("Recordings");
+        folder.createDirectory();
+        auto destination=folder.getNonexistentChildFile("Vocal Take",".wav",false);
+        if(recorder.start(destination,deviceRate))record.setButtonText("STOP RECORD");
+        else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Recording unavailable","Check microphone permission, device input and destination directory.");
+    }
     void loadAudio(){
         chooser=std::make_unique<juce::FileChooser>("Select WAV or AIFF audio file",juce::File{},"*.wav;*.aiff;*.aif");
         chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& picker){
@@ -156,12 +174,13 @@ private:
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {recorder.stop();deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     idw::daw::Session session;
     std::atomic<bool> playing{false};
     double playheadBeats=0;
     juce::Label title,tempoLabel;
-    juce::TextButton play,stop,audio,midi,open;
+    juce::TextButton play,stop,audio,midi,open,record;
+    IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
     double deviceRate=48000.0;
