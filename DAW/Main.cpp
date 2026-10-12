@@ -45,6 +45,23 @@ public:
             if(playing.load() || selectedTrack>=session.tracks.size())return;
             session.setTrackSynthPreset(selectedTrack,synthPreset.getSelectedId()-1);
         };
+        attackLabel.setText("ATTACK ms",juce::dontSendNotification);
+        releaseLabel.setText("RELEASE ms",juce::dontSendNotification);
+        addAndMakeVisible(attackLabel);addAndMakeVisible(releaseLabel);
+        for(auto* slider:{&attackControl,&releaseControl}){
+            slider->setRange(0.0,2000.0,1.0);
+            slider->setSliderStyle(juce::Slider::LinearHorizontal);
+            slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,58,20);
+            addAndMakeVisible(*slider);
+        }
+        const auto updateEnvelope=[this]{
+            if(playing.load() || recorder.isRecording() || exportRunning.load() ||
+               selectedTrack>=session.tracks.size())return;
+            session.setTrackSynthEnvelope(selectedTrack,
+                (float)attackControl.getValue(),(float)releaseControl.getValue());
+        };
+        attackControl.onValueChange=updateEnvelope;
+        releaseControl.onValueChange=updateEnvelope;
         pianoButton.setButtonText("PIANO ROLL");
         addAndMakeVisible(pianoButton);
         addChildComponent(pianoRoll);
@@ -186,6 +203,11 @@ public:
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
         clearClips.setBounds(masterRow.removeFromLeft(120).reduced(3));
+        auto synthRow=area.removeFromTop(35);
+        attackLabel.setBounds(synthRow.removeFromLeft(100));
+        attackControl.setBounds(synthRow.removeFromLeft(175));
+        releaseLabel.setBounds(synthRow.removeFromLeft(115));
+        releaseControl.setBounds(synthRow.removeFromLeft(175));
         auto eqRow=area.removeFromTop(35);
         eqLabel.setBounds(eqRow.removeFromLeft(115));
         lowEq.setBounds(eqRow.removeFromLeft(180));
@@ -417,6 +439,12 @@ private:
         const auto& track=session.tracks[selectedTrack];
         synthPreset.setEnabled(track.type==idw::daw::TrackType::midi);
         synthPreset.setSelectedId(track.synthPreset+1,juce::dontSendNotification);
+        const bool editableSynth=track.type==idw::daw::TrackType::midi &&
+            !playing.load() && !recorder.isRecording() && !exportRunning.load();
+        attackControl.setEnabled(editableSynth);
+        releaseControl.setEnabled(editableSynth);
+        attackControl.setValue(track.synthAttackMs,juce::dontSendNotification);
+        releaseControl.setValue(track.synthReleaseMs,juce::dontSendNotification);
         gainLabel.setText(juce::String(track.name)+" VOL",juce::dontSendNotification);
         gainControl.setValue(track.gain,juce::dontSendNotification);
         panControl.setValue(track.pan,juce::dontSendNotification);
@@ -665,6 +693,8 @@ private:
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton;
     juce::ComboBox synthPreset;
+    juce::Label attackLabel,releaseLabel;
+    juce::Slider attackControl,releaseControl;
     IDWPianoRoll pianoRoll;
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
