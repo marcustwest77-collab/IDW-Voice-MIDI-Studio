@@ -218,6 +218,26 @@ int main(){
  if(!std::isfinite(hfRms) || hfRms>0.08f)
     throw std::runtime_error("HF alias rejection inadequate");
  hfReader.reset();
+ // Verify the shared stereo sinc kernel preserves independent channel
+ // levels when resampling a 48 kHz stereo source.
+ const auto stereoResampledOutput=root.getChildFile("stereo-resampled.wav");
+ Session stereoResampled;stereoResampled.setTempo(120);
+ stereoResampled.addTrack(TrackType::audio);
+ if(!stereoResampled.addClip(0,{stereo.getFullPathName().toStdString(),0.0,0.2,0.0}))
+    throw std::runtime_error("stereo resampling clip");
+ if(!renderSessionWav(stereoResampled,stereoResampledOutput,error))
+    throw std::runtime_error("stereo resampling bounce: "+error.toStdString());
+ auto stereoResampledReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(stereoResampledOutput.createInputStream().release(),true));
+ if(!stereoResampledReader)
+    throw std::runtime_error("stereo resampling reader");
+ juce::AudioBuffer<float> stereoResampledAudio(2,512);
+ if(!stereoResampledReader->read(&stereoResampledAudio,0,512,0,true,true))
+    throw std::runtime_error("stereo resampling read");
+ if(std::abs(stereoResampledAudio.getSample(0,256)-0.2f)>0.02f ||
+    std::abs(stereoResampledAudio.getSample(1,256)+0.2f)>0.02f)
+    throw std::runtime_error("stereo resampling channel mismatch");
+ stereoResampledReader.reset();
  // Passband regression: a 1 kHz sine at 48 kHz must survive
  // downsampling to 44.1 kHz at approximately its original level.
  const auto toneInput=root.getChildFile("passband-1khz.wav");
