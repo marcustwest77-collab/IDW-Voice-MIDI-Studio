@@ -126,6 +126,7 @@ public:
     }
     void resized() override {
         auto area=getLocalBounds().reduced(20);
+        setWantsKeyboardFocus(true);
         title.setBounds(area.removeFromTop(42));
         auto controls=area.removeFromTop(44);
         play.setBounds(controls.removeFromLeft(90).reduced(3));
@@ -167,6 +168,31 @@ public:
         connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
         aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
     }
+    bool keyPressed(const juce::KeyPress& key) override {
+        if(!selectedClipValid || playing.load() || recorder.isRecording() ||
+           exportRunning.load() || aiPanel.isVisible() || connectPanel.isVisible())
+            return false;
+        if(selectedClipTrack>=session.tracks.size() ||
+           selectedClipIndex>=session.tracks[selectedClipTrack].clips.size()){
+            selectedClipValid=false;
+            return false;
+        }
+        const auto& clip=session.tracks[selectedClipTrack].clips[selectedClipIndex];
+        const bool shift=key.getModifiers().isShiftDown();
+        bool changed=false;
+        if(key.getKeyCode()==juce::KeyPress::leftKey)
+            changed=shift ? session.resizeClip(selectedClipTrack,selectedClipIndex,
+                         std::max(0.25,clip.lengthBeats-0.25))
+                          : session.moveClip(selectedClipTrack,selectedClipIndex,
+                         std::max(0.0,clip.startBeat-0.25));
+        else if(key.getKeyCode()==juce::KeyPress::rightKey)
+            changed=shift ? session.resizeClip(selectedClipTrack,selectedClipIndex,
+                         clip.lengthBeats+0.25)
+                          : session.moveClip(selectedClipTrack,selectedClipIndex,
+                         clip.startBeat+0.25);
+        if(changed)repaint();
+        return changed;
+    }
     void mouseDown(const juce::MouseEvent& e) override {
         draggingClip=false;
         selectedClipValid=false;
@@ -188,6 +214,7 @@ public:
                 dragOriginalStart=c.startBeat;dragOriginalLength=c.lengthBeats;
                 dragResize=e.x>=x+w-10;
                 draggingClip=true;
+                grabKeyboardFocus();
                 repaint();
                 break;
             }
