@@ -2,6 +2,7 @@
 #include "AIProposal.h"
 #include "AIStatusSnapshot.h"
 #include "MidiScheduler.h"
+#include "MidiSineSynth.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
@@ -70,6 +71,17 @@ int main(){
  scheduleFixture.tracks[0].mute=true;
  if(!buildMidiSchedule(scheduleFixture).empty())
     throw std::runtime_error("muted MIDI notes scheduled");
+ Session sineSession;sineSession.addTrack(TrackType::midi);
+ sineSession.addMidiNote(0,{69,0,1,127});
+ std::vector<float> left(256,0.0f),right(256,0.0f);
+ renderMidiSine(sineSession,left.data(),right.data(),256,0,48000.0);
+ if(std::all_of(left.begin(),left.end(),[](float x){return x==0.0f;}) ||
+    left!=right)throw std::runtime_error("MIDI sine render silent or wrong stereo");
+ sineSession.tracks[0].mute=true;
+ std::fill(left.begin(),left.end(),0.0f);
+ renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
+ if(std::any_of(left.begin(),left.end(),[](float x){return x!=0.0f;}))
+    throw std::runtime_error("muted synth generated sound");
  Session statusFixture;statusFixture.addTrack(TrackType::audio);
  statusFixture.addClip(0,{"PRIVATE_RECORDING_PATH_DO_NOT_SHARE.wav",0,4,0});
  const auto statusJson=juce::JSON::toString(aiSessionStatus(statusFixture,true,false));
