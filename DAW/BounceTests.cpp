@@ -148,6 +148,19 @@ int main(){
     std::abs(limitedAudio.getSample(1,100)+ceiling)>0.01f)
     throw std::runtime_error("master ceiling was not applied");
  limitedReader.reset();
+ // The two-band master tone must modify low-frequency content predictably.
+ const auto bassOutput=root.getChildFile("bass-boost.wav");
+ if(!renderSessionWav(stereoSession,bassOutput,error,44100,1.0f,-0.1f,6.0f,0.0f))
+    throw std::runtime_error("bass EQ bounce: "+error.toStdString());
+ auto bassReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(bassOutput.createInputStream().release(),true));
+ if(!bassReader)throw std::runtime_error("bass reader");
+ juce::AudioBuffer<float> bassAudio(2,1024);
+ if(!bassReader->read(&bassAudio,0,1024,0,true,true))
+    throw std::runtime_error("bass read");
+ if(bassAudio.getSample(0,800)<0.30f || bassAudio.getSample(1,800)>-0.30f)
+    throw std::runtime_error("master bass boost was not applied");
+ bassReader.reset();
  // Cancellation must return failure without leaving an incomplete WAV behind.
  const auto canceledOutput=root.getChildFile("canceled.wav");
  std::atomic<float> progress{0.0f};
