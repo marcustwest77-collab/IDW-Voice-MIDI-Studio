@@ -1,10 +1,25 @@
 #include "SessionPersistence.h"
+#include "AIProposal.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
 #include <iostream>
 int main(){
  using namespace idw::daw;
+ AIProposal action{AIProposal::Kind::tempo};
+ if(!parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":145}})"),action)
+    || action.kind!=AIProposal::Kind::tempo || action.bpm!=145)
+    throw std::runtime_error("AI tempo proposal");
+ Session approved;
+ if(!applyApprovedAIProposal(approved,action) || approved.bpm!=145)
+    throw std::runtime_error("approved tempo");
+ if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":999}})"),action))
+    throw std::runtime_error("accepted unsafe AI tempo");
+ if(parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"delete_recordings","path":"all"}})"),action))
+    throw std::runtime_error("accepted unsafe AI command");
+ if(!parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"add_track","track_type":"midi"}})"),action)
+     || !applyApprovedAIProposal(approved,action) || approved.tracks.size()!=1)
+     throw std::runtime_error("approved MIDI track");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
