@@ -136,6 +136,16 @@ int main(){
  renderMidiSine(sineSession,splitBlock.data()+256,nullptr,256,256,48000.0);
  if(fullBlock!=splitBlock)
     throw std::runtime_error("MIDI audio differs across block boundaries");
+ // Malformed tempo or negative playback position must be safely silent.
+ Session invalidTempo;invalidTempo.addTrack(TrackType::midi);
+ invalidTempo.addMidiNote(0,{69,0,1,127});
+ std::vector<float> invalidOutput(256,0.0f);
+ invalidTempo.bpm=0.0;
+ renderMidiSine(invalidTempo,invalidOutput.data(),nullptr,256,0,48000.0);
+ invalidTempo.bpm=120.0;
+ renderMidiSine(invalidTempo,invalidOutput.data(),nullptr,256,-1,48000.0);
+ if(std::any_of(invalidOutput.begin(),invalidOutput.end(),[](float sample){return sample!=0.0f;}))
+    throw std::runtime_error("Malformed timing produced synth audio");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
