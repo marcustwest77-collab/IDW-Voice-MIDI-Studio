@@ -271,3 +271,7 @@ The transport playhead calculation now checks that the audio sample rate and act
 ### Mixed arrangement timing regression
 
 Automated transport tests now verify the endpoint for mixed audio/MIDI sessions (the latest item wins), audio-only clips, and empty arrangements. These tests supplement the existing frame-to-beat and MIDI-only checks; they are not a substitute for sound-device latency tests.
+
+### Long-session transport regressions
+
+The transport test suite now includes a 32-track alternating audio/MIDI arrangement, checking that the latest musical event determines the song endpoint, and a 30-minute playback clock at 120 BPM. These are numerical correctness tests, not real-time CPU or audio hardware stress tests.
