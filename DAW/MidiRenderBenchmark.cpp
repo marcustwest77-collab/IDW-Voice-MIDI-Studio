@@ -26,6 +26,7 @@ int main(){
     std::array<double,n> times{};
     const double budget=1000.0*smallBlock/48000.0;
     double total=0.0;
+    double finalBlockEnergy=0.0;
     int missed=0;
     double excessMs=0.0;
     double worstOverrunMs=0.0;
@@ -42,9 +43,14 @@ int main(){
           total+=ms;
           if(ms>budget){++missed;excessMs+=ms-budget;worstOverrunMs=std::max(worstOverrunMs,ms-budget);}
        }
-       for(int j=0;j<smallBlock;++j)
+       for(int j=0;j<smallBlock;++j){
           if(!std::isfinite(l[(std::size_t)j]) ||
              !std::isfinite(r[(std::size_t)j]))return 1;
+          if(i==n-1)finalBlockEnergy+=std::abs(l[(std::size_t)j])+std::abs(r[(std::size_t)j]);
+       }
+    }
+    if(finalBlockEnergy<=0.0)return 2;
+    {
     }
     std::sort(times.begin(),times.end());
     std::cout<<"buffer_size="<<smallBlock<<" avg_block_ms="<<(total/n)
