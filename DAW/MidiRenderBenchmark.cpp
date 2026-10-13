@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <vector>
 int main(){
  using namespace idw::daw;
@@ -17,6 +18,8 @@ int main(){
  constexpr int block=256, iterations=256;
  std::vector<float> left(block,0.0f),right(block,0.0f);
  double worstBlockMs=0.0;
+ double bestBlockMs=std::numeric_limits<double>::infinity();
+ double totalRenderMs=0.0;
  const auto start=std::chrono::steady_clock::now();
  for(int i=0;i<iterations;++i){
     std::fill(left.begin(),left.end(),0.0f);
@@ -26,6 +29,8 @@ int main(){
     const double blockMs=std::chrono::duration<double,std::milli>(
         std::chrono::steady_clock::now()-blockStart).count();
     worstBlockMs=std::max(worstBlockMs,blockMs);
+    bestBlockMs=std::min(bestBlockMs,blockMs);
+    totalRenderMs+=blockMs;
     for(int sample=0;sample<block;++sample)
        if(!std::isfinite(left[sample]) || !std::isfinite(right[sample]))return 1;
  }
@@ -33,6 +38,9 @@ int main(){
  const double audioMs=1000.0*block*iterations/48000.0;
  std::cout<<"128-note synth benchmark: render_ms="<<elapsed
           <<" audio_ms="<<audioMs<<" ratio="<<elapsed/audioMs
+          <<" render_only_ms="<<totalRenderMs
+          <<" avg_block_ms="<<(totalRenderMs/iterations)
+          <<" best_block_ms="<<bestBlockMs
           <<" worst_block_ms="<<worstBlockMs
           <<" block_budget_ms="<<(1000.0*block/48000.0)<<"\n";
  return 0;
