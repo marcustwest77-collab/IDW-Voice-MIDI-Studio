@@ -361,6 +361,7 @@ private:
     int dragOriginX=0;
     double dragOriginalStart=0.0,dragOriginalLength=0.0;
     void prepareToPlay(int samplesPerBlockExpected,double sampleRate) override {
+        playing.store(false,std::memory_order_release);
         deviceRate=sampleRate;
         for(auto& state:eqState)state=0.0f;
         preparedBlockSize=juce::jmax(1,samplesPerBlockExpected);
