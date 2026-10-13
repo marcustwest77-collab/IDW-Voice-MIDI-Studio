@@ -255,3 +255,7 @@ The message-thread playback recovery path now explicitly stops all track AudioTr
 ### Playback timer tempo consistency
 
 The playback UI clock now uses the BPM captured in the immutable playback session snapshot, matching the tempo used in the audio callback. When no playback snapshot exists it falls back to the editable session's BPM. This avoids playhead drift if the live project tempo differs from the active snapshot; real-device timing tests remain outstanding.
+
+### Snapshot-aligned arrangement end
+
+The transport's end-of-arrangement calculation now reads note and clip ends from the same immutable playback session used by the audio renderer and playhead tempo. Edits to the live project cannot alter the active playback endpoint. The updated cross-platform CI build is required before treating this as verified.
