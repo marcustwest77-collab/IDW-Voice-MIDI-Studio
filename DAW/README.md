@@ -239,3 +239,7 @@ A new regression test copies a MIDI session, then edits pitch, timing and instru
 ### Device reconfiguration playback guard
 
 When JUCE prepares the audio engine for a new audio device/sample rate/block size, V14 now marks the transport as not playing before it reconfigures playback buffers. This avoids inadvertently continuing a session across a changed device configuration. UI transport state and complete device lifecycle synchronization still need hands-on testing.
+
+### Audio resource release guard
+
+JUCE's `releaseResources()` callback now marks the transport stopped before releasing track transport resources. Together with the `prepareToPlay()` guard, this prevents the application's playback flag remaining active across the device lifecycle. Hardware device switching, timer/UI reset behavior and real-time synchronization still require testing.
