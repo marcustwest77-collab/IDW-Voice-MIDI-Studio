@@ -263,3 +263,7 @@ The transport's end-of-arrangement calculation now reads note and clip ends from
 ### Playback clock input validation
 
 The transport playhead calculation now checks that the audio sample rate and active snapshot tempo are finite and positive before calculating its beat position. Invalid values yield a zero playhead instead of an invalid number. This is defensive code; the newest cross-platform build and real-device timing behavior still need verification.
+
+### Testable transport timing
+
+`DAW/PlaybackTiming.h` provides standalone `playbackBeat(frame, sampleRate, bpm)` and `arrangementEndBeat(session)` functions used by the GUI transport. Persistence tests now check frame-to-beat conversion, invalid timing inputs and note-based arrangement end, reducing reliance on GUI-only timing validation. Real audio-device transport latency remains unmeasured.
