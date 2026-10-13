@@ -3,6 +3,7 @@
 #include "AIStatusSnapshot.h"
 #include "MidiScheduler.h"
 #include "MidiSineSynth.h"
+#include "PlaybackTiming.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
@@ -86,6 +87,15 @@ int main(){
     playbackCopy.tracks[0].notes[0].startBeat!=0.0 ||
     playbackCopy.tracks[0].synthPreset!=0)
     throw std::runtime_error("Playback snapshot changed after project edit");
+ if(std::abs(playbackBeat(48000,48000.0,120.0)-2.0)>1e-10 ||
+    playbackBeat(-1,48000.0,120.0)!=0.0 ||
+    playbackBeat(48000,0.0,120.0)!=0.0 ||
+    playbackBeat(48000,48000.0,0.0)!=0.0)
+    throw std::runtime_error("Playback clock conversion");
+ Session arrangement;arrangement.addTrack(TrackType::midi);
+ arrangement.addMidiNote(0,{60,3.0,2.5,100});
+ if(std::abs(arrangementEndBeat(arrangement)-5.5)>1e-10)
+    throw std::runtime_error("Arrangement end from MIDI note");
  Session scheduleFixture;
  scheduleFixture.addTrack(TrackType::midi);
  scheduleFixture.addMidiNote(0,{60,1.0,1.0,100});
