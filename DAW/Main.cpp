@@ -554,12 +554,13 @@ private:
             });
     }
     void bounceMix(){
-        if(playing.load() || recorder.isRecording())return;
+        if(playing.load() || recorder.isRecording() || exportRunning.load())return;
         projectChooser=std::make_unique<juce::FileChooser>("Export stereo WAV",
             juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW Mix.wav"),"*.wav");
         projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
             [this](const juce::FileChooser& picker){
-                auto output=picker.getResult();if(output==juce::File{})return;
+                auto output=picker.getResult();
+                if(output==juce::File{} || playing.load() || recorder.isRecording() || exportRunning.load())return;
                 output=output.withFileExtension(".wav");
                 if(exportThread.joinable())exportThread.join();
                 const auto snapshot=session;
@@ -612,7 +613,7 @@ private:
             });
     }
     bool importTake(const juce::File& take){
-        if(!take.existsAsFile() || playing.load())return false;
+        if(!take.existsAsFile() || playing.load() || recorder.isRecording() || exportRunning.load())return false;
         std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(take));
         if(!reader || reader->sampleRate<=0 || reader->lengthInSamples<=0)return false;
         AudioSlot* target=nullptr;
@@ -632,6 +633,7 @@ private:
         repaint();return true;
     }
     void toggleRecording(){
+        if(exportRunning.load())return;
         if(recorder.isRecording()){
             recorder.stop();record.setButtonText("RECORD VOCAL");
             // Stop the transport before changing the audio graph.
