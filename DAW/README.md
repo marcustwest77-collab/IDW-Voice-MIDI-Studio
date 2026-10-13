@@ -319,3 +319,7 @@ The offline MIDI benchmark now prints average and worst render time alongside ea
 ### Comparable multi-buffer render samples
 
 The 64-, 128-, and 512-frame benchmarks now warm up for 32 blocks and measure 256 blocks each, reporting mean, P95, P99, worst block time, and nominal-deadline exceedance count. These are offline CI timings; audio-interface driver overhead, scheduling and hardware dropout behavior are not measured.
+
+### Low-buffer deadline overrun diagnostics
+
+For 64-, 128-, and 512-frame benchmarks, `total_overrun_ms` now sums the milliseconds by which individual measured render calls exceed their nominal audio callback budget. This distinguishes a few small misses from large scheduling spikes. Measurements are offline on shared CI runners and do not establish hardware underrun counts.
