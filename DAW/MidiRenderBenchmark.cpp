@@ -16,6 +16,22 @@ int main(){
     for(int note=0;note<8;++note)
        session.addMidiNote((std::size_t)track,{48+(track+note)%36,0.0,4.0,100});
  }
+
+// Additional block-size smoke checks exercise common low-latency settings.
+// These checks verify sample validity rather than impose machine-specific deadlines.
+ for(const int smallBlock : {64,128,512}){
+    std::vector<float> checkL((std::size_t)smallBlock,0.0f);
+    std::vector<float> checkR((std::size_t)smallBlock,0.0f);
+    for(int i=0;i<8;++i){
+       std::fill(checkL.begin(),checkL.end(),0.0f);
+       std::fill(checkR.begin(),checkR.end(),0.0f);
+       renderMidiSine(session,checkL.data(),checkR.data(),smallBlock,
+                      (std::int64_t)i*smallBlock,48000.0);
+       for(int j=0;j<smallBlock;++j)
+          if(!std::isfinite(checkL[(std::size_t)j]) ||
+             !std::isfinite(checkR[(std::size_t)j]))return 1;
+    }
+ }
  constexpr int block=256, iterations=256, warmupBlocks=32;
  std::vector<float> left(block,0.0f),right(block,0.0f);
  double worstBlockMs=0.0;
