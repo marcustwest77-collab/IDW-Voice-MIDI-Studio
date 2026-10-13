@@ -217,3 +217,7 @@ The stereo WAV bounce chooser now rejects an export if playback, recording, or a
 ### Transport operation guard
 
 Pressing Play while playback, vocal recording or WAV export is active no longer restarts the transport and resets its timeline. Stop is ignored while a WAV export is in progress, so it cannot indirectly attempt to end and import an active recording during export. Normal playback and recording transport use is unchanged. These guards are not a substitute for full audio callback synchronization.
+
+### Additional recording/track control restrictions
+
+A new vocal recording cannot be started during ordinary playback; stopping an already active recording remains possible. MIDI instrument selection is disabled during playback, recording and export, and the internal audio-track creation helper rejects those active-operation states. These are further UI-level precautions, not a complete synchronization guarantee.
