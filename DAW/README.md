@@ -283,3 +283,7 @@ The automated tests now render 128 overlapping notes across 16 MIDI tracks using
 ### Offline MIDI render performance benchmark
 
 When configured with `IDW_BUILD_DAW=ON` and `BUILD_TESTING=ON`, build target `IDWDAWMidiBenchmark` and run it manually to measure the time needed to render 256 stereo 256-frame blocks with 128 active notes on 16 MIDI tracks. It prints elapsed rendering milliseconds, the equivalent audio duration and their ratio. The target is not a pass/fail real-time latency test and is not registered with CTest; compare results on the same machine/configuration, preferably Release. Hardware audio callback latency and worst-case scheduling are still unmeasured.
+
+### MIDI benchmark worst-block reporting
+
+The offline MIDI benchmark now reports its slowest individual 256-frame render (`worst_block_ms`) beside the nominal audio callback time budget (`block_budget_ms`), as well as total throughput. Both stereo channels are checked for nonfinite values. Results include measurement overhead, are machine-dependent, and do not establish glitch-free real-time operation.
