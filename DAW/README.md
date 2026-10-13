@@ -185,3 +185,7 @@ Harmonic boundary refinement: comparisons now use the Nyquist frequency divided 
 ### MIDI pitch lookup optimization
 
 The preview synthesizer now uses a fixed 128-note frequency lookup table rather than recalculating equal-tempered pitches for every note in each audio buffer. Existing render-continuity and pitch/audio tests remain part of the cross-platform CI suite. This optimization has not yet been CPU-benchmarked on hardware.
+
+### Fourth MIDI instrument: Organ
+
+Select **Organ** in a MIDI track's instrument dropdown to hear a two-harmonic organ-style oscillator. The second harmonic is omitted at or beyond the current sample-rate Nyquist limit. The Organ preset is saved with each track (preset ID 3); older sessions remain compatible. A regression test checks that Organ audio is audible and distinct from Keys, Bass, and Lead. This is a simple synthesized approximation, not a sampled organ.
