@@ -339,3 +339,7 @@ The 256-frame benchmark now continues its absolute MIDI frame position after the
 ### Stereo clipping regression
 
 The offline 128-note benchmark now rejects any nonfinite or out-of-range sample (absolute amplitude greater than 1.0) on either left or right output, across its 64-, 128-, 256-, and 512-frame tests. This detects sample-level clipping in the test renderer; it is not a substitute for audio-interface measurements or listening tests.
+
+### First deadline miss diagnostics
+
+The buffer-size benchmark reports `first_over_budget_block` (0-based, or -1 if no missed budget) alongside overrun duration metrics. This helps identify whether unusually slow renders cluster at the beginning or later in a sampled workload. Shared CI runner scheduling can still cause isolated long measurements.
