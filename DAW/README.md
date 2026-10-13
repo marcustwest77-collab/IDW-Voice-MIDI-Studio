@@ -197,3 +197,7 @@ A new **Pad** oscillator preset combines a dominant fundamental and quiet second
 ### Five-preset regression and playback editing guard
 
 Automated persistence tests now round-trip all five Keys/Bass/Lead/Organ/Pad instrument selections through JSON. Starting playback hides the editable piano roll to reduce the risk of UI note changes racing with the audio renderer. This is not a complete thread-safe snapshot architecture; other project mutations during playback still require an explicit concurrency audit.
+
+### Playback-time model mutation guard
+
+Tempo changes and adding audio/MIDI tracks are now ignored during playback, recording, or export, preventing those controls from modifying audio-rendered session state midstream. Piano-roll editing also closes on Play. These narrow safeguards do not make the whole session model thread-safe; a complete cross-thread mutation audit is still required.
