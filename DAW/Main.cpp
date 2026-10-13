@@ -466,7 +466,12 @@ private:
     }
     void timerCallback() override {
         playheadBeats=deviceRate>0?(double)sessionFrames.load()*session.bpm/(deviceRate*60.0):0.0;
-        if(playing && playheadBeats>=lastClipEndBeat()){playing=false;if(!exportRunning.load())stopTimer();for(auto& slot:sources)slot->transport.stop();}
+        if(playing.load() && playheadBeats>=lastClipEndBeat()){
+            playing.store(false);
+            if(!exportRunning.load())stopTimer();
+            for(auto& slot:sources)slot->transport.stop();
+            refreshMixer();
+        }
         repaint();
     }
     struct AudioSlot {
