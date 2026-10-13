@@ -70,6 +70,7 @@ int main(){
  double totalRenderMs=0.0;
  constexpr double blockBudgetMs=1000.0*block/48000.0;
  int overBudgetBlocks=0;
+ double lastBlockEnergy=0.0;
  std::array<double,iterations> blockTimes{};
  // Warm up code paths and caches before collecting timed blocks.
  for(int i=0;i<warmupBlocks;++i){
@@ -92,6 +93,11 @@ int main(){
     if(blockMs>blockBudgetMs)++overBudgetBlocks;
     for(int sample=0;sample<block;++sample)
        if(!std::isfinite(left[sample]) || !std::isfinite(right[sample]))return 1;
+       if(i==iterations-1)lastBlockEnergy+=std::abs(left[sample])+std::abs(right[sample]);
+ }
+ if(lastBlockEnergy<=0.0){
+    std::cerr<<"Silent final MIDI block at buffer_size=256\n";
+    return 2;
  }
  const double elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
  std::sort(blockTimes.begin(),blockTimes.end());
