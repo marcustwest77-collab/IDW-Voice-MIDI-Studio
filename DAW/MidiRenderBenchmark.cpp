@@ -84,7 +84,7 @@ int main(){
     std::fill(left.begin(),left.end(),0.0f);
     std::fill(right.begin(),right.end(),0.0f);
     const auto blockStart=std::chrono::steady_clock::now();
-    renderMidiSine(session,left.data(),right.data(),block,(std::int64_t)i*block,48000.0);
+    renderMidiSine(session,left.data(),right.data(),block,(std::int64_t)(i+warmupBlocks)*block,48000.0);
     const double blockMs=std::chrono::duration<double,std::milli>(
         std::chrono::steady_clock::now()-blockStart).count();
     worstBlockMs=std::max(worstBlockMs,blockMs);
