@@ -9,12 +9,14 @@
 #include <vector>
 int main(){
  using namespace idw::daw;
+ // Sustain all 128 notes through warm-up and every measured buffer size.
+ // At 120 BPM, 16 beats = 8 seconds; the longest run is ~3.07 seconds.
  Session session;
  for(int track=0;track<16;++track){
     session.addTrack(TrackType::midi);
     session.setTrackSynthPreset((std::size_t)track,track%5);
     for(int note=0;note<8;++note)
-       session.addMidiNote((std::size_t)track,{48+(track+note)%36,0.0,4.0,100});
+       session.addMidiNote((std::size_t)track,{48+(track+note)%36,0.0,16.0,100});
  }
 
 // Collect 256 timed blocks for each alternate buffer size after warm-up.
