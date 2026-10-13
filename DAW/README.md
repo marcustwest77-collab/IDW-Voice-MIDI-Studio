@@ -209,3 +209,7 @@ The open-project file chooser now rechecks playback, recording and export state 
 ### Project save/export concurrency guards
 
 Native session save, portable project export, and project restoration now check playback, recording, and export activity. The asynchronous save/export chooser callbacks also recheck these states at execution, preventing a file dialog opened while idle from saving a session after audio processing begins. This is a targeted safety guard rather than a full thread-safe audio snapshot system.
+
+### Bounce, recording and take-import coordination
+
+The stereo WAV bounce chooser now rejects an export if playback, recording, or another export starts before the asynchronous file selection completes. Recording actions are blocked during an active bounce/export, and importing a completed take checks these operations before mutating the track graph. These are UI-level guards; audio-device callback synchronization and detailed race testing remain future work.
