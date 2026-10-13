@@ -460,7 +460,7 @@ private:
         refreshMixer();repaint();
     }
     void updateFirstTrackMix(){
-        if(playing.load() || session.tracks.empty())return;
+        if(playing.load() || recorder.isRecording() || exportRunning.load() || session.tracks.empty())return;
         session.setTrackMix(selectedTrack,(float)gainControl.getValue(),(float)panControl.getValue());
     }
     void timerCallback() override {
@@ -541,12 +541,13 @@ private:
         return true;
     }
     void openProjectFile(){
-        if(playing.load() || recorder.isRecording())return;
+        if(playing.load() || recorder.isRecording() || exportRunning.load())return;
         projectChooser=std::make_unique<juce::FileChooser>("Open IDW DAW Project",
             juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*.idwproj");
         projectChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
             [this](const juce::FileChooser& picker){
                 const auto project=picker.getResult();
+                if(playing.load() || recorder.isRecording() || exportRunning.load())return;
                 if(project.existsAsFile() && !restoreProject(project))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Open failed",
                         "The project is invalid or cannot be opened during playback.");
@@ -654,7 +655,7 @@ private:
     void loadAudio(){
         chooser=std::make_unique<juce::FileChooser>("Select WAV or AIFF audio file",juce::File{},"*.wav;*.aiff;*.aif");
         chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& picker){
-            auto file=picker.getResult();if(!file.existsAsFile() || playing.load())return;
+            auto file=picker.getResult();if(!file.existsAsFile() || playing.load() || recorder.isRecording() || exportRunning.load())return;
             std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
             if(!reader)return;
             AudioSlot* target=nullptr;
