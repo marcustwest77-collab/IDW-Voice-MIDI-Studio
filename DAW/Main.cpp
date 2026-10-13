@@ -374,6 +374,7 @@ private:
         if(!playing.load(std::memory_order_relaxed) || deviceRate<=0)return;
         // Never resize heap buffers in the real-time audio callback.
         if(info.numSamples>preparedBlockSize || info.buffer->getNumChannels()>2)return;
+        // Read a single session revision for the entire audio block.
         const auto snapshot=std::atomic_load_explicit(&playbackSession,std::memory_order_acquire);
         if(!snapshot)return;
         const auto& playback=*snapshot;
