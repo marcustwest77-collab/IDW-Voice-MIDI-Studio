@@ -152,6 +152,12 @@ int main(){
  if(organ==left || organ==bass || organ==lead ||
     std::all_of(organ.begin(),organ.end(),[](float x){return x==0.0f;}))
     throw std::runtime_error("Organ preset not audible or distinct");
+ std::vector<float> pad(256,0.0f);
+ if(!sineSession.setTrackSynthPreset(0,4))throw std::runtime_error("Pad preset rejected");
+ renderMidiSine(sineSession,pad.data(),nullptr,256,0,48000.0);
+ if(pad==left || pad==bass || pad==lead || pad==organ ||
+    std::all_of(pad.begin(),pad.end(),[](float x){return x==0.0f;}))
+    throw std::runtime_error("Pad preset not audible or distinct");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
