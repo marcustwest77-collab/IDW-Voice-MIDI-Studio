@@ -50,8 +50,6 @@ int main(){
        }
     }
     if(finalBlockEnergy<=0.0)return 2;
-    {
-    }
     std::sort(times.begin(),times.end());
     std::cout<<"buffer_size="<<smallBlock<<" avg_block_ms="<<(total/n)
              <<" p95_block_ms="<<times[n*95/100-1]
