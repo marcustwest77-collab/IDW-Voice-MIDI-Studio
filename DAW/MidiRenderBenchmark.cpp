@@ -49,7 +49,10 @@ int main(){
           if(i==n-1)finalBlockEnergy+=std::abs(l[(std::size_t)j])+std::abs(r[(std::size_t)j]);
        }
     }
-    if(finalBlockEnergy<=0.0)return 2;
+    if(finalBlockEnergy<=0.0){
+       std::cerr<<"Silent final MIDI block at buffer_size="<<smallBlock<<"\n";
+       return 2;
+    }
     std::sort(times.begin(),times.end());
     std::cout<<"buffer_size="<<smallBlock<<" avg_block_ms="<<(total/n)
              <<" p95_block_ms="<<times[n*95/100-1]
