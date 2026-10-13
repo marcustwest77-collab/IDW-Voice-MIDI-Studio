@@ -103,7 +103,10 @@ public:
         };
         record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
-        play.onClick=[this]{if(playing.load() || recorder.isRecording() || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
+        play.onClick=[this]{if(playing.load() || recorder.isRecording() || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);
+            std::atomic_store_explicit(&playbackSession,
+                std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
+            sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
         stop.onClick=[this]{if(exportRunning.load())return;if(recorder.isRecording())toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;refreshMixer();repaint();};
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
@@ -370,15 +373,18 @@ private:
         if(!playing.load(std::memory_order_relaxed) || deviceRate<=0)return;
         // Never resize heap buffers in the real-time audio callback.
         if(info.numSamples>preparedBlockSize || info.buffer->getNumChannels()>2)return;
+        const auto snapshot=std::atomic_load_explicit(&playbackSession,std::memory_order_acquire);
+        if(!snapshot)return;
+        const auto& playback=*snapshot;
         const auto blockStart=sessionFrames.load(std::memory_order_relaxed);
-        const bool anySolo=std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return t.solo;});
+        const bool anySolo=std::any_of(playback.tracks.begin(),playback.tracks.end(),[](const auto& t){return t.solo;});
         for(auto& slot:sources) {
-            if(!slot->reader || slot->trackIndex>=session.tracks.size())continue;
-            const auto& track=session.tracks[slot->trackIndex];
+            if(!slot->reader || slot->trackIndex>=playback.tracks.size())continue;
+            const auto& track=playback.tracks[slot->trackIndex];
             if(track.mute || (anySolo && !track.solo) || track.clips.empty())continue;
             const auto& clip=track.clips.front();
             const auto window=idw::daw::overlap(blockStart,info.numSamples,deviceRate,
-                    session.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
+                    playback.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
             if(window.frames<=0)continue;
             slot->scratch.clear(0,window.frames);
             juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
@@ -392,7 +398,7 @@ private:
         }
         // Basic audible piano-roll preview. No MIDI device or VST routing yet.
         if(info.buffer->getNumChannels()>0){
-            idw::daw::renderMidiSine(session,
+            idw::daw::renderMidiSine(playback,
                 info.buffer->getWritePointer(0,info.startSample),
                 info.buffer->getNumChannels()>1
                     ?info.buffer->getWritePointer(1,info.startSample):nullptr,
@@ -715,6 +721,7 @@ private:
     IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
+    std::shared_ptr<const idw::daw::Session> playbackSession;
     double deviceRate=48000.0;
     int preparedBlockSize=0;
     std::vector<std::unique_ptr<AudioSlot>> sources;
