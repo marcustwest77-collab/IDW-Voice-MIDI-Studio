@@ -299,3 +299,7 @@ The offline MIDI benchmark now prints `render_only_ms`, `avg_block_ms`, `best_bl
 ### MIDI benchmark tail latency
 
 The benchmark now prints `p95_block_ms` and `p99_block_ms`, computed from its 256 observed per-block rendering durations, alongside mean and worst-case time. This helps distinguish sporadic CI scheduling interruptions from consistently expensive blocks. Shared CI runner measurements are not controlled hardware audio latency measurements.
+
+### Block deadline exceedance diagnostics
+
+The benchmark also reports `over_budget_blocks` and `over_budget_pct` for measured 256-frame rendering blocks above the nominal 5.33 ms block interval at 48 kHz. An exceedance on a shared CI runner is a performance warning, not proof of a real hardware underrun; the count is diagnostic only and does not fail CTest.
