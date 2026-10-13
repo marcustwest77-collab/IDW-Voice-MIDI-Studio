@@ -247,3 +247,7 @@ JUCE's `releaseResources()` callback now marks the transport stopped before rele
 ### Device-suspension UI recovery
 
 The message-thread timer now notices when audio playback was suspended by device preparation or resource release, restores the currently selected track's mixer control states, and stops the playback repaint timer when no recording or export is active. This complements device lifecycle transport guards; physical device switching remains untested.
+
+### Suspended transport source cleanup
+
+The message-thread playback recovery path now explicitly stops all track AudioTransportSources when playback is suspended (for example, following a device lifecycle reset), before refreshing mixer controls and stopping its timer. This closes a gap where the DAW transport flag was stopped but individual audio sources could remain running internally. Physical device change behavior still requires manual testing.
