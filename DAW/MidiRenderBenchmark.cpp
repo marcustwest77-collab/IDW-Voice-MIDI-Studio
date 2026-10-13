@@ -21,6 +21,8 @@ int main(){
  double worstBlockMs=0.0;
  double bestBlockMs=std::numeric_limits<double>::infinity();
  double totalRenderMs=0.0;
+ constexpr double blockBudgetMs=1000.0*block/48000.0;
+ int overBudgetBlocks=0;
  std::array<double,iterations> blockTimes{};
  const auto start=std::chrono::steady_clock::now();
  for(int i=0;i<iterations;++i){
@@ -34,6 +36,7 @@ int main(){
     bestBlockMs=std::min(bestBlockMs,blockMs);
     totalRenderMs+=blockMs;
     blockTimes[(std::size_t)i]=blockMs;
+    if(blockMs>blockBudgetMs)++overBudgetBlocks;
     for(int sample=0;sample<block;++sample)
        if(!std::isfinite(left[sample]) || !std::isfinite(right[sample]))return 1;
  }
@@ -50,6 +53,8 @@ int main(){
           <<" p95_block_ms="<<p95BlockMs
           <<" p99_block_ms="<<p99BlockMs
           <<" worst_block_ms="<<worstBlockMs
-          <<" block_budget_ms="<<(1000.0*block/48000.0)<<"\n";
+          <<" block_budget_ms="<<blockBudgetMs
+          <<" over_budget_blocks="<<overBudgetBlocks
+          <<" over_budget_pct="<<(100.0*overBudgetBlocks/iterations)<<"\n";
  return 0;
 }
