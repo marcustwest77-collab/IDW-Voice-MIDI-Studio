@@ -490,7 +490,7 @@ private:
         return count;
     }
     bool restoreProject(const juce::File& project){
-        if(playing.load() || recorder.isRecording())return false;
+        if(playing.load() || recorder.isRecording() || exportRunning.load())return false;
         idw::daw::Session restored;
         if(!idw::daw::loadSession(project,restored))return false;
         // Build replacement players before replacing the current project.
@@ -588,25 +588,25 @@ private:
             });
     }
     void exportProjectFile(){
-        if(playing.load() || recorder.isRecording())return;
+        if(playing.load() || recorder.isRecording() || exportRunning.load())return;
         projectChooser=std::make_unique<juce::FileChooser>("Export portable IDW Project",
             juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*");
         projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
             [this](const juce::FileChooser& picker){
                 const auto folder=picker.getResult();
-                if(folder==juce::File{})return;
+                if(folder==juce::File{} || playing.load() || recorder.isRecording() || exportRunning.load())return;
                 juce::String error;
                 if(!idw::daw::exportPortableProject(session,folder,error))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Export failed",error);
             });
     }
     void saveProjectFile(){
-        if(recorder.isRecording())return;
+        if(playing.load() || recorder.isRecording() || exportRunning.load())return;
         projectChooser=std::make_unique<juce::FileChooser>("Save IDW DAW Project",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW Session.idwproj"),"*.idwproj");
         projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
             [this](const juce::FileChooser& picker){
                 const auto file=picker.getResult();
-                if(file==juce::File{})return;
+                if(file==juce::File{} || playing.load() || recorder.isRecording() || exportRunning.load())return;
                 if(!idw::daw::saveSession(session,file.withFileExtension(".idwproj")))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save failed","Could not write IDW project.");
             });
