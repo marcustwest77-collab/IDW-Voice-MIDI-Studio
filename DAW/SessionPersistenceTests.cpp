@@ -146,6 +146,12 @@ int main(){
  renderMidiSine(invalidTempo,invalidOutput.data(),nullptr,256,-1,48000.0);
  if(std::any_of(invalidOutput.begin(),invalidOutput.end(),[](float sample){return sample!=0.0f;}))
     throw std::runtime_error("Malformed timing produced synth audio");
+ std::vector<float> organ(256,0.0f);
+ if(!sineSession.setTrackSynthPreset(0,3))throw std::runtime_error("Organ preset rejected");
+ renderMidiSine(sineSession,organ.data(),nullptr,256,0,48000.0);
+ if(organ==left || organ==bass || organ==lead ||
+    std::all_of(organ.begin(),organ.end(),[](float x){return x==0.0f;}))
+    throw std::runtime_error("Organ preset not audible or distinct");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
