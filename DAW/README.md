@@ -189,3 +189,7 @@ The preview synthesizer now uses a fixed 128-note frequency lookup table rather 
 ### Fourth MIDI instrument: Organ
 
 Select **Organ** in a MIDI track's instrument dropdown to hear a two-harmonic organ-style oscillator. The second harmonic is omitted at or beyond the current sample-rate Nyquist limit. The Organ preset is saved with each track (preset ID 3); older sessions remain compatible. A regression test checks that Organ audio is audible and distinct from Keys, Bass, and Lead. This is a simple synthesized approximation, not a sampled organ.
+
+### Fifth MIDI preset: Pad
+
+A new **Pad** oscillator preset combines a dominant fundamental and quiet second harmonic, subject to the same sample-rate harmonic filtering. Choose Pad from the MIDI track instrument selector; per-track session persistence continues to support it (preset ID 4). This is an initial sustained pad-like tone, not a sampled synthesizer or full ADSR patch.
