@@ -225,3 +225,7 @@ A new vocal recording cannot be started during ordinary playback; stopping an al
 ### Mixer controls after transport stop
 
 When playback reaches the end of the arrangement or Stop is pressed, the mixer now refreshes its MIDI preset, Attack and Release control enabled states. This restores normal editing after the transport finishes. It is a user-interface state fix, not full audio-thread snapshot synchronization.
+
+### Immutable playback session snapshot
+
+At Play, V14 now makes an immutable copy of the current session and publishes it to the audio callback. The callback uses this copy for track mute/solo, audio clip arrangement, tempo, gain/pan and MIDI synthesis instead of reading the editable project directly. This reduces session-model read/write races. The snapshot is published and loaded using atomic shared-pointer operations; their real-time cost still needs profiling. Transport slots, device lifecycle and other shared fields still need a separate concurrency audit. Project edits while playing remain deliberately restricted.
