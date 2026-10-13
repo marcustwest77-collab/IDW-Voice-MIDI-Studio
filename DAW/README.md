@@ -275,3 +275,7 @@ Automated transport tests now verify the endpoint for mixed audio/MIDI sessions 
 ### Long-session transport regressions
 
 The transport test suite now includes a 32-track alternating audio/MIDI arrangement, checking that the latest musical event determines the song endpoint, and a 30-minute playback clock at 120 BPM. These are numerical correctness tests, not real-time CPU or audio hardware stress tests.
+
+### Dense MIDI rendering regression
+
+The automated tests now render 128 overlapping notes across 16 MIDI tracks using all five internal presets. They compare a 1,024-sample render against four 256-sample blocks and reject nonfinite or out-of-range output. This is a deterministic correctness stress case, not a CPU benchmark or proof of real-time performance.
