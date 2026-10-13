@@ -335,3 +335,7 @@ The benchmark's 128 MIDI notes now last 16 beats rather than 4 beats, ensuring t
 ### Continuous benchmark timeline
 
 The 256-frame benchmark now continues its absolute MIDI frame position after the 32-block warm-up rather than restarting at zero for timed measurement. This more faithfully exercises sustained note phase and envelope progression. It changes the workload timeline, so performance comparisons should use results from the updated version.
+
+### Stereo clipping regression
+
+The offline 128-note benchmark now rejects any nonfinite or out-of-range sample (absolute amplitude greater than 1.0) on either left or right output, across its 64-, 128-, 256-, and 512-frame tests. This detects sample-level clipping in the test renderer; it is not a substitute for audio-interface measurements or listening tests.
