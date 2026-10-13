@@ -295,3 +295,7 @@ The offline MIDI benchmark now reports its slowest individual 256-frame render (
 ### Benchmark timing breakdown
 
 The offline MIDI benchmark now prints `render_only_ms`, `avg_block_ms`, `best_block_ms`, and `worst_block_ms` in addition to total loop time and the audio deadline. Its per-block timings exclude buffer clears and sample validity checks, providing more useful before/after synth optimization comparisons. They still include clock instrumentation overhead and should not be interpreted as physical audio device latency.
+
+### MIDI benchmark tail latency
+
+The benchmark now prints `p95_block_ms` and `p99_block_ms`, computed from its 256 observed per-block rendering durations, alongside mean and worst-case time. This helps distinguish sporadic CI scheduling interruptions from consistently expensive blocks. Shared CI runner measurements are not controlled hardware audio latency measurements.
