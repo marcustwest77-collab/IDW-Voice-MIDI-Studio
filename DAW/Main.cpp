@@ -475,6 +475,12 @@ private:
         session.setTrackMix(selectedTrack,(float)gainControl.getValue(),(float)panControl.getValue());
     }
     void timerCallback() override {
+        // Device shutdown can suspend playback from the audio thread.
+        // Re-enable editing controls on the message thread after that transition.
+        if(!playing.load() && !recorder.isRecording() && !exportRunning.load()){
+            refreshMixer();
+            stopTimer();
+        }
         playheadBeats=deviceRate>0?(double)sessionFrames.load()*session.bpm/(deviceRate*60.0):0.0;
         if(playing.load() && playheadBeats>=lastClipEndBeat()){
             playing.store(false);
