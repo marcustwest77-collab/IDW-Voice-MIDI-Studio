@@ -235,3 +235,7 @@ Snapshot build portability: `DAW/Main.cpp` explicitly includes `<memory>` for `s
 ### Playback snapshot isolation regression
 
 A new regression test copies a MIDI session, then edits pitch, timing and instrument assignment in the original and checks that the copied playback model is unchanged. The audio callback also documents its single-snapshot-per-block behavior. This test validates ordinary session copying, not simultaneous multithreaded operation or the real-time cost of atomic shared-pointer access.
+
+### Device reconfiguration playback guard
+
+When JUCE prepares the audio engine for a new audio device/sample rate/block size, V14 now marks the transport as not playing before it reconfigures playback buffers. This avoids inadvertently continuing a session across a changed device configuration. UI transport state and complete device lifecycle synchronization still need hands-on testing.
