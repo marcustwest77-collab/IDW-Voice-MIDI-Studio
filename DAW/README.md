@@ -327,3 +327,7 @@ For 64-, 128-, and 512-frame benchmarks, `total_overrun_ms` now sums the millise
 ### Worst individual deadline overrun
 
 Low-buffer benchmark output now includes `worst_overrun_ms`, the largest amount by which any 64-, 128-, or 512-frame offline render exceeded its nominal deadline. This complements `total_overrun_ms` and helps distinguish occasional scheduling spikes from consistently slow processing. Shared CI results are diagnostic and are not measurements of physical driver dropouts.
+
+### Corrected benchmark note duration
+
+The benchmark's 128 MIDI notes now last 16 beats rather than 4 beats, ensuring that they remain sounding throughout the longest warmed-up 512-frame measurement (approximately 3.07 seconds at 48 kHz). Earlier 512-frame timings could include blocks after notes ended, making those numbers unsuitable for sustained-load comparisons. Re-establish performance baselines using the updated benchmark.
