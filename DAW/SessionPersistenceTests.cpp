@@ -76,6 +76,16 @@ int main(){
     !midiRestored.tracks[0].notes.empty() ||
     midiRestored.removeMidiNote(0,0))
     throw std::runtime_error("MIDI note deletion");
+ // A playback copy must not change when its editable project is modified.
+ Session editableSnapshot;editableSnapshot.addTrack(TrackType::midi);
+ editableSnapshot.addMidiNote(0,{60,0.0,1.0,100});
+ const Session playbackCopy=editableSnapshot;
+ editableSnapshot.moveMidiNote(0,0,2.0,72);
+ editableSnapshot.setTrackSynthPreset(0,4);
+ if(playbackCopy.tracks[0].notes[0].pitch!=60 ||
+    playbackCopy.tracks[0].notes[0].startBeat!=0.0 ||
+    playbackCopy.tracks[0].synthPreset!=0)
+    throw std::runtime_error("Playback snapshot changed after project edit");
  Session scheduleFixture;
  scheduleFixture.addTrack(TrackType::midi);
  scheduleFixture.addMidiNote(0,{60,1.0,1.0,100});
