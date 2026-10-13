@@ -478,6 +478,7 @@ private:
         // Device shutdown can suspend playback from the audio thread.
         // Re-enable editing controls on the message thread after that transition.
         if(!playing.load() && !recorder.isRecording() && !exportRunning.load()){
+            for(auto& slot:sources)slot->transport.stop();
             refreshMixer();
             stopTimer();
             playheadBeats=0.0;
