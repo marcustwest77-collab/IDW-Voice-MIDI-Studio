@@ -193,3 +193,7 @@ Select **Organ** in a MIDI track's instrument dropdown to hear a two-harmonic or
 ### Fifth MIDI preset: Pad
 
 A new **Pad** oscillator preset combines a dominant fundamental and quiet second harmonic, subject to the same sample-rate harmonic filtering. Choose Pad from the MIDI track instrument selector; per-track session persistence continues to support it (preset ID 4). This is an initial sustained pad-like tone, not a sampled synthesizer or full ADSR patch.
+
+### Five-preset regression and playback editing guard
+
+Automated persistence tests now round-trip all five Keys/Bass/Lead/Organ/Pad instrument selections through JSON. Starting playback hides the editable piano roll to reduce the risk of UI note changes racing with the audio renderer. This is not a complete thread-safe snapshot architecture; other project mutations during playback still require an explicit concurrency audit.
