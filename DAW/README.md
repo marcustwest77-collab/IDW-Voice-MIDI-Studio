@@ -315,3 +315,7 @@ The MIDI benchmark now exercises 64, 128, and 512 sample stereo buffers in addit
 ### Buffer-size timing diagnostics
 
 The offline MIDI benchmark now prints average and worst render time alongside each audio deadline for 64-, 128-, and 512-sample blocks, supplementing the detailed 256-sample timing results. Each alternate buffer-size measurement currently covers eight blocks and should be treated as a diagnostic sample, not statistically robust performance evidence or measured hardware latency.
+
+### Comparable multi-buffer render samples
+
+The 64-, 128-, and 512-frame benchmarks now warm up for 32 blocks and measure 256 blocks each, reporting mean, P95, P99, worst block time, and nominal-deadline exceedance count. These are offline CI timings; audio-interface driver overhead, scheduling and hardware dropout behavior are not measured.
