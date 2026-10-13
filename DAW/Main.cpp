@@ -442,6 +442,7 @@ private:
         sessionFrames.fetch_add(info.numSamples,std::memory_order_relaxed);
     }
     void releaseResources() override {
+        playing.store(false,std::memory_order_release);
         for(auto& slot:sources)slot->transport.releaseResources();
     }
     void refreshMixer(){
