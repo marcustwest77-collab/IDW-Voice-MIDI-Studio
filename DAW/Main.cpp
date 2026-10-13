@@ -112,10 +112,10 @@ public:
         exportProject.onClick=[this]{exportProjectFile();};
         bounce.onClick=[this]{bounceMix();};
         cancelBounce.onClick=[this]{exportCancel.store(true);};
-        audio.onClick=[this]{addAudioTrack();refreshMixer();repaint();};
-        midi.onClick=[this]{if(!playing.load())session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
+        audio.onClick=[this]{if(playing.load() || recorder.isRecording() || exportRunning.load())return;addAudioTrack();refreshMixer();repaint();};
+        midi.onClick=[this]{if(playing.load() || recorder.isRecording() || exportRunning.load())return;session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
-        tempo.onValueChange=[this]{session.setTempo(tempo.getValue());};addAndMakeVisible(tempo);
+        tempo.onValueChange=[this]{if(playing.load() || recorder.isRecording() || exportRunning.load())return;session.setTempo(tempo.getValue());};addAndMakeVisible(tempo);
         tempoLabel.setText("BPM",juce::dontSendNotification);addAndMakeVisible(tempoLabel);
         addAudioTrack();
         session.addTrack(idw::daw::TrackType::midi);
