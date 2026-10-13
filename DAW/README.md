@@ -303,3 +303,7 @@ The benchmark now prints `p95_block_ms` and `p99_block_ms`, computed from its 25
 ### Block deadline exceedance diagnostics
 
 The benchmark also reports `over_budget_blocks` and `over_budget_pct` for measured 256-frame rendering blocks above the nominal 5.33 ms block interval at 48 kHz. An exceedance on a shared CI runner is a performance warning, not proof of a real hardware underrun; the count is diagnostic only and does not fail CTest.
+
+### Benchmark warm-up
+
+The offline MIDI benchmark now performs 32 untimed 256-frame synth render blocks before capturing 256 measured blocks. This reduces cold-cache and initialization effects on reported tail latency. Results remain dependent on shared CI scheduling and do not demonstrate real-time hardware performance.
