@@ -307,3 +307,7 @@ The benchmark also reports `over_budget_blocks` and `over_budget_pct` for measur
 ### Benchmark warm-up
 
 The offline MIDI benchmark now performs 32 untimed 256-frame synth render blocks before capturing 256 measured blocks. This reduces cold-cache and initialization effects on reported tail latency. Results remain dependent on shared CI scheduling and do not demonstrate real-time hardware performance.
+
+### Additional audio buffer-size smoke checks
+
+The MIDI benchmark now exercises 64, 128, and 512 sample stereo buffers in addition to its timed 256-sample benchmark. Each size renders several blocks and checks both channels for nonfinite values. These checks provide configuration coverage, not latency measurements for the additional buffer sizes.
