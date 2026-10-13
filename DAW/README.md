@@ -279,3 +279,7 @@ The transport test suite now includes a 32-track alternating audio/MIDI arrangem
 ### Dense MIDI rendering regression
 
 The automated tests now render 128 overlapping notes across 16 MIDI tracks using all five internal presets. They compare a 1,024-sample render against four 256-sample blocks and reject nonfinite or out-of-range output. This is a deterministic correctness stress case, not a CPU benchmark or proof of real-time performance.
+
+### Offline MIDI render performance benchmark
+
+When configured with `IDW_BUILD_DAW=ON` and `BUILD_TESTING=ON`, build target `IDWDAWMidiBenchmark` and run it manually to measure the time needed to render 256 stereo 256-frame blocks with 128 active notes on 16 MIDI tracks. It prints elapsed rendering milliseconds, the equivalent audio duration and their ratio. The target is not a pass/fail real-time latency test and is not registered with CTest; compare results on the same machine/configuration, preferably Release. Hardware audio callback latency and worst-case scheduling are still unmeasured.
