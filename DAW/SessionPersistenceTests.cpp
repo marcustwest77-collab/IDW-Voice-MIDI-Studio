@@ -218,13 +218,13 @@ int main(){
  Session validVoices;
  validVoices.addTrack(TrackType::midi);
  validVoices.addMidiNote(0,{60,0.0,2.0,100});
- std::vector<float> cleanOutput(256,0.0f),invalidOutput(256,0.0f);
+ std::vector<float> cleanOutput(256,0.0f),invalidVoiceOutput(256,0.0f);
  renderMidiSine(validVoices,cleanOutput.data(),nullptr,256,0,48000.0);
  Session invalidVoices=validVoices;
  invalidVoices.tracks[0].notes.push_back({999,0.0,2.0,100});
  invalidVoices.tracks[0].notes.push_back({60,0.0,2.0,0});
- renderMidiSine(invalidVoices,invalidOutput.data(),nullptr,256,0,48000.0);
- if(cleanOutput!=invalidOutput)
+ renderMidiSine(invalidVoices,invalidVoiceOutput.data(),nullptr,256,0,48000.0);
+ if(cleanOutput!=invalidVoiceOutput)
     throw std::runtime_error("Invalid MIDI notes changed voice normalization");
  // Dense multi-track MIDI render smoke test: no clipping, NaNs or inconsistent
  // output when the same audio is processed in smaller callback blocks.
