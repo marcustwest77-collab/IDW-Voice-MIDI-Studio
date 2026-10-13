@@ -1,4 +1,5 @@
 #include "MidiSineSynth.h"
+#include "PlaybackTiming.h"
 #include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
@@ -487,9 +488,8 @@ private:
         }
         const auto activeSnapshot=std::atomic_load_explicit(&playbackSession,std::memory_order_acquire);
         const double timelineBpm=activeSnapshot?activeSnapshot->bpm:session.bpm;
-        playheadBeats=deviceRate>0 && std::isfinite(deviceRate) && std::isfinite(timelineBpm) && timelineBpm>0
-            ?(double)sessionFrames.load()*timelineBpm/(deviceRate*60.0):0.0;
-        if(playing.load() && activeSnapshot && playheadBeats>=lastClipEndBeat(*activeSnapshot)){
+        playheadBeats=idw::daw::playbackBeat(sessionFrames.load(),deviceRate,timelineBpm);
+        if(playing.load() && activeSnapshot && playheadBeats>=idw::daw::arrangementEndBeat(*activeSnapshot)){
             playing.store(false);
             if(!exportRunning.load())stopTimer();
             for(auto& slot:sources)slot->transport.stop();
@@ -513,7 +513,6 @@ private:
         if(preparedBlockSize>0){slot->scratch.setSize(2,preparedBlockSize,false,true,false);slot->transport.prepareToPlay(preparedBlockSize,deviceRate);}
         sources.push_back(std::move(slot));
     }
-    double lastClipEndBeat(const idw::daw::Session& timeline) const {double end=0;for(const auto& track:timeline.tracks){for(const auto& clip:track.clips)end=juce::jmax(end,clip.startBeat+clip.lengthBeats);for(const auto& note:track.notes)end=juce::jmax(end,note.startBeat+note.lengthBeats);}return end;}
     int loadedCount() const {
         int count=0;for(auto& slot:sources)if(slot->reader)++count;
         return count;
