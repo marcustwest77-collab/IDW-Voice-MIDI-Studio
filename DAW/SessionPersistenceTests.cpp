@@ -47,7 +47,7 @@ int main(){
     midiFixture.resizeMidiNote(0,0,0) ||
     midiFixture.tracks[0].notes.size()!=1)
     throw std::runtime_error("Invalid MIDI edit accepted");
- if(!midiFixture.setTrackSynthPreset(0,2) || midiFixture.setTrackSynthPreset(0,3))
+ if(!midiFixture.setTrackSynthPreset(0,2) || midiFixture.setTrackSynthPreset(0,5))
     throw std::runtime_error("MIDI preset validation");
  if(!midiFixture.setTrackSynthEnvelope(0,25.0f,90.0f) ||
     midiFixture.setTrackSynthEnvelope(0,-1.0f,50.0f))
