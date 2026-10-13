@@ -20,17 +20,27 @@ int main(){
 // Additional block-size smoke checks exercise common low-latency settings.
 // These checks verify sample validity rather than impose machine-specific deadlines.
  for(const int smallBlock : {64,128,512}){
+    double totalMs=0.0;
+    double worstMs=0.0;
     std::vector<float> checkL((std::size_t)smallBlock,0.0f);
     std::vector<float> checkR((std::size_t)smallBlock,0.0f);
     for(int i=0;i<8;++i){
        std::fill(checkL.begin(),checkL.end(),0.0f);
        std::fill(checkR.begin(),checkR.end(),0.0f);
+       const auto blockStart=std::chrono::steady_clock::now();
        renderMidiSine(session,checkL.data(),checkR.data(),smallBlock,
                       (std::int64_t)i*smallBlock,48000.0);
+       const double blockMs=std::chrono::duration<double,std::milli>(
+           std::chrono::steady_clock::now()-blockStart).count();
+       totalMs+=blockMs;
+       worstMs=std::max(worstMs,blockMs);
        for(int j=0;j<smallBlock;++j)
           if(!std::isfinite(checkL[(std::size_t)j]) ||
              !std::isfinite(checkR[(std::size_t)j]))return 1;
     }
+    std::cout<<"buffer_size="<<smallBlock<<" avg_block_ms="<<(totalMs/8.0)
+             <<" worst_block_ms="<<worstMs
+             <<" block_budget_ms="<<(1000.0*smallBlock/48000.0)<<"\n";
  }
  constexpr int block=256, iterations=256, warmupBlocks=32;
  std::vector<float> left(block,0.0f),right(block,0.0f);
