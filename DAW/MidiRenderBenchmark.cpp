@@ -17,30 +17,38 @@ int main(){
        session.addMidiNote((std::size_t)track,{48+(track+note)%36,0.0,4.0,100});
  }
 
-// Additional block-size smoke checks exercise common low-latency settings.
-// These checks verify sample validity rather than impose machine-specific deadlines.
+// Collect 256 timed blocks for each alternate buffer size after warm-up.
  for(const int smallBlock : {64,128,512}){
-    double totalMs=0.0;
-    double worstMs=0.0;
-    std::vector<float> checkL((std::size_t)smallBlock,0.0f);
-    std::vector<float> checkR((std::size_t)smallBlock,0.0f);
-    for(int i=0;i<8;++i){
-       std::fill(checkL.begin(),checkL.end(),0.0f);
-       std::fill(checkR.begin(),checkR.end(),0.0f);
-       const auto blockStart=std::chrono::steady_clock::now();
-       renderMidiSine(session,checkL.data(),checkR.data(),smallBlock,
-                      (std::int64_t)i*smallBlock,48000.0);
-       const double blockMs=std::chrono::duration<double,std::milli>(
-           std::chrono::steady_clock::now()-blockStart).count();
-       totalMs+=blockMs;
-       worstMs=std::max(worstMs,blockMs);
+    constexpr int n=256,warmup=32;
+    std::vector<float> l((std::size_t)smallBlock,0.0f),r((std::size_t)smallBlock,0.0f);
+    std::array<double,n> times{};
+    const double budget=1000.0*smallBlock/48000.0;
+    double total=0.0;
+    int missed=0;
+    for(int i=-warmup;i<n;++i){
+       std::fill(l.begin(),l.end(),0.0f);
+       std::fill(r.begin(),r.end(),0.0f);
+       const auto before=std::chrono::steady_clock::now();
+       renderMidiSine(session,l.data(),r.data(),smallBlock,
+                      (std::int64_t)(i+warmup)*smallBlock,48000.0);
+       const double ms=std::chrono::duration<double,std::milli>(
+           std::chrono::steady_clock::now()-before).count();
+       if(i>=0){
+          times[(std::size_t)i]=ms;
+          total+=ms;
+          if(ms>budget)++missed;
+       }
        for(int j=0;j<smallBlock;++j)
-          if(!std::isfinite(checkL[(std::size_t)j]) ||
-             !std::isfinite(checkR[(std::size_t)j]))return 1;
+          if(!std::isfinite(l[(std::size_t)j]) ||
+             !std::isfinite(r[(std::size_t)j]))return 1;
     }
-    std::cout<<"buffer_size="<<smallBlock<<" avg_block_ms="<<(totalMs/8.0)
-             <<" worst_block_ms="<<worstMs
-             <<" block_budget_ms="<<(1000.0*smallBlock/48000.0)<<"\n";
+    std::sort(times.begin(),times.end());
+    std::cout<<"buffer_size="<<smallBlock<<" avg_block_ms="<<(total/n)
+             <<" p95_block_ms="<<times[n*95/100-1]
+             <<" p99_block_ms="<<times[n*99/100-1]
+             <<" worst_block_ms="<<times.back()
+             <<" block_budget_ms="<<budget
+             <<" over_budget_blocks="<<missed<<"\n";
  }
  constexpr int block=256, iterations=256, warmupBlocks=32;
  std::vector<float> left(block,0.0f),right(block,0.0f);
