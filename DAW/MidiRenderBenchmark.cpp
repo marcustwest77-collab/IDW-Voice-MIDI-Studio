@@ -49,6 +49,7 @@ int main(){
           if(i==n-1)finalBlockEnergy+=std::abs(l[(std::size_t)j])+std::abs(r[(std::size_t)j]);
        }
     }
+    // Guard against an accidentally silent workload invalidating timing results.
     if(finalBlockEnergy<=0.0){
        std::cerr<<"Silent final MIDI block at buffer_size="<<smallBlock<<"\n";
        return 2;
