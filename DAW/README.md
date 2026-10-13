@@ -231,3 +231,7 @@ When playback reaches the end of the arrangement or Stop is pressed, the mixer n
 At Play, V14 now makes an immutable copy of the current session and publishes it to the audio callback. The callback uses this copy for track mute/solo, audio clip arrangement, tempo, gain/pan and MIDI synthesis instead of reading the editable project directly. This reduces session-model read/write races. The snapshot is published and loaded using atomic shared-pointer operations; their real-time cost still needs profiling. Transport slots, device lifecycle and other shared fields still need a separate concurrency audit. Project edits while playing remain deliberately restricted.
 
 Snapshot build portability: `DAW/Main.cpp` explicitly includes `<memory>` for `std::shared_ptr`, `std::make_shared`, and atomic shared-pointer free functions, avoiding reliance on transitive JUCE headers. Full platform compilation and audio callback validation are still required.
+
+### Playback snapshot isolation regression
+
+A new regression test copies a MIDI session, then edits pitch, timing and instrument assignment in the original and checks that the copied playback model is unchanged. The audio callback also documents its single-snapshot-per-block behavior. This test validates ordinary session copying, not simultaneous multithreaded operation or the real-time cost of atomic shared-pointer access.
