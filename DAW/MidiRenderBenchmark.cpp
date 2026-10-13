@@ -25,6 +25,7 @@ int main(){
     const double budget=1000.0*smallBlock/48000.0;
     double total=0.0;
     int missed=0;
+    double excessMs=0.0;
     for(int i=-warmup;i<n;++i){
        std::fill(l.begin(),l.end(),0.0f);
        std::fill(r.begin(),r.end(),0.0f);
@@ -36,7 +37,7 @@ int main(){
        if(i>=0){
           times[(std::size_t)i]=ms;
           total+=ms;
-          if(ms>budget)++missed;
+          if(ms>budget){++missed;excessMs+=ms-budget;}
        }
        for(int j=0;j<smallBlock;++j)
           if(!std::isfinite(l[(std::size_t)j]) ||
@@ -48,7 +49,8 @@ int main(){
              <<" p99_block_ms="<<times[n*99/100-1]
              <<" worst_block_ms="<<times.back()
              <<" block_budget_ms="<<budget
-             <<" over_budget_blocks="<<missed<<"\n";
+             <<" over_budget_blocks="<<missed
+             <<" total_overrun_ms="<<excessMs<<"\n";
  }
  constexpr int block=256, iterations=256, warmupBlocks=32;
  std::vector<float> left(block,0.0f),right(block,0.0f);
