@@ -487,7 +487,8 @@ private:
         }
         const auto activeSnapshot=std::atomic_load_explicit(&playbackSession,std::memory_order_acquire);
         const double timelineBpm=activeSnapshot?activeSnapshot->bpm:session.bpm;
-        playheadBeats=deviceRate>0?(double)sessionFrames.load()*timelineBpm/(deviceRate*60.0):0.0;
+        playheadBeats=deviceRate>0 && std::isfinite(deviceRate) && std::isfinite(timelineBpm) && timelineBpm>0
+            ?(double)sessionFrames.load()*timelineBpm/(deviceRate*60.0):0.0;
         if(playing.load() && activeSnapshot && playheadBeats>=lastClipEndBeat(*activeSnapshot)){
             playing.store(false);
             if(!exportRunning.load())stopTimer();
