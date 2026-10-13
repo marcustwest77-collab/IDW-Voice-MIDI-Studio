@@ -485,7 +485,9 @@ private:
             repaint();
             return;
         }
-        playheadBeats=deviceRate>0?(double)sessionFrames.load()*session.bpm/(deviceRate*60.0):0.0;
+        const auto activeSnapshot=std::atomic_load_explicit(&playbackSession,std::memory_order_acquire);
+        const double timelineBpm=activeSnapshot?activeSnapshot->bpm:session.bpm;
+        playheadBeats=deviceRate>0?(double)sessionFrames.load()*timelineBpm/(deviceRate*60.0):0.0;
         if(playing.load() && playheadBeats>=lastClipEndBeat()){
             playing.store(false);
             if(!exportRunning.load())stopTimer();
