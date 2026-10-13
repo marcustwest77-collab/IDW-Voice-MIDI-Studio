@@ -96,6 +96,19 @@ int main(){
  arrangement.addMidiNote(0,{60,3.0,2.5,100});
  if(std::abs(arrangementEndBeat(arrangement)-5.5)>1e-10)
     throw std::runtime_error("Arrangement end from MIDI note");
+ Session mixedArrangement;
+ mixedArrangement.addTrack(TrackType::audio);
+ mixedArrangement.addTrack(TrackType::midi);
+ mixedArrangement.addClip(0,{"mix-test.wav",1.0,8.0,0.0});
+ mixedArrangement.addMidiNote(1,{72,10.0,2.0,96});
+ if(std::abs(arrangementEndBeat(mixedArrangement)-12.0)>1e-10)
+    throw std::runtime_error("Mixed arrangement end ignored MIDI");
+ mixedArrangement.tracks[1].notes.clear();
+ if(std::abs(arrangementEndBeat(mixedArrangement)-9.0)>1e-10)
+    throw std::runtime_error("Audio clip arrangement end incorrect");
+ Session emptyArrangement;
+ if(arrangementEndBeat(emptyArrangement)!=0.0)
+    throw std::runtime_error("Empty arrangement end incorrect");
  Session scheduleFixture;
  scheduleFixture.addTrack(TrackType::midi);
  scheduleFixture.addMidiNote(0,{60,1.0,1.0,100});
