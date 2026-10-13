@@ -259,3 +259,7 @@ The playback UI clock now uses the BPM captured in the immutable playback sessio
 ### Snapshot-aligned arrangement end
 
 The transport's end-of-arrangement calculation now reads note and clip ends from the same immutable playback session used by the audio renderer and playhead tempo. Edits to the live project cannot alter the active playback endpoint. The updated cross-platform CI build is required before treating this as verified.
+
+### Playback clock input validation
+
+The transport playhead calculation now checks that the audio sample rate and active snapshot tempo are finite and positive before calculating its beat position. Invalid values yield a zero playhead instead of an invalid number. This is defensive code; the newest cross-platform build and real-device timing behavior still need verification.
