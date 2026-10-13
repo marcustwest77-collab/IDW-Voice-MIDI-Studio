@@ -291,3 +291,7 @@ The offline MIDI benchmark now reports its slowest individual 256-frame render (
 ### Benchmark in automated test runs
 
 `IDWDAWMidiBenchmarkSmoke` runs the offline 128-note render from CTest so CI can detect invalid audio output and benchmark crashes. It deliberately does **not** fail when rendering takes longer than the audio deadline: CI machine performance and scheduler contention vary, and this offline benchmark is not a real-time glitch/latency guarantee. Use `ctest -V -R IDWDAWMidiBenchmarkSmoke` to see timing output.
+
+### Benchmark timing breakdown
+
+The offline MIDI benchmark now prints `render_only_ms`, `avg_block_ms`, `best_block_ms`, and `worst_block_ms` in addition to total loop time and the audio deadline. Its per-block timings exclude buffer clears and sample validity checks, providing more useful before/after synth optimization comparisons. They still include clock instrumentation overhead and should not be interpreted as physical audio device latency.
