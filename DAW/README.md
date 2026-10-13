@@ -205,3 +205,7 @@ Tempo changes and adding audio/MIDI tracks are now ignored during playback, reco
 ### Audio-operation guards: asynchronous file dialogs
 
 The open-project file chooser now rechecks playback, recording and export state in its asynchronous callback before restoring a session. Audio import likewise checks all three states when its chooser completes. Track gain/pan edits are blocked during these audio operations. These safeguards reduce unsafe UI model mutations; they do not provide a complete immutable audio-thread session snapshot.
+
+### Project save/export concurrency guards
+
+Native session save, portable project export, and project restoration now check playback, recording, and export activity. The asynchronous save/export chooser callbacks also recheck these states at execution, preventing a file dialog opened while idle from saving a session after audio processing begins. This is a targeted safety guard rather than a full thread-safe audio snapshot system.
