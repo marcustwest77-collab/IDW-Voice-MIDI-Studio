@@ -343,3 +343,7 @@ The offline 128-note benchmark now rejects any nonfinite or out-of-range sample 
 ### First deadline miss diagnostics
 
 The buffer-size benchmark reports `first_over_budget_block` (0-based, or -1 if no missed budget) alongside overrun duration metrics. This helps identify whether unusually slow renders cluster at the beginning or later in a sampled workload. Shared CI runner scheduling can still cause isolated long measurements.
+
+### Missed block interval diagnostics
+
+The low-buffer benchmark now reports `last_over_budget_block` in addition to the first missed block. Both use zero-based indices, or -1 when no block exceeds the nominal deadline. These fields help identify the span of observed scheduling spikes; they do not measure actual sound-card underruns.
