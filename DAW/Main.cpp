@@ -39,6 +39,7 @@ public:
         synthPreset.addItem("Keys",1);
         synthPreset.addItem("Bass",2);
         synthPreset.addItem("Lead",3);
+        synthPreset.addItem("Organ",4);
         synthPreset.setSelectedId(1,juce::dontSendNotification);
         addAndMakeVisible(synthPreset);
         synthPreset.onChange=[this]{
