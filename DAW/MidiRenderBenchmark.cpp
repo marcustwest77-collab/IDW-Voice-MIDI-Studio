@@ -45,7 +45,9 @@ int main(){
        }
        for(int j=0;j<smallBlock;++j){
           if(!std::isfinite(l[(std::size_t)j]) ||
-             !std::isfinite(r[(std::size_t)j]))return 1;
+             !std::isfinite(r[(std::size_t)j]) ||
+             std::abs(l[(std::size_t)j])>1.0f ||
+             std::abs(r[(std::size_t)j])>1.0f)return 1;
           if(i==n-1){finalLeftEnergy+=std::abs(l[(std::size_t)j]);finalRightEnergy+=std::abs(r[(std::size_t)j]);}
        }
     }
@@ -93,7 +95,8 @@ int main(){
     blockTimes[(std::size_t)i]=blockMs;
     if(blockMs>blockBudgetMs)++overBudgetBlocks;
     for(int sample=0;sample<block;++sample){
-       if(!std::isfinite(left[sample]) || !std::isfinite(right[sample]))return 1;
+       if(!std::isfinite(left[sample]) || !std::isfinite(right[sample]) ||
+          std::abs(left[sample])>1.0f || std::abs(right[sample])>1.0f)return 1;
        if(i==iterations-1){lastLeftEnergy+=std::abs(left[sample]);lastRightEnergy+=std::abs(right[sample]);}
     }
  }
