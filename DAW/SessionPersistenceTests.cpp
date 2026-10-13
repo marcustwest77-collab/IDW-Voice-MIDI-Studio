@@ -109,6 +109,19 @@ int main(){
  Session emptyArrangement;
  if(arrangementEndBeat(emptyArrangement)!=0.0)
     throw std::runtime_error("Empty arrangement end incorrect");
+ // Long multi-track arrangements must use the latest item, regardless of track order.
+ Session largeArrangement;
+ for(int track=0;track<32;++track){
+    largeArrangement.addTrack(track%2==0?TrackType::audio:TrackType::midi);
+    if(track%2==0)
+        largeArrangement.addClip((std::size_t)track,{"long-test.wav",0.0,64.0+track,0.0});
+    else
+        largeArrangement.addMidiNote((std::size_t)track,{60+track%12,128.0+track,2.0,100});
+ }
+ if(std::abs(arrangementEndBeat(largeArrangement)-161.0)>1e-10)
+    throw std::runtime_error("Multi-track arrangement endpoint incorrect");
+ if(std::abs(playbackBeat(48000LL*60LL*30LL,48000.0,120.0)-3600.0)>1e-8)
+    throw std::runtime_error("Thirty-minute playback clock incorrect");
  Session scheduleFixture;
  scheduleFixture.addTrack(TrackType::midi);
  scheduleFixture.addMidiNote(0,{60,1.0,1.0,100});
