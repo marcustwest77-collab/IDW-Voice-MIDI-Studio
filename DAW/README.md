@@ -221,3 +221,7 @@ Pressing Play while playback, vocal recording or WAV export is active no longer 
 ### Additional recording/track control restrictions
 
 A new vocal recording cannot be started during ordinary playback; stopping an already active recording remains possible. MIDI instrument selection is disabled during playback, recording and export, and the internal audio-track creation helper rejects those active-operation states. These are further UI-level precautions, not a complete synchronization guarantee.
+
+### Mixer controls after transport stop
+
+When playback reaches the end of the arrangement or Stop is pressed, the mixer now refreshes its MIDI preset, Attack and Release control enabled states. This restores normal editing after the transport finishes. It is a user-interface state fix, not full audio-thread snapshot synchronization.
