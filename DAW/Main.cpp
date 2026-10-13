@@ -11,6 +11,7 @@
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
 #include <atomic>
+#include <memory>
 #include <thread>
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
 public:
@@ -721,6 +722,7 @@ private:
     IDWTakeRecorder recorder;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
+    // Allocated on the message thread before transport starts; audio only reads.
     std::shared_ptr<const idw::daw::Session> playbackSession;
     double deviceRate=48000.0;
     int preparedBlockSize=0;
