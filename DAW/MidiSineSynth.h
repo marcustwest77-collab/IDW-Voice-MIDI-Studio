@@ -51,9 +51,15 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
     for(const auto& track:s.tracks){
         if(track.type!=TrackType::midi || track.mute || (anySolo && !track.solo))continue;
         for(const auto& note:track.notes)
-            if(std::isfinite(note.startBeat) && std::isfinite(note.lengthBeats) &&
-               note.lengthBeats>0 && note.startBeat<bufferEndBeat &&
-               note.startBeat+note.lengthBeats>bufferStartBeat)++activeVoices;
+            if(note.pitch>=0 && note.pitch<=127 &&
+               note.velocity>=1 && note.velocity<=127 &&
+               std::isfinite(note.startBeat) && std::isfinite(note.lengthBeats) &&
+               note.startBeat>=0 && note.lengthBeats>0 &&
+               std::isfinite(note.startBeat+note.lengthBeats) &&
+               note.startBeat<bufferEndBeat &&
+               note.startBeat+note.lengthBeats>bufferStartBeat &&
+               440.0*std::pow(2.0,(note.pitch-69)/12.0)<sampleRate*0.5)
+                ++activeVoices;
     }
     const float voiceScale=1.0f/std::sqrt((float)std::max<std::size_t>(1,activeVoices));
     for(const auto& t:s.tracks){
