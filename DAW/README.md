@@ -323,3 +323,7 @@ The 64-, 128-, and 512-frame benchmarks now warm up for 32 blocks and measure 25
 ### Low-buffer deadline overrun diagnostics
 
 For 64-, 128-, and 512-frame benchmarks, `total_overrun_ms` now sums the milliseconds by which individual measured render calls exceed their nominal audio callback budget. This distinguishes a few small misses from large scheduling spikes. Measurements are offline on shared CI runners and do not establish hardware underrun counts.
+
+### Worst individual deadline overrun
+
+Low-buffer benchmark output now includes `worst_overrun_ms`, the largest amount by which any 64-, 128-, or 512-frame offline render exceeded its nominal deadline. This complements `total_overrun_ms` and helps distinguish occasional scheduling spikes from consistently slow processing. Shared CI results are diagnostic and are not measurements of physical driver dropouts.
