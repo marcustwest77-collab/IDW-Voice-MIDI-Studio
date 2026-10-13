@@ -26,6 +26,7 @@ int main(){
     double total=0.0;
     int missed=0;
     double excessMs=0.0;
+    double worstOverrunMs=0.0;
     for(int i=-warmup;i<n;++i){
        std::fill(l.begin(),l.end(),0.0f);
        std::fill(r.begin(),r.end(),0.0f);
@@ -37,7 +38,7 @@ int main(){
        if(i>=0){
           times[(std::size_t)i]=ms;
           total+=ms;
-          if(ms>budget){++missed;excessMs+=ms-budget;}
+          if(ms>budget){++missed;excessMs+=ms-budget;worstOverrunMs=std::max(worstOverrunMs,ms-budget);}
        }
        for(int j=0;j<smallBlock;++j)
           if(!std::isfinite(l[(std::size_t)j]) ||
@@ -50,7 +51,8 @@ int main(){
              <<" worst_block_ms="<<times.back()
              <<" block_budget_ms="<<budget
              <<" over_budget_blocks="<<missed
-             <<" total_overrun_ms="<<excessMs<<"\n";
+             <<" total_overrun_ms="<<excessMs
+             <<" worst_overrun_ms="<<worstOverrunMs<<"\n";
  }
  constexpr int block=256, iterations=256, warmupBlocks=32;
  std::vector<float> left(block,0.0f),right(block,0.0f);
