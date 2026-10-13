@@ -201,3 +201,7 @@ Automated persistence tests now round-trip all five Keys/Bass/Lead/Organ/Pad ins
 ### Playback-time model mutation guard
 
 Tempo changes and adding audio/MIDI tracks are now ignored during playback, recording, or export, preventing those controls from modifying audio-rendered session state midstream. Piano-roll editing also closes on Play. These narrow safeguards do not make the whole session model thread-safe; a complete cross-thread mutation audit is still required.
+
+### Audio-operation guards: asynchronous file dialogs
+
+The open-project file chooser now rechecks playback, recording and export state in its asynchronous callback before restoring a session. Audio import likewise checks all three states when its chooser completes. Track gain/pan edits are blocked during these audio operations. These safeguards reduce unsafe UI model mutations; they do not provide a complete immutable audio-thread session snapshot.
