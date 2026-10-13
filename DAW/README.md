@@ -213,3 +213,7 @@ Native session save, portable project export, and project restoration now check 
 ### Bounce, recording and take-import coordination
 
 The stereo WAV bounce chooser now rejects an export if playback, recording, or another export starts before the asynchronous file selection completes. Recording actions are blocked during an active bounce/export, and importing a completed take checks these operations before mutating the track graph. These are UI-level guards; audio-device callback synchronization and detailed race testing remain future work.
+
+### Transport operation guard
+
+Pressing Play while playback, vocal recording or WAV export is active no longer restarts the transport and resets its timeline. Stop is ignored while a WAV export is in progress, so it cannot indirectly attempt to end and import an active recording during export. Normal playback and recording transport use is unchanged. These guards are not a substitute for full audio callback synchronization.
