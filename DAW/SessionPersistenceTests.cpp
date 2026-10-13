@@ -214,6 +214,22 @@ int main(){
  if(pad==left || pad==bass || pad==lead || pad==organ ||
     std::all_of(pad.begin(),pad.end(),[](float x){return x==0.0f;}))
     throw std::runtime_error("Pad preset not audible or distinct");
+ // Dense multi-track MIDI render smoke test: no clipping, NaNs or inconsistent
+ // output when the same audio is processed in smaller callback blocks.
+ Session denseSession;
+ for(int track=0;track<16;++track){
+    denseSession.addTrack(TrackType::midi);
+    denseSession.setTrackSynthPreset((std::size_t)track,track%5);
+    for(int note=0;note<8;++note)
+        denseSession.addMidiNote((std::size_t)track,{48+(track+note)%36,0.0,2.0,100});
+ }
+ std::vector<float> denseFull(1024,0.0f),denseSplit(1024,0.0f);
+ renderMidiSine(denseSession,denseFull.data(),nullptr,1024,0,48000.0);
+ for(int offset=0;offset<1024;offset+=256)
+    renderMidiSine(denseSession,denseSplit.data()+offset,nullptr,256,offset,48000.0);
+ if(denseFull!=denseSplit ||
+    std::any_of(denseFull.begin(),denseFull.end(),[](float x){return !std::isfinite(x) || std::abs(x)>1.0f;}))
+    throw std::runtime_error("Dense MIDI rendering unstable across blocks");
  sineSession.tracks[0].mute=true;
  std::fill(left.begin(),left.end(),0.0f);
  renderMidiSine(sineSession,left.data(),nullptr,256,0,48000.0);
