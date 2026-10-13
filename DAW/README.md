@@ -331,3 +331,7 @@ Low-buffer benchmark output now includes `worst_overrun_ms`, the largest amount 
 ### Corrected benchmark note duration
 
 The benchmark's 128 MIDI notes now last 16 beats rather than 4 beats, ensuring that they remain sounding throughout the longest warmed-up 512-frame measurement (approximately 3.07 seconds at 48 kHz). Earlier 512-frame timings could include blocks after notes ended, making those numbers unsuitable for sustained-load comparisons. Re-establish performance baselines using the updated benchmark.
+
+### Continuous benchmark timeline
+
+The 256-frame benchmark now continues its absolute MIDI frame position after the 32-block warm-up rather than restarting at zero for timed measurement. This more faithfully exercises sustained note phase and envelope progression. It changes the workload timeline, so performance comparisons should use results from the updated version.
