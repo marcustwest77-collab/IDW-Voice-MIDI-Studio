@@ -20,7 +20,7 @@ struct Track {
     bool solo=false;
     float gain=1.0f;
     float pan=0.0f;
-    int synthPreset=0; // Keys=0, Bass=1, Lead=2
+    int synthPreset=0; // Keys=0, Bass=1, Lead=2, Organ=3
     float synthAttackMs=5.0f,synthReleaseMs=5.0f;
     std::vector<Clip> clips;
     std::vector<MidiNote> notes;
@@ -99,7 +99,7 @@ public:
         return true;
     }
     bool setTrackSynthPreset(size_t index,int preset) {
-        if(index>=tracks.size() || tracks[index].type!=TrackType::midi || preset<0 || preset>2)return false;
+        if(index>=tracks.size() || tracks[index].type!=TrackType::midi || preset<0 || preset>3)return false;
         tracks[index].synthPreset=preset;
         return true;
     }
