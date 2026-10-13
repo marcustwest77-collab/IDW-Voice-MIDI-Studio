@@ -311,3 +311,7 @@ The offline MIDI benchmark now performs 32 untimed 256-frame synth render blocks
 ### Additional audio buffer-size smoke checks
 
 The MIDI benchmark now exercises 64, 128, and 512 sample stereo buffers in addition to its timed 256-sample benchmark. Each size renders several blocks and checks both channels for nonfinite values. These checks provide configuration coverage, not latency measurements for the additional buffer sizes.
+
+### Buffer-size timing diagnostics
+
+The offline MIDI benchmark now prints average and worst render time alongside each audio deadline for 64-, 128-, and 512-sample blocks, supplementing the detailed 256-sample timing results. Each alternate buffer-size measurement currently covers eight blocks and should be treated as a diagnostic sample, not statistically robust performance evidence or measured hardware latency.
