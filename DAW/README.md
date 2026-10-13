@@ -243,3 +243,7 @@ When JUCE prepares the audio engine for a new audio device/sample rate/block siz
 ### Audio resource release guard
 
 JUCE's `releaseResources()` callback now marks the transport stopped before releasing track transport resources. Together with the `prepareToPlay()` guard, this prevents the application's playback flag remaining active across the device lifecycle. Hardware device switching, timer/UI reset behavior and real-time synchronization still require testing.
+
+### Device-suspension UI recovery
+
+The message-thread timer now notices when audio playback was suspended by device preparation or resource release, restores the currently selected track's mixer control states, and stops the playback repaint timer when no recording or export is active. This complements device lifecycle transport guards; physical device switching remains untested.
