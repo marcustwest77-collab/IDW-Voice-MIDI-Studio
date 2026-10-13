@@ -26,7 +26,7 @@ int main(){
     std::array<double,n> times{};
     const double budget=1000.0*smallBlock/48000.0;
     double total=0.0;
-    double finalBlockEnergy=0.0;
+    double finalLeftEnergy=0.0,finalRightEnergy=0.0;
     int missed=0;
     double excessMs=0.0;
     double worstOverrunMs=0.0;
@@ -46,11 +46,11 @@ int main(){
        for(int j=0;j<smallBlock;++j){
           if(!std::isfinite(l[(std::size_t)j]) ||
              !std::isfinite(r[(std::size_t)j]))return 1;
-          if(i==n-1)finalBlockEnergy+=std::abs(l[(std::size_t)j])+std::abs(r[(std::size_t)j]);
+          if(i==n-1){finalLeftEnergy+=std::abs(l[(std::size_t)j]);finalRightEnergy+=std::abs(r[(std::size_t)j]);}
        }
     }
     // Guard against an accidentally silent workload invalidating timing results.
-    if(finalBlockEnergy<=0.0){
+    if(finalLeftEnergy<=0.0 || finalRightEnergy<=0.0){
        std::cerr<<"Silent final MIDI block at buffer_size="<<smallBlock<<"\n";
        return 2;
     }
@@ -71,7 +71,7 @@ int main(){
  double totalRenderMs=0.0;
  constexpr double blockBudgetMs=1000.0*block/48000.0;
  int overBudgetBlocks=0;
- double lastBlockEnergy=0.0;
+ double lastLeftEnergy=0.0,lastRightEnergy=0.0;
  std::array<double,iterations> blockTimes{};
  // Warm up code paths and caches before collecting timed blocks.
  for(int i=0;i<warmupBlocks;++i){
@@ -94,10 +94,10 @@ int main(){
     if(blockMs>blockBudgetMs)++overBudgetBlocks;
     for(int sample=0;sample<block;++sample){
        if(!std::isfinite(left[sample]) || !std::isfinite(right[sample]))return 1;
-       if(i==iterations-1)lastBlockEnergy+=std::abs(left[sample])+std::abs(right[sample]);
+       if(i==iterations-1){lastLeftEnergy+=std::abs(left[sample]);lastRightEnergy+=std::abs(right[sample]);}
     }
  }
- if(lastBlockEnergy<=0.0){
+ if(lastLeftEnergy<=0.0 || lastRightEnergy<=0.0){
     std::cerr<<"Silent final MIDI block at buffer_size=256\n";
     return 2;
  }
