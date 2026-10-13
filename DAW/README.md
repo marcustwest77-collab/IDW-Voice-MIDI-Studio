@@ -267,3 +267,7 @@ The transport playhead calculation now checks that the audio sample rate and act
 ### Testable transport timing
 
 `DAW/PlaybackTiming.h` provides standalone `playbackBeat(frame, sampleRate, bpm)` and `arrangementEndBeat(session)` functions used by the GUI transport. Persistence tests now check frame-to-beat conversion, invalid timing inputs and note-based arrangement end, reducing reliance on GUI-only timing validation. Real audio-device transport latency remains unmeasured.
+
+### Mixed arrangement timing regression
+
+Automated transport tests now verify the endpoint for mixed audio/MIDI sessions (the latest item wins), audio-only clips, and empty arrangements. These tests supplement the existing frame-to-beat and MIDI-only checks; they are not a substitute for sound-device latency tests.
