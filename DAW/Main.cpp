@@ -439,7 +439,8 @@ private:
         if(session.tracks.empty())return;
         if(selectedTrack>=session.tracks.size())selectedTrack=0;
         const auto& track=session.tracks[selectedTrack];
-        synthPreset.setEnabled(track.type==idw::daw::TrackType::midi);
+        synthPreset.setEnabled(track.type==idw::daw::TrackType::midi &&
+            !playing.load() && !recorder.isRecording() && !exportRunning.load());
         synthPreset.setSelectedId(track.synthPreset+1,juce::dontSendNotification);
         const bool editableSynth=track.type==idw::daw::TrackType::midi &&
             !playing.load() && !recorder.isRecording() && !exportRunning.load();
@@ -477,7 +478,7 @@ private:
         juce::AudioBuffer<float> scratch;
     };
     void addAudioTrack(){
-        if(playing.load())return; // Avoid mutating the audio graph during playback.
+        if(playing.load() || recorder.isRecording() || exportRunning.load())return; // Avoid mutating the audio graph during playback.
         if(!session.addTrack(idw::daw::TrackType::audio))return;
         auto slot=std::make_unique<AudioSlot>();
         slot->trackIndex=session.tracks.size()-1;
@@ -634,6 +635,9 @@ private:
     }
     void toggleRecording(){
         if(exportRunning.load())return;
+        // Recording may stop while the transport runs, but must not start
+        // while ordinary playback is active.
+        if(!recorder.isRecording() && playing.load())return;
         if(recorder.isRecording()){
             recorder.stop();record.setButtonText("RECORD VOCAL");
             // Stop the transport before changing the audio graph.
