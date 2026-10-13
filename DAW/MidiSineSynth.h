@@ -5,8 +5,8 @@
 #include <cmath>
 #include <cstdint>
 namespace idw::daw {
-// Three lightweight oscillator timbres. MIDI note timing stays unchanged.
-enum class SynthPreset { keys, bass, lead, organ };
+// Five lightweight oscillator timbres. MIDI note timing stays unchanged.
+enum class SynthPreset { keys, bass, lead, organ, pad };
 inline float synthWave(SynthPreset preset,double phase,double fundamentalHz,double sampleRate){
     // Exclude overtones at or above Nyquist to avoid their folding into
     // unrelated lower pitches on devices with lower sample rates.
@@ -20,6 +20,9 @@ inline float synthWave(SynthPreset preset,double phase,double fundamentalHz,doub
     if(preset==SynthPreset::organ)
         return (second?0.75f:1.0f)*fundamental+
                (second?0.25f*(float)std::sin(2.0*phase):0.0f);
+    if(preset==SynthPreset::pad)
+        return (second?0.9f:1.0f)*fundamental+
+               (second?0.1f*(float)std::sin(2.0*phase):0.0f);
     if(preset==SynthPreset::lead)
         return (third?0.6f:(second?0.75f:1.0f))*fundamental+
                (second?(third?0.3f:0.25f)*(float)std::sin(2.0*phase):0.0f)+
@@ -93,15 +96,17 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
             const auto total=noteEnd-noteStart;
             const auto attackFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthAttackMs/1000.0));
             const auto releaseFrames=std::max<std::int64_t>(1,(std::int64_t)(sampleRate*t.synthReleaseMs/1000.0));
-            const auto preset=static_cast<SynthPreset>(std::clamp(t.synthPreset,0,3));
+            const auto preset=static_cast<SynthPreset>(std::clamp(t.synthPreset,0,4));
             // Resolve harmonic eligibility once per note rather than per sample.
             const double nyquist=sampleRate*0.5;
             const bool second=freq<nyquist/2.0;
             const bool third=freq<nyquist/3.0;
-            const float fundamentalGain=preset==SynthPreset::organ?(second?0.75f:1.0f):
+            const float fundamentalGain=preset==SynthPreset::pad?(second?0.9f:1.0f):
+                preset==SynthPreset::organ?(second?0.75f:1.0f):
                 preset==SynthPreset::bass?(second?0.8f:1.0f):
                 preset==SynthPreset::lead?(third?0.6f:(second?0.75f:1.0f)):1.0f;
-            const float secondGain=preset==SynthPreset::organ?(second?0.25f:0.0f):
+            const float secondGain=preset==SynthPreset::pad?(second?0.1f:0.0f):
+                preset==SynthPreset::organ?(second?0.25f:0.0f):
                 preset==SynthPreset::bass?(second?0.2f:0.0f):
                 preset==SynthPreset::lead&&second?(third?0.3f:0.25f):0.0f;
             const float thirdGain=preset==SynthPreset::lead&&third?0.1f:0.0f;
