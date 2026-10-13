@@ -251,3 +251,7 @@ The message-thread timer now notices when audio playback was suspended by device
 ### Suspended transport source cleanup
 
 The message-thread playback recovery path now explicitly stops all track AudioTransportSources when playback is suspended (for example, following a device lifecycle reset), before refreshing mixer controls and stopping its timer. This closes a gap where the DAW transport flag was stopped but individual audio sources could remain running internally. Physical device change behavior still requires manual testing.
+
+### Playback timer tempo consistency
+
+The playback UI clock now uses the BPM captured in the immutable playback session snapshot, matching the tempo used in the audio callback. When no playback snapshot exists it falls back to the editable session's BPM. This avoids playhead drift if the live project tempo differs from the active snapshot; real-device timing tests remain outstanding.
