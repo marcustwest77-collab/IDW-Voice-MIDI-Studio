@@ -52,6 +52,16 @@ int main(){
  if(!midiFixture.setTrackSynthEnvelope(0,25.0f,90.0f) ||
     midiFixture.setTrackSynthEnvelope(0,-1.0f,50.0f))
     throw std::runtime_error("MIDI envelope validation");
+ // Every supported preset must survive session save/load.
+ for(int preset=0;preset<=4;++preset){
+    Session presetSession;presetSession.addTrack(TrackType::midi);
+    if(!presetSession.setTrackSynthPreset(0,preset))
+        throw std::runtime_error("Valid MIDI preset rejected");
+    Session roundTrip;
+    if(!sessionFromJson(sessionToJson(presetSession),roundTrip) ||
+       roundTrip.tracks.size()!=1 || roundTrip.tracks[0].synthPreset!=preset)
+        throw std::runtime_error("MIDI preset round-trip failure");
+ }
  Session midiRestored;
  if(!sessionFromJson(sessionToJson(midiFixture),midiRestored) ||
     midiRestored.tracks.size()!=1 || midiRestored.tracks[0].notes.size()!=1 ||
