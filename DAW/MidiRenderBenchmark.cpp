@@ -91,9 +91,10 @@ int main(){
     totalRenderMs+=blockMs;
     blockTimes[(std::size_t)i]=blockMs;
     if(blockMs>blockBudgetMs)++overBudgetBlocks;
-    for(int sample=0;sample<block;++sample)
+    for(int sample=0;sample<block;++sample){
        if(!std::isfinite(left[sample]) || !std::isfinite(right[sample]))return 1;
        if(i==iterations-1)lastBlockEnergy+=std::abs(left[sample])+std::abs(right[sample]);
+    }
  }
  if(lastBlockEnergy<=0.0){
     std::cerr<<"Silent final MIDI block at buffer_size=256\n";
