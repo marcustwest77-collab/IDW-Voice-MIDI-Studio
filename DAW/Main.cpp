@@ -480,6 +480,9 @@ private:
         if(!playing.load() && !recorder.isRecording() && !exportRunning.load()){
             refreshMixer();
             stopTimer();
+            playheadBeats=0.0;
+            repaint();
+            return;
         }
         playheadBeats=deviceRate>0?(double)sessionFrames.load()*session.bpm/(deviceRate*60.0):0.0;
         if(playing.load() && playheadBeats>=lastClipEndBeat()){
