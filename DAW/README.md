@@ -355,3 +355,9 @@ The MIDI renderer now uses its existing 128-entry equal-temperament pitch lookup
 ## V14 recording beta — headphone monitoring foundation
 
 `IDWMultiTakeRecorder` now has an opt-in, gain-limited dry monitor path for the first armed input. Monitoring remains **OFF by default** and is reset to OFF when recording stops. The DAW UI now provides a **HEADPHONES ONLY** toggle during multi-input recording; it remains disabled during single-input recording. This requires device-specific testing. Never route the monitoring output to loudspeakers near an open microphone because acoustic feedback can result. Use closed-back headphones and a low output volume. This is not a guaranteed low-latency monitoring solution: driver buffer settings and interface hardware affect delay. Verify JUCE audio-callback mixing behavior on Windows and macOS before shipping.
+
+## Recording beta — experimental overdubbing
+
+Enable **PLAY BEAT WHILE RECORDING**, arm an **empty audio track**, then press **RECORD VOCAL**. The application starts playback of existing session audio/MIDI after the capture writer is started. Press **STOP RECORD** to stop playback, close the WAV and import the new take. The switch is off by default. Existing audio tracks are protected from overwriting when overdub is enabled.
+
+**Limitations:** playback and capture are started sequentially, not at an identical sample boundary; reported input-driver latency trim is only an estimate. Do not treat this as sample-accurate synchronized overdubbing until loopback testing, device callback alignment and a calibrated round-trip latency offset have been implemented. Use headphones to avoid playback bleeding into the microphone.
