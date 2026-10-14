@@ -579,7 +579,9 @@ private:
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                 "Live loopback result",quality!=idw::daw::CalibrationQuality::invalid
                     ? "Measured "+juce::String(idw::daw::alignmentMilliseconds(alignment.lagSamples,rate),3)+
-                      " ms, matched "+juce::String((int)alignment.accepted)+"/5 pulses. Quality: "+
+                      " ms, matched "+juce::String((int)alignment.accepted)+"/5 pulses. Jitter: "+
+                      juce::String(idw::daw::alignmentMilliseconds(alignment.jitterSamples,rate),3)+
+                      " ms. Quality: "+
                       juce::String(quality==idw::daw::CalibrationQuality::consistent?"consistent":"repeat test")+
                       ". Use TAKE TRIM ms manually after verifying recording alignment. No automatic adjustment was applied."
                     : "No reliable loopback measurement. Confirm line-level output-to-input routing.");
