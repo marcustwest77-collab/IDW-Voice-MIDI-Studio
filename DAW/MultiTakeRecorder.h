@@ -75,6 +75,13 @@ public:
         const juce::ScopedLock lock(guard);
         for(auto& slot:slots)slot.writer.reset();
         count=0;
+        monitorGain.store(0.0f,std::memory_order_relaxed);
+    }
+    // Monitoring is disabled by default. Only call this after the user has
+    // confirmed headphone use; speakers can produce acoustic feedback.
+    void setHeadphoneMonitor(bool enabled,float gain=0.1f) noexcept {
+        monitorGain.store(enabled?juce::jlimit(0.0f,0.25f,gain):0.0f,
+                          std::memory_order_relaxed);
     }
     std::uint64_t getDroppedBlocks() const noexcept {
         return droppedBlocks.load(std::memory_order_relaxed);
@@ -90,7 +97,7 @@ public:
         return count!=0;
     }
     void audioDeviceIOCallbackWithContext(const float* const* inputs,int inputsCount,
-                                          float* const*,int,int samples,
+                                          float* const* outputs,int outputsCount,int samples,
                                           const juce::AudioIODeviceCallbackContext&) override {
         const juce::ScopedTryLock lock(guard);
         if(!lock.isLocked()){
@@ -106,6 +113,7 @@ public:
                 droppedBlocks.fetch_add(1,std::memory_order_relaxed);
                 return;
             }
+        const float monitor=monitorGain.load(std::memory_order_relaxed);
         for(std::size_t i=0;i<count;++i){
             const float* source=inputs[slots[i].channel];
             float peak=0.0f;
@@ -114,6 +122,16 @@ public:
                 if(std::isfinite(value))peak=std::max(peak,std::abs(value));
             }
             inputPeaks[i].store(peak,std::memory_order_relaxed);
+            // Limited direct monitoring of the FIRST input only; dry signal,
+            // no allocations, and never active unless explicitly enabled.
+            if(i==0 && monitor>0.0f && outputs && outputsCount>0){
+                for(int channel=0;channel<std::min(2,outputsCount);++channel){
+                    if(auto* out=outputs[channel])
+                        for(int frame=0;frame<samples;++frame)
+                            out[frame]=juce::jlimit(-0.5f,0.5f,
+                                out[frame]+source[frame]*monitor);
+                }
+            }
             const float* mono[] { source };
             if(!slots[i].writer->write(mono,samples))
                 rejectedWrites.fetch_add(1,std::memory_order_relaxed);
@@ -140,5 +158,6 @@ private:
     std::size_t count=0;
     std::atomic<std::uint64_t> droppedBlocks{0};
     std::atomic<std::uint64_t> rejectedWrites{0};
+    std::atomic<float> monitorGain{0.0f};
     std::array<std::atomic<float>,maxTracks> inputPeaks{};
 };
