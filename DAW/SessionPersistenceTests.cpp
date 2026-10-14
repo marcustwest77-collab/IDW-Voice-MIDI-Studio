@@ -392,6 +392,20 @@ int main(){
  if(!referenceReader || referenceReader->sampleRate!=48000.0 ||
     referenceReader->lengthInSamples<24000)
     throw std::runtime_error("invalid generated loopback WAV");
+ juce::AudioBuffer<float> referenceSamples(1,static_cast<int>(referenceReader->lengthInSamples));
+ referenceSamples.clear();
+ if(!referenceReader->read(&referenceSamples,0,referenceSamples.getNumSamples(),0,true,true))
+    throw std::runtime_error("could not read reference pulses");
+ for(int ms: {100,200,300,400,500}){
+    const int frame=ms*48;
+    if(std::abs(referenceSamples.getSample(0,frame)-0.25f)>0.001f)
+       throw std::runtime_error("reference pulse missing or misplaced");
+    if(std::abs(referenceSamples.getSample(0,frame-1))>0.001f)
+       throw std::runtime_error("reference pulse unexpectedly early");
+ }
+ if(std::abs(referenceSamples.getSample(0,1000))>0.001f)
+    throw std::runtime_error("reference silence not preserved");
+
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
 }
