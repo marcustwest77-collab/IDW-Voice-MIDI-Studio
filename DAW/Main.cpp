@@ -818,9 +818,9 @@ private:
         for(const auto& token:times){
             const auto entry=token.trim();
             const double ms=entry.getDoubleValue();
-            if(entry.isEmpty() || !std::isfinite(ms) || ms<=previous || ms<0 || ms>600000){
+            if(entry.isEmpty() || !std::isfinite(ms) || ms<=previous || ms<0 || ms>60000){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-                    "Invalid pulse schedule","Enter strictly increasing pulse times between 0 and 600000 ms.");
+                    "Invalid pulse schedule","Enter strictly increasing pulse times between 0 and 60000 ms.");
                 return;
             }
             milliseconds.push_back(ms);previous=ms;
@@ -835,10 +835,10 @@ private:
                 juce::WavAudioFormat wav;
                 auto reader=std::unique_ptr<juce::AudioFormatReader>(
                     wav.createReaderFor(file.createInputStream().release(),true));
-                if(!reader || reader->sampleRate<=0 || reader->lengthInSamples>48000LL*60 ||
+                if(!reader || reader->sampleRate<=0 || reader->lengthInSamples>reader->sampleRate*60.0 ||
                    reader->lengthInSamples<=0){
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-                        "Invalid WAV","Select a valid recorded WAV no longer than the supported 48000-sample/minute limit.");
+                        "Invalid WAV","Select a valid recorded WAV no longer than 60 seconds.");
                     return;
                 }
                 std::vector<std::size_t> positions;
