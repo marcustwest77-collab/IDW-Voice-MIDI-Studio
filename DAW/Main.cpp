@@ -506,6 +506,13 @@ private:
         session.setTrackMix(selectedTrack,(float)gainControl.getValue(),(float)panControl.getValue());
     }
     void timerCallback() override {
+        if(multiRecorder.isRecording()){
+            float peak=0.0f;
+            for(std::size_t i=0;i<multiTakes.size();++i)
+                peak=std::max(peak,multiRecorder.getInputPeak(i));
+            const double db=20.0*std::log10(std::max(1.0e-6f,peak));
+            record.setButtonText("REC PEAK "+juce::String(db,0)+" dBFS");
+        }
         // Device shutdown can suspend playback from the audio thread.
         // Re-enable editing controls on the message thread after that transition.
         if(!playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load()){
@@ -790,7 +797,10 @@ private:
                 inputs.push_back({path,inputAssignments[selectedInputs[i]]});
                 multiTakes.emplace_back(selectedInputs[i],path);
             }
-            if(multiRecorder.start(inputs,deviceRate))record.setButtonText("STOP RECORD");
+            if(multiRecorder.start(inputs,deviceRate)){
+                record.setButtonText("STOP RECORD");
+                startTimerHz(15); // UI peak updates only; never poll on the audio callback.
+            }
             else{
                 multiTakes.clear();
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
