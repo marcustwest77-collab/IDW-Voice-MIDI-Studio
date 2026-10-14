@@ -528,6 +528,10 @@ int main(){
  captureDiagnostics.audioDeviceIOCallbackWithContext(missingChannelInputs,0,nullptr,0,256,{});
  if(captureDiagnostics.getDroppedBlocks()!=2 || captureDiagnostics.getRejectedWrites()!=0)
     throw std::runtime_error("missing microphone blocks not counted");
+ // A failed restart must not erase evidence from the previous recording.
+ if(captureDiagnostics.start(root.getChildFile("failed-restart.wav"),0.0,1,0) ||
+    captureDiagnostics.getDroppedBlocks()!=2 || captureDiagnostics.getRejectedWrites()!=0)
+    throw std::runtime_error("failed restart erased recording diagnostics");
  captureDiagnostics.stop();
  // Starting a new take must clear the previous take's diagnostics.
  if(!captureDiagnostics.start(root.getChildFile("callback-reset.wav"),48000.0,1,0))
