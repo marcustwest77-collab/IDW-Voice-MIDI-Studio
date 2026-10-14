@@ -89,8 +89,19 @@ inline RepeatedPulseAlignment estimateLoopbackLatency(
     // Compute the 75% threshold without multiplication overflow.
     const std::size_t required=result.total-result.total/4;
     if(result.accepted<3 || result.accepted<required)return result;
+    // The global median can fall outside the accepted cluster when unusual
+    // outliers are present. Use the median of only the accepted lags.
+    std::vector<int> acceptedDelays;
+    for(const auto delay:delays)
+        if(std::abs(static_cast<double>(delay)-median)<=toleranceSamples)
+            acceptedDelays.push_back(delay);
+    const int stableMedian=acceptedDelays[acceptedDelays.size()/2];
+    result.jitterSamples=0;
+    for(const auto delay:acceptedDelays)
+        result.jitterSamples=std::max(result.jitterSamples,
+            static_cast<int>(std::abs(static_cast<double>(delay)-stableMedian)));
     result.valid=true;
-    result.lagSamples=median;
+    result.lagSamples=stableMedian;
     return result;
 }
 // Conservative UI quality label; never authorizes applying a correction.
