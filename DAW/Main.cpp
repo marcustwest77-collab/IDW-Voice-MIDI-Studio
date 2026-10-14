@@ -556,6 +556,14 @@ private:
         session.setTrackMix(selectedTrack,(float)gainControl.getValue(),(float)panControl.getValue());
     }
     void timerCallback() override {
+        if(loopbackCapture.consumeFailed()){
+            liveCalibration.setEnabled(true);
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Live loopback interrupted",
+                "Audio input or output became unavailable. The incomplete calibration was discarded.");
+            if(!playing.load() && !recorder.isRecording() && !multiRecorder.isRecording())stopTimer();
+            return;
+        }
         if(loopbackCapture.consumeComplete()){
             const auto& captured=loopbackCapture.getCapturedBuffer();
             const double rate=loopbackCapture.getSampleRate();
