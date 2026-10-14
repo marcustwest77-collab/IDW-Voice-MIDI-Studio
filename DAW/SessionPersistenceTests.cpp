@@ -444,6 +444,14 @@ int main(){
  // Completion is a one-shot notification and should not be reprocessed.
  if(!live.consumeComplete() || live.consumeComplete())
     throw std::runtime_error("completed loopback should only be consumed once");
+ // Cancelling a finished test discards any unconsumed completion event.
+ IDWLoopbackCapture discarded;
+ if(!discarded.prepare(48000.0,0,0) || !discarded.start())
+    throw std::runtime_error("cancelled calibration setup");
+ discarded.audioDeviceStopped();
+ discarded.cancel();
+ if(discarded.consumeFailed() || discarded.consumeComplete() || discarded.isActive())
+    throw std::runtime_error("cancelled calibration retained stale event");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
