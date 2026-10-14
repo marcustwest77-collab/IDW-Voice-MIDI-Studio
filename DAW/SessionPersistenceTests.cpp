@@ -304,6 +304,16 @@ int main(){
  repeated.assign(8192,0.0f);
  if(estimateLoopbackLatency(repeated.data(),repeated.size(),pulsePositions,200).valid)
     throw std::runtime_error("silent loopback was calibrated");
+ // Reject calibration schedules whose search windows overlap: a single
+ // transient must not count as evidence for several expected pulses.
+ std::vector<float> overlapSignal(2048,0.0f);
+ overlapSignal[520]=0.9f;
+ if(estimateLoopbackLatency(overlapSignal.data(),overlapSignal.size(),
+      {500,520,540},40).valid)
+    throw std::runtime_error("overlapping pulse windows accepted");
+ if(estimateLoopbackLatency(overlapSignal.data(),overlapSignal.size(),
+      {500,500,900},40).valid)
+    throw std::runtime_error("duplicate pulse schedule accepted");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
