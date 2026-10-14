@@ -350,6 +350,17 @@ int main(){
  if(!consensus.valid || consensus.accepted!=4 || consensus.lagSamples!=72 ||
     consensus.jitterSamples!=2)
     throw std::runtime_error("loopback consensus median and jitter");
+ // A valid measurement with moderate jitter should prompt repetition rather
+ // than silently authorizing an uncertain overdub correction.
+ std::vector<float> variable(8192,0.0f);
+ const std::vector<std::size_t> variableTimes{1024,2048,3072,4096,5120};
+ const int variableLags[]{60,66,70,72,68};
+ for(std::size_t i=0;i<variableTimes.size();++i)
+    variable[variableTimes[i]+static_cast<std::size_t>(variableLags[i])]=0.9f;
+ const auto unstable=estimateLoopbackLatency(variable.data(),variable.size(),variableTimes,200,12);
+ if(!unstable.valid || unstable.jitterSamples<8 ||
+    assessCalibration(unstable,48000.0,0.1)!=CalibrationQuality::repeat)
+    throw std::runtime_error("unstable valid calibration was not flagged");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
