@@ -5,6 +5,7 @@
 #include "MidiSineSynth.h"
 #include "PlaybackTiming.h"
 #include "LatencyAlignment.h"
+#include "LoopbackWavAnalysis.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
@@ -360,6 +361,28 @@ int main(){
     moved.getChildFile(relative).createInputStream().release(),true));
  if(!reader || reader->lengthInSamples!=4410 || reader->sampleRate!=44100.0)
     throw std::runtime_error("packaged WAV unreadable");
+ // Exercise the WAV-file analysis path, not just raw memory buffers.
+ const auto loopbackFile=root.getChildFile("loopback-test.wav");
+ auto loopStream=std::unique_ptr<juce::FileOutputStream>(loopbackFile.createOutputStream());
+ if(!loopStream)throw std::runtime_error("loopback fixture stream");
+ auto loopWriter=std::unique_ptr<juce::AudioFormatWriter>(
+    wav.createWriterFor(loopStream.get(),48000.0,1,16,{},0));
+ if(!loopWriter)throw std::runtime_error("loopback fixture writer");
+ loopStream.release();
+ juce::AudioBuffer<float> recorded(1,8192);
+ recorded.clear();
+ const std::vector<std::size_t> expected{1024,2048,3072,4096,5120};
+ for(auto pos:expected)recorded.setSample(0,(int)pos+72,0.85f);
+ const float* recordedChannels[]{recorded.getReadPointer(0)};
+ if(!loopWriter->writeFromFloatArrays(recordedChannels,1,8192))
+    throw std::runtime_error("loopback fixture write");
+ loopWriter.reset();
+ const auto measured=analyzeLoopbackWav(loopbackFile,0,expected,150);
+ if(!measured.alignment.valid || measured.alignment.lagSamples!=72 ||
+    std::abs(measured.lagMilliseconds-1.5)>0.01)
+    throw std::runtime_error("WAV loopback analysis failed");
+ if(analyzeLoopbackWav(loopbackFile,3,expected,150).alignment.valid)
+    throw std::runtime_error("invalid WAV channel accepted");
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
 }
