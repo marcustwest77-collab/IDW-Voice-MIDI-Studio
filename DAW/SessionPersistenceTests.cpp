@@ -451,6 +451,13 @@ int main(){
  if(pendingStatus.start() || !pendingStatus.consumeFailed() || !pendingStatus.start())
     throw std::runtime_error("pending failure should gate restart");
  pendingStatus.cancel();
+ // A device-restart notification without a valid device is an aborted test.
+ IDWLoopbackCapture restarted;
+ if(!restarted.prepare(48000.0,0,0) || !restarted.start())
+    throw std::runtime_error("restarted loopback setup");
+ restarted.audioDeviceAboutToStart(nullptr);
+ if(restarted.isActive() || !restarted.consumeFailed() || restarted.consumeComplete())
+    throw std::runtime_error("device restart failed to invalidate calibration");
  // Completion is a one-shot notification and should not be reprocessed.
  if(!live.consumeComplete() || live.consumeComplete())
     throw std::runtime_error("completed loopback should only be consumed once");
