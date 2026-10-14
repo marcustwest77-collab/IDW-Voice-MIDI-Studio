@@ -253,6 +253,25 @@ int main(){
  if(statusJson.contains("PRIVATE_RECORDING_PATH_DO_NOT_SHARE") ||
     !statusJson.contains("clipCount") || !statusJson.contains("playing"))
     throw std::runtime_error("AI snapshot leaked source paths or missed state");
+ // Audio hardware routing must survive a save/load round-trip while old
+ // session files without inputChannel continue defaulting to input one.
+ Session routing;routing.addTrack(TrackType::audio);
+ routing.tracks[0].inputChannel=5;
+ Session routed;
+ if(!sessionFromJson(sessionToJson(routing),routed) ||
+    routed.tracks[0].inputChannel!=5)
+    throw std::runtime_error("audio input routing round-trip");
+ auto legacyRoute=sessionToJson(routing);
+ legacyRoute.getDynamicObject()->getProperty("tracks").getArray()->getReference(0)
+    .getDynamicObject()->removeProperty("inputChannel");
+ Session legacyLoaded;
+ if(!sessionFromJson(legacyRoute,legacyLoaded) || legacyLoaded.tracks[0].inputChannel!=0)
+    throw std::runtime_error("legacy input routing fallback");
+ auto badRoute=sessionToJson(routing);
+ badRoute.getDynamicObject()->getProperty("tracks").getArray()->getReference(0)
+    .getDynamicObject()->setProperty("inputChannel",99);
+ if(sessionFromJson(badRoute,routed))
+    throw std::runtime_error("invalid input channel accepted");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
