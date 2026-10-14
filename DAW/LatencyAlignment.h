@@ -52,7 +52,19 @@ inline RepeatedPulseAlignment estimateLoopbackLatency(
     std::size_t searchRadius,int toleranceSamples=8) {
     RepeatedPulseAlignment result;
     result.total=expectedPulses.size();
-    if(!recorded || expectedPulses.size()<3 || toleranceSamples<0)return result;
+    if(!recorded || expectedPulses.size()<3 || toleranceSamples<0 || count==0)return result;
+    // Overlapping search windows could identify the same transient for
+    // multiple pulses and incorrectly report a confident measurement.
+    for(std::size_t i=0;i<expectedPulses.size();++i){
+        const auto expected=expectedPulses[i];
+        if(expected>=count)return result;
+        if(i>0){
+            const auto previous=expectedPulses[i-1];
+            if(expected<=previous ||
+               expected-previous<=searchRadius ||
+               expected-previous-searchRadius<=searchRadius)return result;
+        }
+    }
     std::vector<int> delays;
     for(const auto expected:expectedPulses){
         const auto pulse=locateLoopbackPulse(recorded,count,expected,searchRadius);
