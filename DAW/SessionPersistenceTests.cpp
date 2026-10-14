@@ -8,6 +8,7 @@
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
 #include "LoopbackCapture.h"
+#include "TakeRecorder.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
@@ -510,6 +511,14 @@ int main(){
  const auto root=juce::File::getSpecialLocation(juce::File::tempDirectory)
     .getNonexistentChildFile("idw-portable-test","",false);
  if(!root.createDirectory())throw std::runtime_error("test directory");
+ // A missing input buffer must be counted, not silently treated as a clean take.
+ IDWTakeRecorder captureDiagnostics;
+ if(!captureDiagnostics.start(root.getChildFile("callback-dropout.wav"),48000.0,1,0))
+    throw std::runtime_error("take recorder diagnostics setup");
+ captureDiagnostics.audioDeviceIOCallbackWithContext(nullptr,0,nullptr,0,256,{});
+ if(captureDiagnostics.getDroppedBlocks()!=1 || captureDiagnostics.getRejectedWrites()!=0)
+    throw std::runtime_error("missing microphone block not counted");
+ captureDiagnostics.stop();
  const auto sourceAudio=root.getChildFile("source.wav");
  // Construct a genuine 16-bit PCM WAV fixture rather than copying arbitrary bytes.
  juce::WavAudioFormat wav;
