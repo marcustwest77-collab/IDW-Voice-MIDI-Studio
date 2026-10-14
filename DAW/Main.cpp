@@ -645,7 +645,12 @@ private:
         std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(take));
         if(!reader || reader->sampleRate<=0 || reader->lengthInSamples<=0)return false;
         AudioSlot* target=nullptr;
-        for(auto& slot:sources)if(!slot->reader){target=slot.get();break;}
+        // Prefer the audio track selected when recording began, provided it
+        // remains empty. Never overwrite a previously recorded/imported take.
+        for(auto& slot:sources)
+            if(slot->trackIndex==recordTargetTrack && !slot->reader){target=slot.get();break;}
+        if(!target)
+            for(auto& slot:sources)if(!slot->reader){target=slot.get();break;}
         if(!target){
             addAudioTrack();
             if(!sources.empty() && !sources.back()->reader)target=sources.back().get();
@@ -662,7 +667,8 @@ private:
         if(!session.addClip(target->trackIndex,{take.getFullPathName().toStdString(),takeStartBeat,beatLength,trim}))return false;
         target->transport.setSource(source.get(),0,nullptr,rate);
         target->file=take;target->reader=std::move(source);
-        repaint();return true;
+        selectedTrack=target->trackIndex;
+        refreshMixer();repaint();return true;
     }
     void toggleRecording(){
         if(exportRunning.load())return;
@@ -679,6 +685,7 @@ private:
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Take saved, import failed",take.getFullPathName());
             return;
         }
+        recordTargetTrack=selectedTrack;
         const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
             .getChildFile("IDW DAW").getChildFile("Recordings");
         folder.createDirectory();
@@ -720,6 +727,7 @@ private:
     std::atomic<bool> playing{false};
     double playheadBeats=0;
     double takeStartBeat=0.0;
+    size_t recordTargetTrack=0;
     double takeInputLatencySeconds=0.0;
     juce::Label title,tempoLabel,gainLabel,panLabel;
     juce::Slider gainControl,panControl,masterGain;
