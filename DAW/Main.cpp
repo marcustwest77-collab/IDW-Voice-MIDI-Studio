@@ -952,6 +952,13 @@ private:
         startTimerHz(30);
     }
     void toggleRecording(){
+        // Calibration owns a physical input/output while active. Do not let
+        // recording start and contaminate either the pulse capture or a take.
+        if(loopbackCapture.isActive()){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Calibration running","Finish the live loopback test before starting a recording.");
+            return;
+        }
         if(exportRunning.load())return;
         // Recording may stop while the transport runs, but must not start
         // while ordinary playback is active.
