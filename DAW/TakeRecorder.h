@@ -13,8 +13,6 @@ public:
     bool start(const juce::File& destination, double sampleRate,
                int channelsToRecord=1, int firstInputChannel=0) {
         stop();
-        droppedBlocks.store(0,std::memory_order_relaxed);
-        rejectedWrites.store(0,std::memory_order_relaxed);
         if(!std::isfinite(sampleRate) || sampleRate<=0 || destination.existsAsFile() ||
            (channelsToRecord!=1 && channelsToRecord!=2) || firstInputChannel<0)return false;
         if(!destination.getParentDirectory().createDirectory())return false;
@@ -37,6 +35,9 @@ public:
             writer.release(),diskThread,32768);
         const juce::ScopedLock lock(guard);
         activeWriter=std::move(threaded);
+        // Reset diagnostics only after the next take actually starts.
+        droppedBlocks.store(0,std::memory_order_relaxed);
+        rejectedWrites.store(0,std::memory_order_relaxed);
         inputChannels=channelsToRecord;
         inputStartChannel=firstInputChannel;
         currentFile=destination;
