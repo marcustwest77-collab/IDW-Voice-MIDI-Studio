@@ -2,6 +2,8 @@
 #include "LatencyAlignment.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <memory>
+#include <cmath>
+#include <limits>
 #include <vector>
 
 namespace idw::daw {
@@ -22,7 +24,10 @@ inline WavLoopbackResult analyzeLoopbackWav(const juce::File& file,
         format.createReaderFor(file.createInputStream().release(),true));
     if(!reader || reader->sampleRate<=0 || channel<0 ||
        channel>=static_cast<int>(reader->numChannels) ||
-       reader->lengthInSamples<=0 || reader->lengthInSamples>48000LL*60*10)
+       reader->lengthInSamples<=0 || !std::isfinite(reader->sampleRate) ||
+       reader->lengthInSamples>reader->sampleRate*60.0 ||
+       reader->lengthInSamples>std::numeric_limits<int>::max() ||
+       reader->numChannels>8)
         return result;
     result.sampleRate=reader->sampleRate;
     const auto frames=static_cast<int>(reader->lengthInSamples);
