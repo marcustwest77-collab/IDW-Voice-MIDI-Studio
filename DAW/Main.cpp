@@ -1096,9 +1096,10 @@ private:
             const int callbackInput=device
                 ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physicalInput)
                 : -1;
-            if(callbackInput<0){
+            if(!device || physicalInput<0 ||
+               physicalInput>=device->getInputChannelNames().size() || callbackInput<0){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-                    "Input unavailable","Enable the selected input in audio device settings.");
+                    "Input unavailable","Select an existing enabled input in audio device settings.");
                 return;
             }
             if(recorder.start(destination,deviceRate,1,callbackInput)){
