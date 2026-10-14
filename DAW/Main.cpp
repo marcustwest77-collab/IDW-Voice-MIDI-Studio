@@ -812,10 +812,9 @@ private:
         const int input=session.tracks[selectedTrack].inputChannel;
         // JUCE callback channel arrays are packed by enabled hardware channels.
         // Translate the selected physical input index to its callback slot.
-        int callbackInput=0;
-        if(device && input>=0)
-            for(int channel=0;channel<input;++channel)
-                if(device->getActiveInputChannels()[channel])++callbackInput;
+        const int callbackInput=device
+            ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),input)
+            : -1;
         if(!device || input<0 || input>=device->getInputChannelNames().size() ||
            device->getOutputChannelNames().isEmpty() ||
            !device->getActiveInputChannels()[input] ||
