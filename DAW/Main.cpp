@@ -2,6 +2,7 @@
 #include "PlaybackTiming.h"
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
+#include "LoopbackCapture.h" // experimental live capture engine; not wired to UI yet
 #include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
