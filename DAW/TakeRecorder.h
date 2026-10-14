@@ -17,7 +17,7 @@ public:
         rejectedWrites.store(0,std::memory_order_relaxed);
         if(!std::isfinite(sampleRate) || sampleRate<=0 || destination.existsAsFile() ||
            (channelsToRecord!=1 && channelsToRecord!=2) || firstInputChannel<0)return false;
-        destination.getParentDirectory().createDirectory();
+        if(!destination.getParentDirectory().createDirectory())return false;
         std::unique_ptr<juce::FileOutputStream> output(destination.createOutputStream());
         if(!output){
             // File creation may leave an empty or partial destination behind.
