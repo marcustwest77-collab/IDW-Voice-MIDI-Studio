@@ -14,7 +14,7 @@ class IDWMultiTakeRecorder final : public juce::AudioIODeviceCallback {
 public:
     struct Input {
         juce::File file;
-        int deviceChannel = 0; // zero-based physical input index
+        int deviceChannel = 0; // zero-based packed audio callback input slot
     };
     static constexpr std::size_t maxTracks = 8;
 
@@ -129,7 +129,7 @@ public:
                     if(auto* out=outputs[channel])
                         for(int frame=0;frame<samples;++frame)
                             out[frame]=juce::jlimit(-0.5f,0.5f,
-                                out[frame]+source[frame]*monitor);
+                                out[frame]+(std::isfinite(source[frame])?source[frame]:0.0f)*monitor);
                 }
             }
             const float* mono[] { source };
