@@ -289,6 +289,19 @@ int main(){
  if(locateLoopbackPulse(pulse.data(),pulse.size(),1024,200).valid ||
     locateLoopbackPulse(nullptr,0,0,1).valid)
     throw std::runtime_error("invalid/silent loopback accepted");
+ // Repeated loopback pulses tolerate one noisy transient but reject
+ // inconsistent measurements instead of applying an unsafe correction.
+ std::vector<float> repeated(8192,0.0f);
+ const std::vector<std::size_t> pulsePositions{1024,2048,3072,4096,5120};
+ for(const auto pos:pulsePositions)repeated[pos+72]=0.9f;
+ repeated[4096+72]=0.0f;
+ repeated[4096-80]=1.0f; // one deliberate outlier
+ auto calibration=estimateLoopbackLatency(repeated.data(),repeated.size(),pulsePositions,200);
+ if(!calibration.valid || calibration.lagSamples!=72 || calibration.accepted!=4)
+    throw std::runtime_error("repeated loopback estimation");
+ repeated.assign(8192,0.0f);
+ if(estimateLoopbackLatency(repeated.data(),repeated.size(),pulsePositions,200).valid)
+    throw std::runtime_error("silent loopback was calibrated");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
