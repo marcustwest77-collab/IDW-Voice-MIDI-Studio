@@ -709,6 +709,7 @@ private:
             const bool wasMulti=multiRecorder.isRecording();
             recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
             const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : 0;
+            const auto rejected=wasMulti ? multiRecorder.getRejectedWrites() : 0;
             // Stop the transport before changing the audio graph.
             for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(0);}
             playing.store(false);stopTimer();sessionFrames.store(0);playheadBeats=0;
@@ -719,6 +720,9 @@ private:
                     if(!importTake(item.second))failures+=item.second.getFileName()+" ";
                 }
                 multiTakes.clear();
+                if(rejected>0)juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,"Audio disk buffer overflow",
+                    juce::String(rejected)+" WAV write operations were rejected. Check recorded takes for missing audio.");
                 if(dropped>0)juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,"Recording may be incomplete",
                     juce::String(dropped)+" audio input blocks were skipped. Check recording synchronization.");
