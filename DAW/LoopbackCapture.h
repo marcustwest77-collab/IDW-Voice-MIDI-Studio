@@ -28,6 +28,8 @@ public:
     void cancel(){active.store(false);}
     bool isActive()const{return active.load();}
     bool isComplete()const{return complete.load();}
+    // The UI must consume each finished capture once to avoid repeat dialogs.
+    bool consumeComplete(){return complete.exchange(false);}
     int recordedSamples()const{return written.load();}
     double getSampleRate()const{return sampleRate;}
     const juce::AudioBuffer<float>& getCapturedBuffer()const{return captured;}
