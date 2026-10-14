@@ -22,6 +22,7 @@ public:
         formats.registerBasicFormats();
         setAudioChannels(1,2);
         deviceManager.addAudioCallback(&recorder);
+        deviceManager.addAudioCallback(&multiRecorder);
         title.setText("IDW  |  VOICE MIDI STUDIO DAW  |  V14 FOUNDATION",juce::dontSendNotification);
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
@@ -110,7 +111,7 @@ public:
             std::atomic_store_explicit(&playbackSession,
                 std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
             sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
-        stop.onClick=[this]{if(exportRunning.load())return;if(recorder.isRecording())toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;refreshMixer();repaint();};
+        stop.onClick=[this]{if(exportRunning.load())return;if(recorder.isRecording() || multiRecorder.isRecording())toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;refreshMixer();repaint();};
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
         saveProject.onClick=[this]{saveProjectFile();};
@@ -689,24 +690,35 @@ private:
         if(exportRunning.load())return;
         // Recording may stop while the transport runs, but must not start
         // while ordinary playback is active.
-        if(!recorder.isRecording() && playing.load())return;
-        if(recorder.isRecording()){
-            recorder.stop();record.setButtonText("RECORD VOCAL");
+        if(!recorder.isRecording() && !multiRecorder.isRecording() && playing.load())return;
+        if(recorder.isRecording() || multiRecorder.isRecording()){
+            const bool wasMulti=multiRecorder.isRecording();
+            recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
             // Stop the transport before changing the audio graph.
             for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(0);}
             playing.store(false);stopTimer();sessionFrames.store(0);playheadBeats=0;
-            const auto take=recorder.file();
-            if(!importTake(take))
-                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Take saved, import failed",take.getFullPathName());
+            if(wasMulti){
+                juce::String failures;
+                for(const auto& item:multiTakes){
+                    recordTargetTrack=item.first;
+                    if(!importTake(item.second))failures+=item.second.getFileName()+" ";
+                }
+                multiTakes.clear();
+                if(failures.isNotEmpty())juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,"Multitrack import incomplete",failures);
+            }else{
+                const auto take=recorder.file();
+                if(!importTake(take))
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                        "Take saved, import failed",take.getFullPathName());
+            }
             return;
         }
-        // One input stream is currently available; choose the first armed
-        // audio track. Multiple armed tracks do not imply simultaneous capture.
-        recordTargetTrack=session.tracks.size();
+        std::vector<std::size_t> selectedInputs;
         for(std::size_t i=0;i<session.tracks.size();++i)
-            if(session.tracks[i].type==idw::daw::TrackType::audio && armedTracks[i]){
-                recordTargetTrack=i;break;
-            }
+            if(session.tracks[i].type==idw::daw::TrackType::audio && armedTracks[i])
+                selectedInputs.push_back(i);
+        recordTargetTrack=selectedInputs.empty()?session.tracks.size():selectedInputs.front();
         if(recordTargetTrack>=session.tracks.size()){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                 "No armed audio track","Select an audio track and enable ARM INPUT before recording.");
@@ -723,8 +735,32 @@ private:
             if(deviceRate>0 && std::isfinite(deviceRate))
                 takeInputLatencySeconds=(double)std::max(0,device->getInputLatencyInSamples())/deviceRate;
         takeStartBeat=deviceRate>0 ? (double)sessionFrames.load()*session.bpm/(deviceRate*60.0) : 0.0;
-        if(recorder.start(destination,deviceRate))record.setButtonText("STOP RECORD");
-        else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Recording unavailable","Check microphone permission, device input and destination directory.");
+        if(selectedInputs.size()>1){
+            auto* device=deviceManager.getCurrentAudioDevice();
+            const int available=device ? device->getActiveInputChannels().countNumberOfSetBits() : 0;
+            if(selectedInputs.size()>IDWMultiTakeRecorder::maxTracks ||
+               (int)selectedInputs.size()>available){
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "More inputs needed","Enable one physical input per armed audio track in audio device settings.");
+                return;
+            }
+            std::vector<IDWMultiTakeRecorder::Input> inputs;
+            multiTakes.clear();
+            for(std::size_t i=0;i<selectedInputs.size();++i){
+                const auto path=folder.getNonexistentChildFile(
+                    "Take "+juce::String(selectedInputs[i]+1)+" "+juce::String(juce::Time::getCurrentTime().toMilliseconds()),".wav",false);
+                inputs.push_back({path,(int)i});
+                multiTakes.emplace_back(selectedInputs[i],path);
+            }
+            if(multiRecorder.start(inputs,deviceRate))record.setButtonText("STOP RECORD");
+            else{
+                multiTakes.clear();
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "Multitrack unavailable","Could not start all armed inputs.");
+            }
+        }else if(recorder.start(destination,deviceRate))record.setButtonText("STOP RECORD");
+        else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            "Recording unavailable","Check microphone permission, device input and destination directory.");
     }
     void loadAudio(){
         chooser=std::make_unique<juce::FileChooser>("Select WAV or AIFF audio file",juce::File{},"*.wav;*.aiff;*.aif");
@@ -744,7 +780,7 @@ private:
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {if(exportThread.joinable())exportThread.join();recorder.stop();deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
     std::atomic<bool> exportCancel{false};
@@ -779,6 +815,8 @@ private:
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
     IDWTakeRecorder recorder;
+    IDWMultiTakeRecorder multiRecorder;
+    std::vector<std::pair<std::size_t,juce::File>> multiTakes;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
     // Allocated on the message thread before transport starts; audio only reads.
