@@ -219,9 +219,9 @@ public:
         synthPreset.setBounds(projectRow.removeFromLeft(100).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
-        gainControl.setBounds(mixRow.removeFromLeft(185));
+        gainControl.setBounds(mixRow.removeFromLeft(165));
         panLabel.setBounds(mixRow.removeFromLeft(45));
-        panControl.setBounds(mixRow.removeFromLeft(185));
+        panControl.setBounds(mixRow.removeFromLeft(165));
         muteControl.setBounds(mixRow.removeFromLeft(80));
         soloControl.setBounds(mixRow.removeFromLeft(75));
         previousTrack.setBounds(mixRow.removeFromLeft(100));
@@ -788,9 +788,18 @@ private:
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "Multitrack unavailable","Could not start all armed inputs.");
             }
-        }else if(recorder.start(destination,deviceRate,1,inputAssignments[recordTargetTrack]))record.setButtonText("STOP RECORD");
-        else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-            "Recording unavailable","Check microphone permission, device input and destination directory.");
+        }else{
+            auto* device=deviceManager.getCurrentAudioDevice();
+            if(!device || !device->getActiveInputChannels()[inputAssignments[recordTargetTrack]]){
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "Input unavailable","Enable the selected input in audio device settings.");
+                return;
+            }
+            if(recorder.start(destination,deviceRate,1,inputAssignments[recordTargetTrack]))
+                record.setButtonText("STOP RECORD");
+            else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Recording unavailable","Check microphone permission, device input and destination directory.");
+        }
     }
     void loadAudio(){
         chooser=std::make_unique<juce::FileChooser>("Select WAV or AIFF audio file",juce::File{},"*.wav;*.aiff;*.aif");
