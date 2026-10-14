@@ -28,8 +28,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $apps = @(Get-ChildItem -Path build-v14 -Recurse -File -Filter '*.exe' |
-            Where-Object { $_.Name -like '*IDW*DAW*.exe' -and $_.FullName -match 'Release' })
+          $apps = @(Get-ChildItem -Path 'build-v14/IDWDAW_artefacts/Release' -File -Filter '*.exe' |
+            Where-Object { $_.Name -eq 'IDW DAW V14 Foundation.exe' })
           if ($apps.Count -ne 1) { throw "Expected exactly one Release DAW executable; found $($apps.Count): $($apps.FullName -join ', ')" }
           New-Item -ItemType Directory -Force -Path beta-windows | Out-Null
           Copy-Item $apps[0].FullName beta-windows/IDW-DAW-V14-Beta.exe
