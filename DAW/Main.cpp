@@ -26,6 +26,7 @@ public:
         setAudioChannels(8,2); // Request up to eight available hardware inputs.
         deviceManager.addAudioCallback(&recorder);
         deviceManager.addAudioCallback(&multiRecorder);
+        deviceManager.addAudioCallback(&loopbackCapture);
         title.setText("IDW  |  VOICE MIDI STUDIO DAW  |  V14 FOUNDATION",juce::dontSendNotification);
         title.setColour(juce::Label::textColourId,juce::Colours::gold);
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
@@ -124,6 +125,10 @@ public:
         generateCalibration.setTooltip("Generate a safe-level 48 kHz test WAV with pulses at 100, 200, 300, 400, 500 ms.");
         addAndMakeVisible(generateCalibration);
         generateCalibration.onClick=[this]{createCalibrationReference();};
+        liveCalibration.setButtonText("LIVE LOOPBACK TEST");
+        liveCalibration.setTooltip("Experimental: route audio interface line output 1 to selected line input. Low-volume pulses; headphones disconnected from loopback path.");
+        addAndMakeVisible(liveCalibration);
+        liveCalibration.onClick=[this]{startLiveCalibration();};
         overdubControl.setButtonText("PLAY BEAT WHILE RECORDING");
         overdubControl.setTooltip("Play existing tracks while capturing new takes on empty armed tracks.");
         overdubControl.setToggleState(false,juce::dontSendNotification);
@@ -272,6 +277,7 @@ public:
         latencyAdjust.setBounds(overdubRow.removeFromLeft(200));
         analyzeCalibration.setBounds(overdubRow.removeFromLeft(200).reduced(3));
         generateCalibration.setBounds(overdubRow.removeFromLeft(170).reduced(3));
+        liveCalibration.setBounds(overdubRow.removeFromLeft(175).reduced(3));
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
@@ -550,6 +556,28 @@ private:
         session.setTrackMix(selectedTrack,(float)gainControl.getValue(),(float)panControl.getValue());
     }
     void timerCallback() override {
+        if(loopbackCapture.isComplete()){
+            const auto& captured=loopbackCapture.getCapturedBuffer();
+            const double rate=loopbackCapture.getSampleRate();
+            std::vector<std::size_t> pulses;
+            for(const int ms:{100,200,300,400,500})
+                pulses.push_back(static_cast<std::size_t>(std::llround(ms*rate/1000.0)));
+            const auto alignment=idw::daw::estimateLoopbackLatency(
+                captured.getReadPointer(0),static_cast<std::size_t>(loopbackCapture.recordedSamples()),
+                pulses,static_cast<std::size_t>(std::llround(rate*0.04)));
+            loopbackCapture.cancel();
+            liveCalibration.setEnabled(true);
+            const auto quality=idw::daw::assessCalibration(alignment,rate);
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                "Live loopback result",alignment.valid
+                    ? "Measured "+juce::String(idw::daw::alignmentMilliseconds(alignment.lagSamples,rate),3)+
+                      " ms, matched "+juce::String((int)alignment.accepted)+"/5 pulses. Quality: "+
+                      juce::String(quality==idw::daw::CalibrationQuality::consistent?"consistent":"repeat test")+
+                      ". No take trim changed."
+                    : "No reliable loopback measurement. Confirm line-level output-to-input routing.");
+            if(!playing.load() && !recorder.isRecording() && !multiRecorder.isRecording())stopTimer();
+            return;
+        }
         if(multiRecorder.isRecording()){
             juce::String levels("RECORDING INPUTS  ");
             float maximum=0.0f;
@@ -759,6 +787,22 @@ private:
         target->file=take;target->reader=std::move(source);
         selectedTrack=target->trackIndex;
         refreshMixer();repaint();return true;
+    }
+    void startLiveCalibration(){
+        if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() ||
+           exportRunning.load() || loopbackCapture.isActive())return;
+        auto* device=deviceManager.getCurrentAudioDevice();
+        const int input=session.tracks[selectedTrack].inputChannel;
+        if(!device || input<0 || !device->getActiveInputChannels()[input] ||
+           !device->getActiveOutputChannels()[0] ||
+           !loopbackCapture.prepare(device->getCurrentSampleRate(),input,0) ||
+           !loopbackCapture.start()){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Live loopback unavailable","Select a track with an enabled line input and enable output channel 1.");
+            return;
+        }
+        liveCalibration.setEnabled(false);
+        startTimerHz(15);
     }
     void createCalibrationReference(){
         if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load())return;
@@ -1046,7 +1090,7 @@ private:
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
     std::atomic<bool> exportCancel{false};
@@ -1075,7 +1119,7 @@ private:
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration,liveCalibration;
     juce::ComboBox synthPreset;
     juce::Label attackLabel,releaseLabel;
     juce::Slider attackControl,releaseControl;
@@ -1084,6 +1128,7 @@ private:
     IDWConnectPanel connectPanel;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
+    IDWLoopbackCapture loopbackCapture;
     std::vector<std::pair<std::size_t,juce::File>> multiTakes;
     juce::AudioFormatManager formats;
     std::atomic<int64_t> sessionFrames{0};
