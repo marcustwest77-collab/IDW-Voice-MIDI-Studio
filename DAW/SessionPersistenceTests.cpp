@@ -314,6 +314,17 @@ int main(){
  if(estimateLoopbackLatency(overlapSignal.data(),overlapSignal.size(),
       {500,500,900},40).valid)
     throw std::runtime_error("duplicate pulse schedule accepted");
+ // Truncated recordings must not be reported as reliable calibration.
+ std::vector<float> truncatedSignal(2048,0.0f);
+ truncatedSignal[1024]=0.9f;
+ truncatedSignal[1536]=0.9f;
+ truncatedSignal[2040]=0.9f;
+ if(estimateLoopbackLatency(truncatedSignal.data(),truncatedSignal.size(),
+      {1024,1536,2040},32).valid)
+    throw std::runtime_error("truncated loopback accepted");
+ if(estimateLoopbackLatency(truncatedSignal.data(),truncatedSignal.size(),
+      {8,512,1024},32).valid)
+    throw std::runtime_error("partial initial pulse search accepted");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
