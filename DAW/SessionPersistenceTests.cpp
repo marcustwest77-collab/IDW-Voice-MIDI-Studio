@@ -299,7 +299,8 @@ int main(){
  repeated[4096+72]=0.0f;
  repeated[4096-80]=1.0f; // one deliberate outlier
  auto calibration=estimateLoopbackLatency(repeated.data(),repeated.size(),pulsePositions,200);
- if(!calibration.valid || calibration.lagSamples!=72 || calibration.accepted!=4)
+ if(!calibration.valid || calibration.lagSamples!=72 || calibration.accepted!=4 ||
+    calibration.jitterSamples!=0)
     throw std::runtime_error("repeated loopback estimation");
  repeated.assign(8192,0.0f);
  if(estimateLoopbackLatency(repeated.data(),repeated.size(),pulsePositions,200).valid)
