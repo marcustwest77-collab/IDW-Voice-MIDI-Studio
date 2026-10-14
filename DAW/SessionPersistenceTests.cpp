@@ -6,6 +6,7 @@
 #include "PlaybackTiming.h"
 #include "LatencyAlignment.h"
 #include "LoopbackWavAnalysis.h"
+#include "LoopbackReference.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
@@ -383,6 +384,14 @@ int main(){
     throw std::runtime_error("WAV loopback analysis failed");
  if(analyzeLoopbackWav(loopbackFile,3,wavPulsePositions,150).alignment.valid)
     throw std::runtime_error("invalid WAV channel accepted");
+ const auto referenceFile=root.getChildFile("reference-pulses.wav");
+ if(!writeLoopbackReference(referenceFile,48000.0,{100.0,200.0,300.0,400.0,500.0}))
+    throw std::runtime_error("loopback reference generator");
+ auto referenceReader=std::unique_ptr<juce::AudioFormatReader>(
+    wav.createReaderFor(referenceFile.createInputStream().release(),true));
+ if(!referenceReader || referenceReader->sampleRate!=48000.0 ||
+    referenceReader->lengthInSamples<24000)
+    throw std::runtime_error("invalid generated loopback WAV");
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
 }
