@@ -158,7 +158,7 @@ public:
         inputChannel.onChange=[this]{
             if(selectedTrack>=session.tracks.size() || playing.load() ||
                recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load())return;
-            inputAssignments[selectedTrack]=inputChannel.getSelectedId()-1;
+            session.tracks[selectedTrack].inputChannel=inputChannel.getSelectedId()-1;
         };
         armControl.setButtonText("ARM INPUT");addAndMakeVisible(armControl);
         armedTracks[0]=true; // Existing single-microphone workflow remains ready by default.
@@ -496,7 +496,7 @@ private:
         inputChannel.setEnabled(track.type==idw::daw::TrackType::audio &&
             !playing.load() && !recorder.isRecording() &&
             !multiRecorder.isRecording() && !exportRunning.load());
-        inputChannel.setSelectedId(inputAssignments[selectedTrack]+1,juce::dontSendNotification);
+        inputChannel.setSelectedId(track.inputChannel+1,juce::dontSendNotification);
     }
     void selectTrack(int direction){
         if(playing.load() || session.tracks.empty())return;
@@ -607,6 +607,7 @@ private:
         sources.clear();
         session=std::move(restored);
         sources=std::move(staged);
+        armedTracks.fill(false); // Reopening a project must never arm recording automatically.
         selectedTrack=0;sessionFrames.store(0);playheadBeats=0;
         tempo.setValue(session.bpm,juce::dontSendNotification);
         refreshMixer();repaint();
@@ -788,10 +789,10 @@ private:
             const auto active=device ? device->getActiveInputChannels() : juce::BigInteger();
             bool validInputs=device!=nullptr;
             for(std::size_t i=0;i<selectedInputs.size();++i){
-                const int channel=inputAssignments[selectedInputs[i]];
+                const int channel=session.tracks[selectedInputs[i]].inputChannel;
                 if(channel<0 || !active[channel])validInputs=false;
                 for(std::size_t j=0;j<i;++j)
-                    if(inputAssignments[selectedInputs[j]]==channel)validInputs=false;
+                    if(session.tracks[selectedInputs[j]].inputChannel==channel)validInputs=false;
             }
             if(selectedInputs.size()>IDWMultiTakeRecorder::maxTracks ||
                !validInputs){
@@ -804,7 +805,7 @@ private:
             for(std::size_t i=0;i<selectedInputs.size();++i){
                 const auto path=folder.getNonexistentChildFile(
                     "Take "+juce::String(selectedInputs[i]+1)+" "+juce::String(juce::Time::getCurrentTime().toMilliseconds()),".wav",false);
-                inputs.push_back({path,inputAssignments[selectedInputs[i]]});
+                inputs.push_back({path,session.tracks[selectedInputs[i]].inputChannel});
                 multiTakes.emplace_back(selectedInputs[i],path);
             }
             if(multiRecorder.start(inputs,deviceRate)){
@@ -818,12 +819,12 @@ private:
             }
         }else{
             auto* device=deviceManager.getCurrentAudioDevice();
-            if(!device || !device->getActiveInputChannels()[inputAssignments[recordTargetTrack]]){
+            if(!device || !device->getActiveInputChannels()[session.tracks[recordTargetTrack].inputChannel]){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "Input unavailable","Enable the selected input in audio device settings.");
                 return;
             }
-            if(recorder.start(destination,deviceRate,1,inputAssignments[recordTargetTrack]))
+            if(recorder.start(destination,deviceRate,1,session.tracks[recordTargetTrack].inputChannel))
                 record.setButtonText("STOP RECORD");
             else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                 "Recording unavailable","Check microphone permission, device input and destination directory.");
@@ -872,7 +873,6 @@ private:
     std::atomic<float> masterLevel{1.0f};
     juce::ToggleButton muteControl,soloControl,armControl;
     juce::ComboBox inputChannel;
-    std::array<int,128> inputAssignments{};
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
