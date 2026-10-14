@@ -799,6 +799,13 @@ private:
     void startLiveCalibration(){
         if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() ||
            exportRunning.load() || loopbackCapture.isActive())return;
+        // Input routing belongs to audio tracks; never index a missing track.
+        if(selectedTrack>=session.tracks.size() ||
+           session.tracks[selectedTrack].type!=idw::daw::TrackType::audio){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Live loopback unavailable","Select an audio track with an enabled line input.");
+            return;
+        }
         auto* device=deviceManager.getCurrentAudioDevice();
         const int input=session.tracks[selectedTrack].inputChannel;
         if(!device || input<0 || !device->getActiveInputChannels()[input] ||
