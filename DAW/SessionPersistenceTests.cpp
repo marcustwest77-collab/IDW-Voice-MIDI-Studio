@@ -331,6 +331,15 @@ int main(){
  if(estimateLoopbackLatency(truncatedSignal.data(),truncatedSignal.size(),
       {8,512,1024},32).valid)
     throw std::runtime_error("partial initial pulse search accepted");
+ RepeatedPulseAlignment stableQuality;
+ stableQuality.valid=true;stableQuality.accepted=5;stableQuality.total=5;
+ stableQuality.jitterSamples=4;
+ if(assessCalibration(stableQuality,48000.0)!=CalibrationQuality::consistent)
+    throw std::runtime_error("stable loopback quality");
+ stableQuality.jitterSamples=20;
+ if(assessCalibration(stableQuality,48000.0)!=CalibrationQuality::repeat ||
+    assessCalibration(stableQuality,0.0)!=CalibrationQuality::invalid)
+    throw std::runtime_error("unstable loopback quality");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
