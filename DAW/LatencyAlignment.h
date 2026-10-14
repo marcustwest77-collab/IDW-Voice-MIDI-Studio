@@ -93,6 +93,19 @@ inline RepeatedPulseAlignment estimateLoopbackLatency(
     result.lagSamples=median;
     return result;
 }
+// Conservative UI quality label; never authorizes applying a correction.
+// A measurement with large pulse-to-pulse variation should be repeated.
+enum class CalibrationQuality { invalid, repeat, consistent };
+inline CalibrationQuality assessCalibration(const RepeatedPulseAlignment& measurement,
+                                             double sampleRate,
+                                             double maxJitterMs=0.25) {
+    if(!measurement.valid || !std::isfinite(sampleRate) || sampleRate<=0.0 ||
+       !std::isfinite(maxJitterMs) || maxJitterMs<0.0 ||
+       measurement.accepted>measurement.total)return CalibrationQuality::invalid;
+    const double jitterMs=1000.0*measurement.jitterSamples/sampleRate;
+    return jitterMs<=maxJitterMs ? CalibrationQuality::consistent
+                                 : CalibrationQuality::repeat;
+}
 inline double alignmentMilliseconds(int lagSamples,double sampleRate){
     return std::isfinite(sampleRate) && sampleRate>0.0
         ?1000.0*static_cast<double>(lagSamples)/sampleRate:0.0;
