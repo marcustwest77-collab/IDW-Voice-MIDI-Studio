@@ -854,7 +854,10 @@ private:
                       " pulses. Maximum accepted timing deviation: "+
                       juce::String(measured.alignment.jitterSamples)+" samples ("+
                       juce::String(idw::daw::alignmentMilliseconds(measured.alignment.jitterSamples,measured.sampleRate),3)+
-                      " ms). No trim setting was changed."
+                      " ms). Quality: "+
+                      juce::String(idw::daw::assessCalibration(measured.alignment,measured.sampleRate)==
+                          idw::daw::CalibrationQuality::consistent ? "consistent" : "repeat measurement")+
+                      ". No trim setting was changed."
                     : "Could not establish a consistent pulse offset. Confirm the channel, sample rate, pulse schedule and recording.";
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                     "Loopback analysis",message);
