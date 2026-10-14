@@ -365,3 +365,7 @@ Enable **PLAY BEAT WHILE RECORDING**, arm an **empty audio track**, then press *
 ### Manual take-alignment adjustment
 
 The **TAKE TRIM ms** control adds a signed correction (-100 to +250 milliseconds) to the input device's reported latency. Zero preserves the old behavior. The adjusted trim is applied non-destructively as a clip source offset when each recorded WAV is imported; the WAV itself is preserved. Positive values remove more initial captured audio; negative values remove less (never less than zero). The value is captured when recording begins, not while recording. This is a manual troubleshooting aid, **not automatic loopback calibration or sample-accurate synchronization**. Test alignment with a transient/click recorded through a physical loopback before relying on the correction.
+
+### Loopback timing regression (synthetic)
+
+`DAW/LatencyAlignment.h` provides a deterministic pulse locator: supply a recorded float buffer, the expected sample index, and a search radius to obtain a signed sample lag and millisecond conversion. `DAW/SessionPersistenceTests.cpp` checks a pulse 96 samples late, 96 samples early, and absent input at 48 kHz. These are **synthetic unit tests**, not measurements of the user's audio interface. A physical loopback recording, matched clock reference, and safe repeatability tests are still needed before offering automatic latency calibration.
