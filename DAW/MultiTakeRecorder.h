@@ -9,7 +9,7 @@
 
 // Experimental V14 simultaneous recording engine. One device callback feeds up
 // to eight independent mono WAV files. No allocation occurs in the callback.
-// Not yet wired to the track-arm UI; see DAW/README.md.
+// Connected to the experimental arm/input UI; physical-device QA is pending.
 class IDWMultiTakeRecorder final : public juce::AudioIODeviceCallback {
 public:
     struct Input {
@@ -31,6 +31,7 @@ public:
     bool start(const std::vector<Input>& inputs, double sampleRate) {
         stop();
         droppedBlocks.store(0,std::memory_order_relaxed);
+        rejectedWrites.store(0,std::memory_order_relaxed);
         if(!std::isfinite(sampleRate) || sampleRate <= 0 ||
            inputs.empty() || inputs.size() > maxTracks)return false;
         for(std::size_t i=0;i<inputs.size();++i){
@@ -77,6 +78,9 @@ public:
     std::uint64_t getDroppedBlocks() const noexcept {
         return droppedBlocks.load(std::memory_order_relaxed);
     }
+    std::uint64_t getRejectedWrites() const noexcept {
+        return rejectedWrites.load(std::memory_order_relaxed);
+    }
     bool isRecording() const {
         const juce::ScopedLock lock(guard);
         return count!=0;
@@ -100,7 +104,8 @@ public:
             }
         for(std::size_t i=0;i<count;++i){
             const float* mono[] { inputs[slots[i].channel] };
-            slots[i].writer->write(mono,samples);
+            if(!slots[i].writer->write(mono,samples))
+                rejectedWrites.fetch_add(1,std::memory_order_relaxed);
         }
     }
     void audioDeviceAboutToStart(juce::AudioIODevice*) override {}
@@ -123,4 +128,5 @@ private:
     std::array<Slot,maxTracks> slots;
     std::size_t count=0;
     std::atomic<std::uint64_t> droppedBlocks{0};
+    std::atomic<std::uint64_t> rejectedWrites{0};
 };
