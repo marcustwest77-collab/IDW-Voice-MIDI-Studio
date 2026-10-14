@@ -389,3 +389,7 @@ Use **ANALYZE LOOPBACK WAV** while idle, enter the *known* pulse timestamps in m
 ### Generate a calibration reference in the app
 
 Click **CREATE PULSE WAV** while transport and recording are stopped, choose a new output filename, and save. The generated mono 48 kHz reference contains five known pulses at 100, 200, 300, 400, and 500 milliseconds. The generator does not overwrite existing WAV files. Play it externally through the interface's supported line-level output, record the returned signal on an input, then click **ANALYZE LOOPBACK WAV** and enter `100,200,300,400,500` to inspect the detected lag. Reference playback and capture are not automated or sample-clock synchronized yet; no correction is automatically applied. Use only electrically compatible line-level loopback connections.
+
+## Recording beta hardware release gate
+
+Before distributing a recording beta, complete the device-specific acceptance checklist in [`RECORDING_BETA_QA.md`](RECORDING_BETA_QA.md). CI compilation and synthetic loopback tests do not replace physical interface latency, headphone monitoring, overdub alignment and 30-minute stress testing on Windows and macOS.
