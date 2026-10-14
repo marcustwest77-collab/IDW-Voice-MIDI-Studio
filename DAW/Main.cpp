@@ -106,6 +106,10 @@ public:
             return true;
         };
         record.setButtonText("RECORD VOCAL");
+        overdubControl.setButtonText("PLAY BEAT WHILE RECORDING");
+        overdubControl.setTooltip("Play existing tracks while capturing new takes on empty armed tracks.");
+        overdubControl.setToggleState(false,juce::dontSendNotification);
+        addAndMakeVisible(overdubControl);
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
         play.onClick=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);
             std::atomic_store_explicit(&playbackSession,
@@ -244,6 +248,7 @@ public:
         auto monitorRow=area.removeFromTop(28);
         monitorControl.setBounds(monitorRow.removeFromLeft(190));
         inputLevel.setBounds(area.removeFromTop(26));
+        overdubControl.setBounds(area.removeFromTop(30).removeFromLeft(285));
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
@@ -548,7 +553,8 @@ private:
         const auto activeSnapshot=std::atomic_load_explicit(&playbackSession,std::memory_order_acquire);
         const double timelineBpm=activeSnapshot?activeSnapshot->bpm:session.bpm;
         playheadBeats=idw::daw::playbackBeat(sessionFrames.load(),deviceRate,timelineBpm);
-        if(playing.load() && activeSnapshot && playheadBeats>=idw::daw::arrangementEndBeat(*activeSnapshot)){
+        if(playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() &&
+           activeSnapshot && playheadBeats>=idw::daw::arrangementEndBeat(*activeSnapshot)){
             playing.store(false);
             if(!exportRunning.load())stopTimer();
             for(auto& slot:sources)slot->transport.stop();
@@ -730,11 +736,27 @@ private:
         selectedTrack=target->trackIndex;
         refreshMixer();repaint();return true;
     }
+    void startOverdubPlayback(){
+        const bool hasMaterial=loadedCount()>0 ||
+            std::any_of(session.tracks.begin(),session.tracks.end(),
+                [](const auto& t){return !t.notes.empty();});
+        if(!hasMaterial)return;
+        std::atomic_store_explicit(&playbackSession,
+            std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
+        sessionFrames.store(0);
+        for(auto& slot:sources){
+            slot->transport.stop();
+            slot->transport.setPosition(slot->sourceOffsetSeconds);
+            slot->transport.start();
+        }
+        playing.store(true);
+        startTimerHz(30);
+    }
     void toggleRecording(){
         if(exportRunning.load())return;
         // Recording may stop while the transport runs, but must not start
         // while ordinary playback is active.
-        if(!(recorder.isRecording() || multiRecorder.isRecording()) && !multiRecorder.isRecording() && playing.load())return;
+        if(!recorder.isRecording() && !multiRecorder.isRecording() && playing.load())return;
         if((recorder.isRecording() || multiRecorder.isRecording())){
             const bool wasMulti=multiRecorder.isRecording();
             multiRecorder.setHeadphoneMonitor(false);
@@ -793,6 +815,18 @@ private:
         takeStartBeat=deviceRate>0 ? (double)sessionFrames.load()*session.bpm/(deviceRate*60.0) : 0.0;
         monitorControl.setToggleState(false,juce::dontSendNotification);
         multiRecorder.setHeadphoneMonitor(false);
+        if(overdubControl.getToggleState()){
+            // Overdubs must use empty destination tracks. Existing material
+            // is preserved and never overwritten by the recording operation.
+            for(const auto index:selectedInputs)
+                for(const auto& slot:sources)
+                    if(slot->trackIndex==index && slot->reader){
+                        juce::AlertWindow::showMessageBoxAsync(
+                            juce::MessageBoxIconType::WarningIcon,"Overdub needs empty tracks",
+                            "Add and arm an empty audio track to record alongside playback.");
+                        return;
+                    }
+        }
         if(selectedInputs.size()>1){
             // A loaded track cannot accept a second AudioSlot reader yet.
             for(const auto index:selectedInputs)
@@ -829,6 +863,7 @@ private:
             if(multiRecorder.start(inputs,deviceRate)){
                 record.setButtonText("STOP RECORD");
                 monitorControl.setEnabled(true);
+                if(overdubControl.getToggleState())startOverdubPlayback();
                 startTimerHz(15); // UI peak updates only; never poll on the audio callback.
             }
             else{
@@ -844,8 +879,10 @@ private:
                     "Input unavailable","Enable the selected input in audio device settings.");
                 return;
             }
-            if(recorder.start(destination,deviceRate,1,session.tracks[recordTargetTrack].inputChannel))
+            if(recorder.start(destination,deviceRate,1,session.tracks[recordTargetTrack].inputChannel)){
                 record.setButtonText("STOP RECORD");
+                if(overdubControl.getToggleState())startOverdubPlayback();
+            }
             else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                 "Recording unavailable","Check microphone permission, device input and destination directory.");
         }
@@ -891,7 +928,7 @@ private:
     std::atomic<float> peakLeft{0.0f},peakRight{0.0f};
     std::atomic<bool> peakClipLeft{false},peakClipRight{false};
     std::atomic<float> masterLevel{1.0f};
-    juce::ToggleButton muteControl,soloControl,armControl,monitorControl;
+    juce::ToggleButton muteControl,soloControl,armControl,monitorControl,overdubControl;
     juce::ComboBox inputChannel;
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextButton previousTrack,nextTrack;
