@@ -524,6 +524,13 @@ int main(){
      0,{4800,9600,14400},128);
  if(missingLoopback.alignment.valid || missingLoopback.sampleRate!=0.0)
     throw std::runtime_error("missing calibration WAV accepted");
+ // Malformed pulse schedules should fail before audio decoding.
+ const auto invalidPlan=analyzeLoopbackWav(referenceFile,0,{4800,4800,14400},128);
+ if(invalidPlan.alignment.valid || invalidPlan.sampleRate!=0.0)
+    throw std::runtime_error("duplicate pulse schedule not rejected before WAV decode");
+ const auto tooClose=analyzeLoopbackWav(referenceFile,0,{4800,4900,14400},128);
+ if(tooClose.alignment.valid || tooClose.sampleRate!=0.0)
+    throw std::runtime_error("overlapping pulse window not rejected before WAV decode");
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
 }
