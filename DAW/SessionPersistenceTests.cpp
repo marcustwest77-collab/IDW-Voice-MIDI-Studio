@@ -407,6 +407,22 @@ int main(){
  if(!liveDelayed.isComplete() || !liveAlignment.valid ||
     liveAlignment.lagSamples!=256 || liveAlignment.accepted!=5)
     throw std::runtime_error("live loopback simulated return latency");
+ // Output pulses must remain within the legal digital signal range.
+ IDWLoopbackCapture boundedOutput;
+ if(!boundedOutput.prepare(48000.0,0,0) || !boundedOutput.start())
+    throw std::runtime_error("bounded calibration setup");
+ float boundedInput[256]{};
+ float boundedSamples[256];
+ const float* boundedInputs[]{boundedInput};
+ float* boundedOutputs[]{boundedSamples};
+ for(int block=0;block<20;++block){
+    std::fill(std::begin(boundedSamples),std::end(boundedSamples),0.95f);
+    boundedOutput.audioDeviceIOCallbackWithContext(boundedInputs,1,boundedOutputs,1,256,{});
+    for(const float value:boundedSamples)
+        if(value>1.0f || value< -1.0f)
+            throw std::runtime_error("live loopback digital output exceeded bounds");
+ }
+ boundedOutput.cancel();
  // Live device interruption must invalidate the capture exactly once.
  IDWLoopbackCapture interrupted;
  if(!interrupted.prepare(48000.0,0,0) || !interrupted.start())
