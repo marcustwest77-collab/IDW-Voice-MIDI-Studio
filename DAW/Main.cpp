@@ -581,7 +581,7 @@ private:
                     ? "Measured "+juce::String(idw::daw::alignmentMilliseconds(alignment.lagSamples,rate),3)+
                       " ms, matched "+juce::String((int)alignment.accepted)+"/5 pulses. Quality: "+
                       juce::String(quality==idw::daw::CalibrationQuality::consistent?"consistent":"repeat test")+
-                      ". No take trim changed."
+                      ". Use TAKE TRIM ms manually after verifying recording alignment. No automatic adjustment was applied."
                     : "No reliable loopback measurement. Confirm line-level output-to-input routing.");
             if(!playing.load() && !recorder.isRecording() && !multiRecorder.isRecording())stopTimer();
             return;
