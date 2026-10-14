@@ -18,12 +18,12 @@ public:
         const int capacity=static_cast<int>(std::ceil(rate*0.8));
         captured.setSize(1,capacity,false,true,false);
         captured.clear();
-        written.store(0);active.store(false);complete.store(false);
+        written.store(0);active.store(false);complete.store(false);failed.store(false);
         return true;
     }
     bool start() {
         if(active.load() || captured.getNumSamples()==0)return false;
-        written.store(0);complete.store(false);active.store(true);
+        written.store(0);complete.store(false);failed.store(false);active.store(true);
         return true;
     }
     void cancel(){active.store(false);}
@@ -31,6 +31,7 @@ public:
     bool isComplete()const{return complete.load();}
     // The UI must consume each finished capture once to avoid repeat dialogs.
     bool consumeComplete(){return complete.exchange(false);}
+    bool consumeFailed(){return failed.exchange(false);}
     int recordedSamples()const{return written.load();}
     double getSampleRate()const{return sampleRate;}
     const juce::AudioBuffer<float>& getCapturedBuffer()const{return captured;}
@@ -40,7 +41,7 @@ public:
         if(!active.load(std::memory_order_acquire) || frames<=0)return;
         if(!inputs || !outputs || inputChannel>=inCount || outputChannel>=outCount ||
            !inputs[inputChannel] || !outputs[outputChannel]){
-            active.store(false);return;
+            active.store(false);failed.store(true);return;
         }
         auto* output=outputs[outputChannel];
         const auto* input=inputs[inputChannel];
@@ -62,10 +63,12 @@ public:
         if(startFrame+usable==capacity){active.store(false);complete.store(true);}
     }
     void audioDeviceAboutToStart(juce::AudioIODevice*)override{}
-    void audioDeviceStopped()override{active.store(false);}
+    void audioDeviceStopped()override{
+        if(active.exchange(false))failed.store(true);
+    }
 private:
     juce::AudioBuffer<float> captured;
-    std::atomic<bool> active{false},complete{false};
+    std::atomic<bool> active{false},complete{false},failed{false};
     std::atomic<int> written{0};
     double sampleRate=0;
     int inputChannel=0,outputChannel=0;
