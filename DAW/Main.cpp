@@ -556,7 +556,7 @@ private:
         session.setTrackMix(selectedTrack,(float)gainControl.getValue(),(float)panControl.getValue());
     }
     void timerCallback() override {
-        if(loopbackCapture.isComplete()){
+        if(loopbackCapture.consumeComplete()){
             const auto& captured=loopbackCapture.getCapturedBuffer();
             const double rate=loopbackCapture.getSampleRate();
             std::vector<std::size_t> pulses;
