@@ -38,6 +38,17 @@ inline WavLoopbackResult analyzeLoopbackWav(const juce::File& file,
         return result;
     if(expectedPulses.size()<3 || expectedPulses.size()>64 || searchRadius==0)
         return result;
+    // Reject malformed timing plans before decoding a potentially large WAV.
+    // Each search window must be complete and disjoint.
+    const auto frameCount=static_cast<std::size_t>(reader->lengthInSamples);
+    if(expectedPulses.front()<searchRadius || expectedPulses.back()>=frameCount ||
+       searchRadius>frameCount-1-expectedPulses.back())return result;
+    for(std::size_t i=1;i<expectedPulses.size();++i){
+        const auto previous=expectedPulses[i-1];
+        const auto current=expectedPulses[i];
+        if(current<=previous || current-previous<=searchRadius ||
+           current-previous-searchRadius<=searchRadius)return result;
+    }
     result.sampleRate=reader->sampleRate;
     const auto frames=static_cast<int>(reader->lengthInSamples);
     juce::AudioBuffer<float> samples(static_cast<int>(reader->numChannels),frames);
