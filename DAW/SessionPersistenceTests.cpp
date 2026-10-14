@@ -528,6 +528,11 @@ int main(){
     throw std::runtime_error("recorder diagnostic reset setup");
  if(captureDiagnostics.getDroppedBlocks()!=0 || captureDiagnostics.getRejectedWrites()!=0)
     throw std::runtime_error("recorder counters leaked into next take");
+ // Valid input must be accepted without incrementing either error counter.
+ const float* validCaptureInputs[]{sample};
+ captureDiagnostics.audioDeviceIOCallbackWithContext(validCaptureInputs,1,nullptr,0,256,{});
+ if(captureDiagnostics.getDroppedBlocks()!=0 || captureDiagnostics.getRejectedWrites()!=0)
+    throw std::runtime_error("valid microphone callback incorrectly flagged");
  captureDiagnostics.stop();
  const auto sourceAudio=root.getChildFile("source.wav");
  // Construct a genuine 16-bit PCM WAV fixture rather than copying arbitrary bytes.
