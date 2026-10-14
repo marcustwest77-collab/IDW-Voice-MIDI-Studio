@@ -12,6 +12,7 @@
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
+#include <limits>
 #include <iostream>
 int main(){
  using namespace idw::daw;
@@ -517,6 +518,11 @@ int main(){
  const auto invalidRateTake=root.getChildFile("invalid-rate.wav");
  if(captureDiagnostics.start(invalidRateTake,0.0,1,0) || invalidRateTake.existsAsFile())
     throw std::runtime_error("invalid sample rate created a take");
+ for(const double badRate:{-1.0,7999.0,192001.0,std::numeric_limits<double>::infinity()}){
+    const auto path=root.getChildFile("out-of-range-rate.wav");
+    if(captureDiagnostics.start(path,badRate,1,0) || path.existsAsFile())
+       throw std::runtime_error("invalid recording sample rate accepted");
+ }
  if(captureDiagnostics.start(root.getChildFile("invalid-channel.wav"),48000.0,1,-1))
     throw std::runtime_error("negative recording input accepted");
  if(!captureDiagnostics.start(root.getChildFile("callback-dropout.wav"),48000.0,1,0))
