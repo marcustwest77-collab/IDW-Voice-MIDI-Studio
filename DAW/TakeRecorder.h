@@ -1,6 +1,8 @@
 #pragma once
 #include <JuceHeader.h>
 #include <cmath>
+#include <atomic>
+#include <cstdint>
 // V14 mono/stereo WAV take recorder. Recording is opt-in and occurs via the
 // device callback; samples are queued for disk writing on a background thread.
 class IDWTakeRecorder final : public juce::AudioIODeviceCallback {
@@ -10,6 +12,8 @@ public:
     bool start(const juce::File& destination, double sampleRate,
                int channelsToRecord=1, int firstInputChannel=0) {
         stop();
+        droppedBlocks.store(0,std::memory_order_relaxed);
+        rejectedWrites.store(0,std::memory_order_relaxed);
         if(!std::isfinite(sampleRate) || sampleRate<=0 || destination.existsAsFile() ||
            (channelsToRecord!=1 && channelsToRecord!=2) || firstInputChannel<0)return false;
         destination.getParentDirectory().createDirectory();
@@ -38,20 +42,30 @@ public:
         return activeWriter!=nullptr;
     }
     juce::File file() const { const juce::ScopedLock lock(guard);return currentFile; }
+    std::uint64_t getDroppedBlocks() const noexcept {return droppedBlocks.load(std::memory_order_relaxed);}
+    std::uint64_t getRejectedWrites() const noexcept {return rejectedWrites.load(std::memory_order_relaxed);}
     void audioDeviceIOCallbackWithContext(const float* const* inputs,int inputsCount,
                                           float* const*,int,int samples,
                                           const juce::AudioIODeviceCallbackContext&) override {
         const juce::ScopedTryLock lock(guard);
-        if(!lock.isLocked() || !activeWriter || samples<=0 || inputs==nullptr ||
-           inputStartChannel>=inputsCount ||
-           inputChannels>inputsCount-inputStartChannel)return;
+        if(!lock.isLocked()){
+            droppedBlocks.fetch_add(1,std::memory_order_relaxed);
+            return;
+        }
+        if(!activeWriter || samples<=0)return;
+        if(inputs==nullptr || inputStartChannel<0 || inputStartChannel>=inputsCount ||
+           inputChannels>inputsCount-inputStartChannel){
+            droppedBlocks.fetch_add(1,std::memory_order_relaxed);
+            return;
+        }
         const float* selected[2] {inputs[inputStartChannel],nullptr};
-        if(selected[0]==nullptr)return;
+        if(selected[0]==nullptr){droppedBlocks.fetch_add(1,std::memory_order_relaxed);return;}
         if(inputChannels==2){
             selected[1]=inputs[inputStartChannel+1];
-            if(selected[1]==nullptr)return;
+            if(selected[1]==nullptr){droppedBlocks.fetch_add(1,std::memory_order_relaxed);return;}
         }
-        activeWriter->write(selected,samples);
+        if(!activeWriter->write(selected,samples))
+            rejectedWrites.fetch_add(1,std::memory_order_relaxed);
     }
     void audioDeviceAboutToStart(juce::AudioIODevice*) override {}
     void audioDeviceStopped() override {stop();}
@@ -62,4 +76,5 @@ private:
     juce::File currentFile;
     int inputChannels=1;
     int inputStartChannel=0;
+    std::atomic<std::uint64_t> droppedBlocks{0},rejectedWrites{0};
 };
