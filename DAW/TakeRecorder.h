@@ -39,6 +39,7 @@ public:
         // Reset diagnostics only after the next take actually starts.
         droppedBlocks.store(0,std::memory_order_relaxed);
         rejectedWrites.store(0,std::memory_order_relaxed);
+        capturedFrames.store(0,std::memory_order_relaxed);
         inputChannels=channelsToRecord;
         inputStartChannel=firstInputChannel;
         currentFile=destination;
@@ -55,6 +56,9 @@ public:
     juce::File file() const { const juce::ScopedLock lock(guard);return currentFile; }
     std::uint64_t getDroppedBlocks() const noexcept {return droppedBlocks.load(std::memory_order_relaxed);}
     std::uint64_t getRejectedWrites() const noexcept {return rejectedWrites.load(std::memory_order_relaxed);}
+    // Callback-received frames provide an audit trail for take duration. This
+    // does not by itself establish synchronization with the playback clock.
+    std::uint64_t getCapturedFrames() const noexcept {return capturedFrames.load(std::memory_order_relaxed);}
     void audioDeviceIOCallbackWithContext(const float* const* inputs,int inputsCount,
                                           float* const*,int,int samples,
                                           const juce::AudioIODeviceCallbackContext&) override {
@@ -75,6 +79,7 @@ public:
             selected[1]=inputs[inputStartChannel+1];
             if(selected[1]==nullptr){droppedBlocks.fetch_add(1,std::memory_order_relaxed);return;}
         }
+        capturedFrames.fetch_add(static_cast<std::uint64_t>(samples),std::memory_order_relaxed);
         if(!activeWriter->write(selected,samples))
             rejectedWrites.fetch_add(1,std::memory_order_relaxed);
     }
@@ -87,5 +92,5 @@ private:
     juce::File currentFile;
     int inputChannels=1;
     int inputStartChannel=0;
-    std::atomic<std::uint64_t> droppedBlocks{0},rejectedWrites{0};
+    std::atomic<std::uint64_t> droppedBlocks{0},rejectedWrites{0},capturedFrames{0};
 };
