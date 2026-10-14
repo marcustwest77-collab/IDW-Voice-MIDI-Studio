@@ -66,7 +66,15 @@ public:
         written.store(startFrame+usable,std::memory_order_release);
         if(startFrame+usable==capacity){active.store(false);complete.store(true);}
     }
-    void audioDeviceAboutToStart(juce::AudioIODevice*)override{}
+    void audioDeviceAboutToStart(juce::AudioIODevice* device)override{
+        // A hardware device restart invalidates the sample clock and routing
+        // assumed when the calibration capture was prepared.
+        if(active.load() && (!device ||
+            std::abs(device->getCurrentSampleRate()-sampleRate)>0.01)){
+            active.store(false);
+            failed.store(true);
+        }
+    }
     void audioDeviceStopped()override{
         if(active.exchange(false))failed.store(true);
     }
