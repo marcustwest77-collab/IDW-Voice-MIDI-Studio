@@ -519,6 +519,11 @@ int main(){
  if(!lowerRateMeasured.alignment.valid || lowerRateMeasured.alignment.lagSamples!=88 ||
     std::abs(lowerRateMeasured.lagMilliseconds-1000.0*88.0/44100.0)>0.01)
     throw std::runtime_error("44.1 kHz delay analysis");
+ // A missing WAV must fail cleanly rather than dereferencing a stream.
+ const auto missingLoopback=analyzeLoopbackWav(root.getChildFile("not-recorded.wav"),
+     0,{4800,9600,14400},128);
+ if(missingLoopback.alignment.valid || missingLoopback.sampleRate!=0.0)
+    throw std::runtime_error("missing calibration WAV accepted");
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
 }
