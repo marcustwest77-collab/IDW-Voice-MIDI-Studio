@@ -497,6 +497,28 @@ int main(){
  if(!delayedMeasurement.alignment.valid || delayedMeasurement.alignment.lagSamples!=120 ||
     std::abs(delayedMeasurement.lagMilliseconds-2.5)>0.01)
     throw std::runtime_error("generated pulse delayed capture analysis");
+ // Verify the same offline calibration path at 44.1 kHz. Timing must
+ // use the recording's actual sample rate rather than assuming 48 kHz.
+ const auto lowerRateFile=root.getChildFile("loopback-44100.wav");
+ auto lowerRateStream=std::unique_ptr<juce::FileOutputStream>(lowerRateFile.createOutputStream());
+ if(!lowerRateStream)throw std::runtime_error("44.1 kHz fixture stream");
+ auto lowerRateWriter=std::unique_ptr<juce::AudioFormatWriter>(
+    wav.createWriterFor(lowerRateStream.get(),44100.0,1,16,{},0));
+ if(!lowerRateWriter)throw std::runtime_error("44.1 kHz fixture writer");
+ lowerRateStream.release();
+ juce::AudioBuffer<float> lowerRateSamples(1,30000);
+ lowerRateSamples.clear();
+ const std::vector<std::size_t> lowerRatePositions{4410,8820,13230,17640,22050};
+ for(const auto position:lowerRatePositions)
+    lowerRateSamples.setSample(0,static_cast<int>(position+88),0.5f);
+ const float* lowerRateChannels[]{lowerRateSamples.getReadPointer(0)};
+ if(!lowerRateWriter->writeFromFloatArrays(lowerRateChannels,1,30000))
+    throw std::runtime_error("44.1 kHz fixture write");
+ lowerRateWriter.reset();
+ const auto lowerRateMeasured=analyzeLoopbackWav(lowerRateFile,0,lowerRatePositions,150);
+ if(!lowerRateMeasured.alignment.valid || lowerRateMeasured.alignment.lagSamples!=88 ||
+    std::abs(lowerRateMeasured.lagMilliseconds-1000.0*88.0/44100.0)>0.01)
+    throw std::runtime_error("44.1 kHz delay analysis");
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
 }
