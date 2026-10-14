@@ -1064,7 +1064,7 @@ private:
                     if(session.tracks[selectedInputs[j]].inputChannel==channel)validInputs=false;
             }
             if(selectedInputs.size()>IDWMultiTakeRecorder::maxTracks ||
-               !validInputs){
+               !validInputs || !std::isfinite(deviceRate) || deviceRate<=0.0){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "More inputs needed","Enable one physical input per armed audio track in audio device settings.");
                 return;
