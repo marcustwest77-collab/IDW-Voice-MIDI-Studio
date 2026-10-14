@@ -547,8 +547,9 @@ int main(){
  // Valid input must be accepted without incrementing either error counter.
  const float* validCaptureInputs[]{sample};
  captureDiagnostics.audioDeviceIOCallbackWithContext(validCaptureInputs,1,nullptr,0,256,{});
- if(captureDiagnostics.getDroppedBlocks()!=0 || captureDiagnostics.getRejectedWrites()!=0)
-    throw std::runtime_error("valid microphone callback incorrectly flagged");
+ if(captureDiagnostics.getDroppedBlocks()!=0 || captureDiagnostics.getRejectedWrites()!=0 ||
+    captureDiagnostics.getCapturedFrames()!=256)
+    throw std::runtime_error("valid microphone callback frame accounting");
  captureDiagnostics.stop();
  const auto sourceAudio=root.getChildFile("source.wav");
  // Construct a genuine 16-bit PCM WAV fixture rather than copying arbitrary bytes.
