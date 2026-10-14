@@ -458,6 +458,13 @@ int main(){
  restarted.audioDeviceAboutToStart(nullptr);
  if(restarted.isActive() || !restarted.consumeFailed() || restarted.consumeComplete())
     throw std::runtime_error("device restart failed to invalidate calibration");
+ // A restart at the SAME nominal sample rate also breaks continuity.
+ IDWLoopbackCapture sameRateRestart;
+ if(!sameRateRestart.prepare(48000.0,0,0) || !sameRateRestart.start())
+    throw std::runtime_error("same-rate restart setup");
+ sameRateRestart.audioDeviceAboutToStart(nullptr);
+ if(sameRateRestart.isActive() || !sameRateRestart.consumeFailed())
+    throw std::runtime_error("same-rate restart must abort live calibration");
  // Completion is a one-shot notification and should not be reprocessed.
  if(!live.consumeComplete() || live.consumeComplete())
     throw std::runtime_error("completed loopback should only be consumed once");
