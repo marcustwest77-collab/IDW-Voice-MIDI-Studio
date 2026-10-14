@@ -340,6 +340,16 @@ int main(){
  if(assessCalibration(stableQuality,48000.0)!=CalibrationQuality::repeat ||
     assessCalibration(stableQuality,0.0)!=CalibrationQuality::invalid)
     throw std::runtime_error("unstable loopback quality");
+ // Consensus estimate should remain centered on the accepted lag cluster.
+ std::vector<float> clustered(8192,0.0f);
+ const std::vector<std::size_t> clusterTimes{1024,2048,3072,4096,5120};
+ const int clusterLags[]{70,71,72,73,150};
+ for(std::size_t i=0;i<clusterTimes.size();++i)
+    clustered[clusterTimes[i]+static_cast<std::size_t>(clusterLags[i])]=0.9f;
+ const auto consensus=estimateLoopbackLatency(clustered.data(),clustered.size(),clusterTimes,200);
+ if(!consensus.valid || consensus.accepted!=4 || consensus.lagSamples!=72 ||
+    consensus.jitterSamples!=2)
+    throw std::runtime_error("loopback consensus median and jitter");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
