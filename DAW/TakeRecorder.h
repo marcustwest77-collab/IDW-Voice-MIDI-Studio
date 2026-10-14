@@ -13,7 +13,8 @@ public:
     bool start(const juce::File& destination, double sampleRate,
                int channelsToRecord=1, int firstInputChannel=0) {
         stop();
-        if(!std::isfinite(sampleRate) || sampleRate<=0 || destination.existsAsFile() ||
+        if(!std::isfinite(sampleRate) || sampleRate<8000.0 || sampleRate>192000.0 ||
+           destination.existsAsFile() ||
            (channelsToRecord!=1 && channelsToRecord!=2) || firstInputChannel<0)return false;
         if(!destination.getParentDirectory().createDirectory())return false;
         std::unique_ptr<juce::FileOutputStream> output(destination.createOutputStream());
