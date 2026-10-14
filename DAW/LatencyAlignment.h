@@ -52,7 +52,13 @@ inline RepeatedPulseAlignment estimateLoopbackLatency(
     std::size_t searchRadius,int toleranceSamples=8) {
     RepeatedPulseAlignment result;
     result.total=expectedPulses.size();
-    if(!recorded || expectedPulses.size()<3 || toleranceSamples<0 || count==0)return result;
+    if(!recorded || expectedPulses.size()<3 || toleranceSamples<0 || count==0 ||
+       expectedPulses.size()>64 || searchRadius==0)return result;
+    // The first/last search window must fit entirely inside the captured WAV.
+    // Otherwise truncated capture could be mistaken for a valid calibration.
+    if(expectedPulses.front()<searchRadius ||
+       expectedPulses.back()>=count ||
+       searchRadius>count-1-expectedPulses.back())return result;
     // Overlapping search windows could identify the same transient for
     // multiple pulses and incorrectly report a confident measurement.
     for(std::size_t i=0;i<expectedPulses.size();++i){
