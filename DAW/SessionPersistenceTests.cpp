@@ -516,8 +516,12 @@ int main(){
  if(!captureDiagnostics.start(root.getChildFile("callback-dropout.wav"),48000.0,1,0))
     throw std::runtime_error("take recorder diagnostics setup");
  captureDiagnostics.audioDeviceIOCallbackWithContext(nullptr,0,nullptr,0,256,{});
- if(captureDiagnostics.getDroppedBlocks()!=1 || captureDiagnostics.getRejectedWrites()!=0)
-    throw std::runtime_error("missing microphone block not counted");
+ const float sample[256]{};
+ const float* missingChannelInputs[]{sample};
+ // A selected callback slot outside the provided input span must also count.
+ captureDiagnostics.audioDeviceIOCallbackWithContext(missingChannelInputs,0,nullptr,0,256,{});
+ if(captureDiagnostics.getDroppedBlocks()!=2 || captureDiagnostics.getRejectedWrites()!=0)
+    throw std::runtime_error("missing microphone blocks not counted");
  captureDiagnostics.stop();
  const auto sourceAudio=root.getChildFile("source.wav");
  // Construct a genuine 16-bit PCM WAV fixture rather than copying arbitrary bytes.
