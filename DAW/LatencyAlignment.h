@@ -112,7 +112,10 @@ inline CalibrationQuality assessCalibration(const RepeatedPulseAlignment& measur
                                              double maxJitterMs=0.25) {
     if(!measurement.valid || !std::isfinite(sampleRate) || sampleRate<=0.0 ||
        !std::isfinite(maxJitterMs) || maxJitterMs<0.0 ||
-       measurement.accepted>measurement.total)return CalibrationQuality::invalid;
+       measurement.total<3 || measurement.accepted<3 ||
+       measurement.accepted>measurement.total || measurement.jitterSamples<0 ||
+       measurement.accepted<measurement.total-measurement.total/4)
+        return CalibrationQuality::invalid;
     const double jitterMs=1000.0*measurement.jitterSamples/sampleRate;
     return jitterMs<=maxJitterMs ? CalibrationQuality::consistent
                                  : CalibrationQuality::repeat;
