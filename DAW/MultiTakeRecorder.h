@@ -50,6 +50,7 @@ public:
                 wav.createWriterFor(output.get(),sampleRate,1,24,{},0));
             if(!writer){
                 output.reset();
+                inputs[i].file.deleteFile();
                 cleanupPending(pending,inputs.size());
                 return false;
             }
