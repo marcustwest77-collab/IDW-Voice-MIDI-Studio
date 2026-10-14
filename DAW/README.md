@@ -351,3 +351,7 @@ The low-buffer benchmark now reports `last_over_budget_block` in addition to the
 ### Cached pitch frequencies in voice counting
 
 The MIDI renderer now uses its existing 128-entry equal-temperament pitch lookup table when deciding whether notes can sound below Nyquist during active-voice normalization. This avoids calling `pow` for every note during every audio block; the same table is also used for note rendering. Cross-platform build and regression validation is required for this optimization.
+
+## V14 recording beta — headphone monitoring foundation
+
+`IDWMultiTakeRecorder` now has an opt-in, gain-limited dry monitor path for the first armed input. Monitoring remains **OFF by default** and is reset to OFF when recording stops. The UI does not yet provide a monitor-enable control; this is an engine-only foundation requiring device-specific testing. Never route the monitoring output to loudspeakers near an open microphone because acoustic feedback can result. Use closed-back headphones and a low output volume. This is not a guaranteed low-latency monitoring solution: driver buffer settings and interface hardware affect delay. Verify JUCE audio-callback mixing behavior on Windows and macOS before shipping.
