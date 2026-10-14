@@ -708,6 +708,7 @@ private:
         if((recorder.isRecording() || multiRecorder.isRecording())){
             const bool wasMulti=multiRecorder.isRecording();
             recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
+            const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : 0;
             // Stop the transport before changing the audio graph.
             for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(0);}
             playing.store(false);stopTimer();sessionFrames.store(0);playheadBeats=0;
@@ -718,6 +719,9 @@ private:
                     if(!importTake(item.second))failures+=item.second.getFileName()+" ";
                 }
                 multiTakes.clear();
+                if(dropped>0)juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,"Recording may be incomplete",
+                    juce::String(dropped)+" audio input blocks were skipped. Check recording synchronization.");
                 if(failures.isNotEmpty())juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,"Multitrack import incomplete",failures);
             }else{
