@@ -1028,6 +1028,14 @@ private:
         monitorControl.setToggleState(false,juce::dontSendNotification);
         multiRecorder.setHeadphoneMonitor(false);
         if(overdubControl.getToggleState()){
+            const bool hasPlaybackMaterial=loadedCount()>0 ||
+                std::any_of(session.tracks.begin(),session.tracks.end(),
+                    [](const auto& track){return !track.notes.empty();});
+            if(!hasPlaybackMaterial){
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "Overdub unavailable","Load an audio clip or add MIDI notes before recording over playback.");
+                return;
+            }
             // The recording writer starts before transport playback. Reset the
             // reference beat to the beginning of the playback arrangement.
             // Physical capture/playback alignment still needs loopback QA.
