@@ -808,7 +808,9 @@ private:
         }
         auto* device=deviceManager.getCurrentAudioDevice();
         const int input=session.tracks[selectedTrack].inputChannel;
-        if(!device || input<0 || !device->getActiveInputChannels()[input] ||
+        if(!device || input<0 || input>=device->getInputChannelNames().size() ||
+           device->getOutputChannelNames().isEmpty() ||
+           !device->getActiveInputChannels()[input] ||
            !device->getActiveOutputChannels()[0] ||
            !loopbackCapture.prepare(device->getCurrentSampleRate(),input,0) ||
            !loopbackCapture.start()){
