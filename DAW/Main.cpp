@@ -115,7 +115,7 @@ public:
         latencyAdjust.setRange(-100.0,250.0,1.0);
         latencyAdjust.setValue(0.0);
         latencyAdjust.setTextBoxStyle(juce::Slider::TextBoxRight,false,65,24);
-        latencyAdjust.setTooltip("Manual adjustment added to driver-reported input latency (milliseconds). Negative values reduce trim.");
+        latencyAdjust.setTooltip("Manual adjustment added to driver-reported input latency (milliseconds). Negative values reduce trim. Loopback measures round-trip delay and must NOT be copied directly into this input-trim control.");
         addAndMakeVisible(latencyAdjust);
         analyzeCalibration.setButtonText("ANALYZE LOOPBACK WAV");
         analyzeCalibration.setTooltip("Measure known test-pulse positions in an existing WAV. Does not change take trim.");
