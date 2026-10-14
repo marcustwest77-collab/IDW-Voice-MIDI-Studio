@@ -22,7 +22,8 @@ public:
         return true;
     }
     bool start() {
-        if(active.load() || captured.getNumSamples()==0)return false;
+        if(active.load() || captured.getNumSamples()==0 ||
+           complete.load() || failed.load())return false;
         written.store(0);complete.store(false);failed.store(false);active.store(true);
         return true;
     }
