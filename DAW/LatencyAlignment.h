@@ -45,6 +45,7 @@ struct RepeatedPulseAlignment {
     int lagSamples=0;
     std::size_t accepted=0;
     std::size_t total=0;
+    int jitterSamples=0; // maximum absolute deviation among accepted pulse lags
 };
 inline RepeatedPulseAlignment estimateLoopbackLatency(
     const float* recorded,std::size_t count,
@@ -80,8 +81,11 @@ inline RepeatedPulseAlignment estimateLoopbackLatency(
     std::sort(delays.begin(),delays.end());
     const int median=delays[delays.size()/2];
     for(const auto delay:delays)
-        if(std::abs(static_cast<double>(delay)-median)<=toleranceSamples)
+        if(std::abs(static_cast<double>(delay)-median)<=toleranceSamples){
             ++result.accepted;
+            result.jitterSamples=std::max(result.jitterSamples,
+                static_cast<int>(std::abs(static_cast<double>(delay)-median)));
+        }
     if(result.accepted<3 || result.accepted*4<result.total*3)return result;
     result.valid=true;
     result.lagSamples=median;
