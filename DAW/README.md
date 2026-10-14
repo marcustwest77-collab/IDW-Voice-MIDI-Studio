@@ -373,3 +373,7 @@ The **TAKE TRIM ms** control adds a signed correction (-100 to +250 milliseconds
 ### Repeated-pulse calibration analysis
 
 The timing helper now supports analyzing at least three known loopback pulse positions and rejecting inconsistent pulse delays. It requires at least 75% of expected pulses to match the measured median within eight samples (configurable). Synthetic tests cover four consistent pulses, one outlier, and silence rejection. This is an **offline analysis building block only**, not a working hardware loopback wizard. Nothing changes saved trim automatically; the existing manual TAKE TRIM control stays under user control.
+
+### Offline loopback WAV verification
+
+`DAW/LoopbackWavAnalysis.h` now loads a previously recorded WAV file and measures timing against known expected pulse indices on a selected input channel. The test suite generates a real 48 kHz PCM WAV with five delayed pulses and verifies the reported 72-sample (1.5 ms) lag, including invalid-channel rejection. This helper currently requires a known pulse schedule and is not yet connected to an in-app calibration wizard. It **does not** automatically change project latency settings. Only recordings up to ten minutes are accepted by the initial offline implementation to bound memory use; avoid opening untrusted large files. Hardware-generated synchronized playback/recording pulses and round-trip testing remain outstanding.
