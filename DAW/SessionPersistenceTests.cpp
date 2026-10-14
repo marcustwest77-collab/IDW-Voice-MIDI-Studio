@@ -4,6 +4,7 @@
 #include "MidiScheduler.h"
 #include "MidiSineSynth.h"
 #include "PlaybackTiming.h"
+#include "LatencyAlignment.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
@@ -272,6 +273,22 @@ int main(){
     .getDynamicObject()->setProperty("inputChannel",99);
  if(sessionFromJson(badRoute,routed))
     throw std::runtime_error("invalid input channel accepted");
+ // Synthetic loopback fixtures verify positive/negative offsets and silence.
+ std::vector<float> pulse(2048,0.0f);
+ pulse[1120]=0.85f;
+ const auto late=locateLoopbackPulse(pulse.data(),pulse.size(),1024,200);
+ if(!late.valid || late.lagSamples!=96 ||
+    std::abs(alignmentMilliseconds(late.lagSamples,48000.0)-2.0)>1e-9)
+    throw std::runtime_error("late loopback pulse detection");
+ pulse[1120]=0.0f;
+ pulse[928]=-0.7f;
+ const auto early=locateLoopbackPulse(pulse.data(),pulse.size(),1024,200);
+ if(!early.valid || early.lagSamples!=-96)
+    throw std::runtime_error("early loopback pulse detection");
+ pulse[928]=0.0f;
+ if(locateLoopbackPulse(pulse.data(),pulse.size(),1024,200).valid ||
+    locateLoopbackPulse(nullptr,0,0,1).valid)
+    throw std::runtime_error("invalid/silent loopback accepted");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
