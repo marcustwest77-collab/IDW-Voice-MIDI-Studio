@@ -981,6 +981,7 @@ private:
             const auto queuedFrames=wasMulti ? std::uint64_t{0} : recorder.getQueuedFrames();
             // Playback and capture counters currently run in separate callbacks;
             // this discrepancy is diagnostic, not an automatic alignment offset.
+            const bool wasOverdubbing=overdubControl.getToggleState() && playing.load();
             const auto playbackFrames=static_cast<std::uint64_t>(
                 std::max<std::int64_t>(0,sessionFrames.load(std::memory_order_relaxed)));
             // Stop the transport before changing the audio graph.
@@ -1002,7 +1003,7 @@ private:
                 if(failures.isNotEmpty())juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,"Multitrack import incomplete",failures);
             }else{
-                if(playbackFrames>0 && receivedFrames>0 && dropped==0 && rejected==0){
+                if(wasOverdubbing && playbackFrames>0 && receivedFrames>0 && dropped==0 && rejected==0){
                     const auto difference=static_cast<juce::int64>(playbackFrames)-
                         static_cast<juce::int64>(receivedFrames);
                     juce::Logger::writeToLog("IDW overdub timing diagnostic: playback frames="+
