@@ -32,6 +32,7 @@ public:
         stop();
         droppedBlocks.store(0,std::memory_order_relaxed);
         rejectedWrites.store(0,std::memory_order_relaxed);
+        for(auto& peak:inputPeaks)peak.store(0.0f,std::memory_order_relaxed);
         if(!std::isfinite(sampleRate) || sampleRate <= 0 ||
            inputs.empty() || inputs.size() > maxTracks)return false;
         for(std::size_t i=0;i<inputs.size();++i){
@@ -78,6 +79,9 @@ public:
     std::uint64_t getDroppedBlocks() const noexcept {
         return droppedBlocks.load(std::memory_order_relaxed);
     }
+    float getInputPeak(std::size_t slot) const noexcept {
+        return slot<maxTracks ? inputPeaks[slot].load(std::memory_order_relaxed) : 0.0f;
+    }
     std::uint64_t getRejectedWrites() const noexcept {
         return rejectedWrites.load(std::memory_order_relaxed);
     }
@@ -103,7 +107,14 @@ public:
                 return;
             }
         for(std::size_t i=0;i<count;++i){
-            const float* mono[] { inputs[slots[i].channel] };
+            const float* source=inputs[slots[i].channel];
+            float peak=0.0f;
+            for(int frame=0;frame<samples;++frame){
+                const float value=source[frame];
+                if(std::isfinite(value))peak=std::max(peak,std::abs(value));
+            }
+            inputPeaks[i].store(peak,std::memory_order_relaxed);
+            const float* mono[] { source };
             if(!slots[i].writer->write(mono,samples))
                 rejectedWrites.fetch_add(1,std::memory_order_relaxed);
         }
@@ -129,4 +140,5 @@ private:
     std::size_t count=0;
     std::atomic<std::uint64_t> droppedBlocks{0};
     std::atomic<std::uint64_t> rejectedWrites{0};
+    std::array<std::atomic<float>,maxTracks> inputPeaks{};
 };
