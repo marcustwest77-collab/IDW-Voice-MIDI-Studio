@@ -61,7 +61,7 @@ public:
             addAndMakeVisible(*slider);
         }
         const auto updateEnvelope=[this]{
-            if(playing.load() || recorder.isRecording() || exportRunning.load() ||
+            if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() ||
                selectedTrack>=session.tracks.size())return;
             session.setTrackSynthEnvelope(selectedTrack,
                 (float)attackControl.getValue(),(float)releaseControl.getValue());
@@ -73,7 +73,7 @@ public:
         addChildComponent(pianoRoll);
         pianoRoll.session=&session;
         pianoButton.onClick=[this]{
-            if(playing.load() || recorder.isRecording() || exportRunning.load())return;
+            if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
             if(selectedTrack>=session.tracks.size() ||
                session.tracks[selectedTrack].type!=idw::daw::TrackType::midi)return;
             pianoRoll.trackIndex=selectedTrack;
@@ -91,10 +91,10 @@ public:
         };
         aiPanel.getSanitizedStatus=[this]{
             return juce::JSON::toString(idw::daw::aiSessionStatus(
-                session,playing.load(),recorder.isRecording()),true);
+                session,playing.load(),(recorder.isRecording() || multiRecorder.isRecording())),true);
         };
         aiPanel.onApproved=[this](const idw::daw::AIProposal& proposal){
-            if(playing.load() || recorder.isRecording() || exportRunning.load())return false;
+            if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return false;
             if(proposal.kind==idw::daw::AIProposal::Kind::addAudioTrack){
                 const auto count=session.tracks.size();
                 addAudioTrack();
@@ -107,11 +107,11 @@ public:
         };
         record.setButtonText("RECORD VOCAL");
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
-        play.onClick=[this]{if(playing.load() || recorder.isRecording() || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);
+        play.onClick=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);
             std::atomic_store_explicit(&playbackSession,
                 std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
             sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
-        stop.onClick=[this]{if(exportRunning.load())return;if(recorder.isRecording() || multiRecorder.isRecording())toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;refreshMixer();repaint();};
+        stop.onClick=[this]{if(exportRunning.load())return;if((recorder.isRecording() || multiRecorder.isRecording()))toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;refreshMixer();repaint();};
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
         saveProject.onClick=[this]{saveProjectFile();};
@@ -119,10 +119,10 @@ public:
         exportProject.onClick=[this]{exportProjectFile();};
         bounce.onClick=[this]{bounceMix();};
         cancelBounce.onClick=[this]{exportCancel.store(true);};
-        audio.onClick=[this]{if(playing.load() || recorder.isRecording() || exportRunning.load())return;addAudioTrack();refreshMixer();repaint();};
-        midi.onClick=[this]{if(playing.load() || recorder.isRecording() || exportRunning.load())return;session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
+        audio.onClick=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;addAudioTrack();refreshMixer();repaint();};
+        midi.onClick=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
-        tempo.onValueChange=[this]{if(playing.load() || recorder.isRecording() || exportRunning.load())return;session.setTempo(tempo.getValue());};addAndMakeVisible(tempo);
+        tempo.onValueChange=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;session.setTempo(tempo.getValue());};addAndMakeVisible(tempo);
         tempoLabel.setText("BPM",juce::dontSendNotification);addAndMakeVisible(tempoLabel);
         addAudioTrack();
         session.addTrack(idw::daw::TrackType::midi);
@@ -152,7 +152,7 @@ public:
         armControl.setButtonText("ARM INPUT");addAndMakeVisible(armControl);
         armedTracks[0]=true; // Existing single-microphone workflow remains ready by default.
         armControl.onClick=[this]{
-            if(playing.load() || recorder.isRecording() || exportRunning.load() ||
+            if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() ||
                selectedTrack>=session.tracks.size() ||
                session.tracks[selectedTrack].type!=idw::daw::TrackType::audio)return;
             armedTracks[selectedTrack]=armControl.getToggleState();
@@ -239,7 +239,7 @@ public:
         pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
     }
     bool keyPressed(const juce::KeyPress& key) override {
-        if(!selectedClipValid || playing.load() || recorder.isRecording() ||
+        if(!selectedClipValid || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) ||
            exportRunning.load() || aiPanel.isVisible() || connectPanel.isVisible())
             return false;
         if(selectedClipTrack>=session.tracks.size() ||
@@ -266,7 +266,7 @@ public:
     void mouseDown(const juce::MouseEvent& e) override {
         draggingClip=false;
         selectedClipValid=false;
-        if(playing.load() || recorder.isRecording() || exportRunning.load() ||
+        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() ||
            aiPanel.isVisible() || connectPanel.isVisible())return;
         constexpr int top=366, height=70, left=205;
         if(e.y<top || e.x<left || session.tracks.empty())return;
@@ -291,7 +291,7 @@ public:
         }
     }
     void mouseDrag(const juce::MouseEvent& e) override {
-        if(!draggingClip || playing.load() || recorder.isRecording() ||
+        if(!draggingClip || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) ||
            exportRunning.load())return;
         const auto delta=(double)(e.x-dragOriginX)/12.0;
         // Quarter-beat snapping on the visible timeline.
@@ -463,10 +463,10 @@ private:
         if(selectedTrack>=session.tracks.size())selectedTrack=0;
         const auto& track=session.tracks[selectedTrack];
         synthPreset.setEnabled(track.type==idw::daw::TrackType::midi &&
-            !playing.load() && !recorder.isRecording() && !exportRunning.load());
+            !playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load());
         synthPreset.setSelectedId(track.synthPreset+1,juce::dontSendNotification);
         const bool editableSynth=track.type==idw::daw::TrackType::midi &&
-            !playing.load() && !recorder.isRecording() && !exportRunning.load();
+            !playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load();
         attackControl.setEnabled(editableSynth);
         releaseControl.setEnabled(editableSynth);
         attackControl.setValue(track.synthAttackMs,juce::dontSendNotification);
@@ -477,7 +477,7 @@ private:
         muteControl.setToggleState(track.mute,juce::dontSendNotification);
         soloControl.setToggleState(track.solo,juce::dontSendNotification);
         armControl.setEnabled(track.type==idw::daw::TrackType::audio &&
-            !playing.load() && !recorder.isRecording() && !exportRunning.load());
+            !playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load());
         armControl.setToggleState(track.type==idw::daw::TrackType::audio &&
             armedTracks[selectedTrack],juce::dontSendNotification);
     }
@@ -488,13 +488,13 @@ private:
         refreshMixer();repaint();
     }
     void updateFirstTrackMix(){
-        if(playing.load() || recorder.isRecording() || exportRunning.load() || session.tracks.empty())return;
+        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() || session.tracks.empty())return;
         session.setTrackMix(selectedTrack,(float)gainControl.getValue(),(float)panControl.getValue());
     }
     void timerCallback() override {
         // Device shutdown can suspend playback from the audio thread.
         // Re-enable editing controls on the message thread after that transition.
-        if(!playing.load() && !recorder.isRecording() && !exportRunning.load()){
+        if(!playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load()){
             for(auto& slot:sources)slot->transport.stop();
             refreshMixer();
             stopTimer();
@@ -522,7 +522,7 @@ private:
         juce::AudioBuffer<float> scratch;
     };
     void addAudioTrack(){
-        if(playing.load() || recorder.isRecording() || exportRunning.load())return; // Avoid mutating the audio graph during playback.
+        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return; // Avoid mutating the audio graph during playback.
         if(!session.addTrack(idw::daw::TrackType::audio))return;
         auto slot=std::make_unique<AudioSlot>();
         slot->trackIndex=session.tracks.size()-1;
@@ -534,7 +534,7 @@ private:
         return count;
     }
     bool restoreProject(const juce::File& project){
-        if(playing.load() || recorder.isRecording() || exportRunning.load())return false;
+        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return false;
         idw::daw::Session restored;
         if(!idw::daw::loadSession(project,restored))return false;
         // Build replacement players before replacing the current project.
@@ -585,26 +585,26 @@ private:
         return true;
     }
     void openProjectFile(){
-        if(playing.load() || recorder.isRecording() || exportRunning.load())return;
+        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
         projectChooser=std::make_unique<juce::FileChooser>("Open IDW DAW Project",
             juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*.idwproj");
         projectChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
             [this](const juce::FileChooser& picker){
                 const auto project=picker.getResult();
-                if(playing.load() || recorder.isRecording() || exportRunning.load())return;
+                if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
                 if(project.existsAsFile() && !restoreProject(project))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Open failed",
                         "The project is invalid or cannot be opened during playback.");
             });
     }
     void bounceMix(){
-        if(playing.load() || recorder.isRecording() || exportRunning.load())return;
+        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
         projectChooser=std::make_unique<juce::FileChooser>("Export stereo WAV",
             juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW Mix.wav"),"*.wav");
         projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
             [this](const juce::FileChooser& picker){
                 auto output=picker.getResult();
-                if(output==juce::File{} || playing.load() || recorder.isRecording() || exportRunning.load())return;
+                if(output==juce::File{} || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
                 output=output.withFileExtension(".wav");
                 if(exportThread.joinable())exportThread.join();
                 const auto snapshot=session;
@@ -633,31 +633,31 @@ private:
             });
     }
     void exportProjectFile(){
-        if(playing.load() || recorder.isRecording() || exportRunning.load())return;
+        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
         projectChooser=std::make_unique<juce::FileChooser>("Export portable IDW Project",
             juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*");
         projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
             [this](const juce::FileChooser& picker){
                 const auto folder=picker.getResult();
-                if(folder==juce::File{} || playing.load() || recorder.isRecording() || exportRunning.load())return;
+                if(folder==juce::File{} || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
                 juce::String error;
                 if(!idw::daw::exportPortableProject(session,folder,error))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Export failed",error);
             });
     }
     void saveProjectFile(){
-        if(playing.load() || recorder.isRecording() || exportRunning.load())return;
+        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
         projectChooser=std::make_unique<juce::FileChooser>("Save IDW DAW Project",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW Session.idwproj"),"*.idwproj");
         projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
             [this](const juce::FileChooser& picker){
                 const auto file=picker.getResult();
-                if(file==juce::File{} || playing.load() || recorder.isRecording() || exportRunning.load())return;
+                if(file==juce::File{} || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
                 if(!idw::daw::saveSession(session,file.withFileExtension(".idwproj")))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save failed","Could not write IDW project.");
             });
     }
     bool importTake(const juce::File& take){
-        if(!take.existsAsFile() || playing.load() || recorder.isRecording() || exportRunning.load())return false;
+        if(!take.existsAsFile() || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return false;
         std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(take));
         if(!reader || reader->sampleRate<=0 || reader->lengthInSamples<=0)return false;
         AudioSlot* target=nullptr;
@@ -690,8 +690,8 @@ private:
         if(exportRunning.load())return;
         // Recording may stop while the transport runs, but must not start
         // while ordinary playback is active.
-        if(!recorder.isRecording() && !multiRecorder.isRecording() && playing.load())return;
-        if(recorder.isRecording() || multiRecorder.isRecording()){
+        if(!(recorder.isRecording() || multiRecorder.isRecording()) && !multiRecorder.isRecording() && playing.load())return;
+        if((recorder.isRecording() || multiRecorder.isRecording())){
             const bool wasMulti=multiRecorder.isRecording();
             recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
             // Stop the transport before changing the audio graph.
@@ -736,6 +736,15 @@ private:
                 takeInputLatencySeconds=(double)std::max(0,device->getInputLatencyInSamples())/deviceRate;
         takeStartBeat=deviceRate>0 ? (double)sessionFrames.load()*session.bpm/(deviceRate*60.0) : 0.0;
         if(selectedInputs.size()>1){
+            // A loaded track cannot accept a second AudioSlot reader yet.
+            for(const auto index:selectedInputs)
+                for(const auto& slot:sources)
+                    if(slot->trackIndex==index && slot->reader){
+                        juce::AlertWindow::showMessageBoxAsync(
+                            juce::MessageBoxIconType::WarningIcon,"Track already has audio",
+                            "Arm empty audio tracks for simultaneous recording.");
+                        return;
+                    }
             auto* device=deviceManager.getCurrentAudioDevice();
             const int available=device ? device->getActiveInputChannels().countNumberOfSetBits() : 0;
             if(selectedInputs.size()>IDWMultiTakeRecorder::maxTracks ||
@@ -765,7 +774,7 @@ private:
     void loadAudio(){
         chooser=std::make_unique<juce::FileChooser>("Select WAV or AIFF audio file",juce::File{},"*.wav;*.aiff;*.aif");
         chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& picker){
-            auto file=picker.getResult();if(!file.existsAsFile() || playing.load() || recorder.isRecording() || exportRunning.load())return;
+            auto file=picker.getResult();if(!file.existsAsFile() || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
             std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
             if(!reader)return;
             AudioSlot* target=nullptr;
