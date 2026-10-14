@@ -386,6 +386,16 @@ int main(){
  if(!live.isComplete() || live.isActive() || pulseCount!=5 ||
     live.recordedSamples()!=38400)
     throw std::runtime_error("live loopback callback pulse schedule");
+ // Live device interruption must invalidate the capture exactly once.
+ IDWLoopbackCapture interrupted;
+ if(!interrupted.prepare(48000.0,0,0) || !interrupted.start())
+    throw std::runtime_error("interrupted capture setup");
+ float interruptedInput[128]{};
+ const float* interruptedInputs[]{interruptedInput};
+ interrupted.audioDeviceIOCallbackWithContext(interruptedInputs,1,nullptr,0,128,{});
+ if(interrupted.isActive() || !interrupted.consumeFailed() || interrupted.consumeFailed() ||
+    interrupted.consumeComplete())
+    throw std::runtime_error("device interruption did not abort capture once");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
