@@ -654,8 +654,12 @@ private:
         auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
         const double rate=source->getAudioFormatReader()->sampleRate;
         const double duration=(double)source->getAudioFormatReader()->lengthInSamples/rate;
-        const double beatLength=duration*session.bpm/60.0;
-        if(!session.addClip(target->trackIndex,{take.getFullPathName().toStdString(),takeStartBeat,beatLength,0.0}))return false;
+        // Compensate the input device's reported capture latency when importing
+        // a new take. The initial delayed frames remain in the WAV master file.
+        // This is driver-reported latency only, not measured round-trip calibration.
+        const double trim=std::clamp(takeInputLatencySeconds,0.0,std::max(0.0,duration-1.0/rate));
+        const double beatLength=(duration-trim)*session.bpm/60.0;
+        if(!session.addClip(target->trackIndex,{take.getFullPathName().toStdString(),takeStartBeat,beatLength,trim}))return false;
         target->transport.setSource(source.get(),0,nullptr,rate);
         target->file=take;target->reader=std::move(source);
         repaint();return true;
@@ -679,8 +683,12 @@ private:
             .getChildFile("IDW DAW").getChildFile("Recordings");
         folder.createDirectory();
         auto destination=folder.getNonexistentChildFile("Vocal Take",".wav",false);
-        // Anchor the take at the shared timeline location at record start.
-        // Hardware input/output latency compensation remains a future feature.
+        // Use driver-reported input latency to trim delayed capture frames
+        // at take import. Real loopback calibration remains future work.
+        takeInputLatencySeconds=0.0;
+        if(auto* device=deviceManager.getCurrentAudioDevice())
+            if(deviceRate>0 && std::isfinite(deviceRate))
+                takeInputLatencySeconds=(double)std::max(0,device->getInputLatencyInSamples())/deviceRate;
         takeStartBeat=deviceRate>0 ? (double)sessionFrames.load()*session.bpm/(deviceRate*60.0) : 0.0;
         if(recorder.start(destination,deviceRate))record.setButtonText("STOP RECORD");
         else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Recording unavailable","Check microphone permission, device input and destination directory.");
@@ -712,6 +720,7 @@ private:
     std::atomic<bool> playing{false};
     double playheadBeats=0;
     double takeStartBeat=0.0;
+    double takeInputLatencySeconds=0.0;
     juce::Label title,tempoLabel,gainLabel,panLabel;
     juce::Slider gainControl,panControl,masterGain;
     juce::Label masterLabel,eqLabel,limitLabel;
