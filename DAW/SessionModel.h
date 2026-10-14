@@ -18,6 +18,7 @@ struct Track {
     TrackType type;
     bool mute=false;
     bool solo=false;
+    int inputChannel=0; // Saved audio input preference, zero-based (0..7).
     float gain=1.0f;
     float pan=0.0f;
     int synthPreset=0; // Keys=0, Bass=1, Lead=2, Organ=3, Pad=4
