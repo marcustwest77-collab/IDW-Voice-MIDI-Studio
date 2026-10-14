@@ -981,7 +981,7 @@ private:
             const auto queuedFrames=wasMulti ? std::uint64_t{0} : recorder.getQueuedFrames();
             // Playback and capture counters currently run in separate callbacks;
             // this discrepancy is diagnostic, not an automatic alignment offset.
-            const bool wasOverdubbing=overdubControl.getToggleState() && playing.load();
+            const bool wasOverdubbing=playing.load() && takeWasOverdub;
             const auto playbackFrames=static_cast<std::uint64_t>(
                 std::max<std::int64_t>(0,sessionFrames.load(std::memory_order_relaxed)));
             // Stop the transport before changing the audio graph.
@@ -1050,6 +1050,7 @@ private:
         if(auto* device=deviceManager.getCurrentAudioDevice())
             if(deviceRate>0 && std::isfinite(deviceRate))
                 takeInputLatencySeconds=(double)std::max(0,device->getInputLatencyInSamples())/deviceRate;
+        takeWasOverdub=overdubControl.getToggleState();
         takeStartBeat=deviceRate>0 ? (double)sessionFrames.load()*session.bpm/(deviceRate*60.0) : 0.0;
         monitorControl.setToggleState(false,juce::dontSendNotification);
         multiRecorder.setHeadphoneMonitor(false);
@@ -1172,6 +1173,7 @@ private:
     std::atomic<bool> playing{false};
     double playheadBeats=0;
     double takeStartBeat=0.0;
+    bool takeWasOverdub=false;
     size_t recordTargetTrack=0;
     double takeInputLatencySeconds=0.0;
     double takeManualTrimSeconds=0.0;
