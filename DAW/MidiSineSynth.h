@@ -45,6 +45,13 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
     for(const auto& t:s.tracks)if(t.solo)anySolo=true;
     // Normalize active MIDI voices so stacked notes do not overwhelm the mix.
     // Count only notes overlapping the current buffer; no allocations.
+    // Use the same precomputed pitch table for counting and rendering voices.
+    static const auto pitchHz=[]{
+        std::array<double,128> frequencies{};
+        for(int pitch=0;pitch<128;++pitch)
+            frequencies[(std::size_t)pitch]=440.0*std::pow(2.0,(pitch-69)/12.0);
+        return frequencies;
+    }();
     std::size_t activeVoices=0;
     const double bufferEndBeat=(double)(startFrame+samples)/framesPerBeat;
     const double bufferStartBeat=(double)startFrame/framesPerBeat;
@@ -58,7 +65,7 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
                std::isfinite(note.startBeat+note.lengthBeats) &&
                note.startBeat<bufferEndBeat &&
                note.startBeat+note.lengthBeats>bufferStartBeat &&
-               440.0*std::pow(2.0,(note.pitch-69)/12.0)<sampleRate*0.5)
+               pitchHz[(std::size_t)note.pitch]<sampleRate*0.5)
                 ++activeVoices;
     }
     const float voiceScale=1.0f/std::sqrt((float)std::max<std::size_t>(1,activeVoices));
@@ -86,12 +93,7 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
             if(first>=last)continue;
             // Lookup immutable equal-tempered MIDI pitch frequencies instead of
             // evaluating pow() separately for each rendered note and buffer.
-            static const auto pitchHz=[]{
-                std::array<double,128> frequencies{};
-                for(int pitch=0;pitch<128;++pitch)
-                    frequencies[(std::size_t)pitch]=440.0*std::pow(2.0,(pitch-69)/12.0);
-                return frequencies;
-            }();
+
             const double freq=pitchHz[(std::size_t)n.pitch];
             // Skip inaudible / aliased notes rather than generating frequencies
             // above the Nyquist limit (particularly on low sample-rate devices).
