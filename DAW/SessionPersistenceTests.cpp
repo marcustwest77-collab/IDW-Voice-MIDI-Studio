@@ -371,17 +371,17 @@ int main(){
  loopStream.release();
  juce::AudioBuffer<float> recorded(1,8192);
  recorded.clear();
- const std::vector<std::size_t> expected{1024,2048,3072,4096,5120};
- for(auto pos:expected)recorded.setSample(0,(int)pos+72,0.85f);
+ const std::vector<std::size_t> wavPulsePositions{1024,2048,3072,4096,5120};
+ for(auto pos:wavPulsePositions)recorded.setSample(0,(int)pos+72,0.85f);
  const float* recordedChannels[]{recorded.getReadPointer(0)};
  if(!loopWriter->writeFromFloatArrays(recordedChannels,1,8192))
     throw std::runtime_error("loopback fixture write");
  loopWriter.reset();
- const auto measured=analyzeLoopbackWav(loopbackFile,0,expected,150);
+ const auto measured=analyzeLoopbackWav(loopbackFile,0,wavPulsePositions,150);
  if(!measured.alignment.valid || measured.alignment.lagSamples!=72 ||
     std::abs(measured.lagMilliseconds-1.5)>0.01)
     throw std::runtime_error("WAV loopback analysis failed");
- if(analyzeLoopbackWav(loopbackFile,3,expected,150).alignment.valid)
+ if(analyzeLoopbackWav(loopbackFile,3,wavPulsePositions,150).alignment.valid)
     throw std::runtime_error("invalid WAV channel accepted");
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
