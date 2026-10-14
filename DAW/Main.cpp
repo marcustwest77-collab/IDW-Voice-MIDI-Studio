@@ -5,6 +5,7 @@
 #include "SessionModel.h"
 #include "TimelineMath.h"
 #include "TakeRecorder.h"
+#include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
 #include "SessionPersistence.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
