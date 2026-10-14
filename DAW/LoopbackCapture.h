@@ -56,7 +56,7 @@ public:
             const int frame=startFrame+i;
             for(const int ms:pulses)
                 if(frame==static_cast<int>(std::llround(ms*sampleRate/1000.0)))
-                    output[i]+=0.25f;
+                    output[i]=juce::jlimit(-1.0f,1.0f,output[i]+0.25f);
         }
         captured.copyFrom(0,startFrame,input,usable);
         written.store(startFrame+usable,std::memory_order_release);
