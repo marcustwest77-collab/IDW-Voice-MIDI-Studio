@@ -147,6 +147,15 @@ public:
         previousTrack.setButtonText("< TRACK");
         nextTrack.setButtonText("TRACK >");
         addAndMakeVisible(previousTrack);addAndMakeVisible(nextTrack);
+        armControl.setButtonText("ARM INPUT");addAndMakeVisible(armControl);
+        armedTracks[0]=true; // Existing single-microphone workflow remains ready by default.
+        armControl.onClick=[this]{
+            if(playing.load() || recorder.isRecording() || exportRunning.load() ||
+               selectedTrack>=session.tracks.size() ||
+               session.tracks[selectedTrack].type!=idw::daw::TrackType::audio)return;
+            armedTracks[selectedTrack]=armControl.getToggleState();
+            refreshMixer();
+        };
         previousTrack.onClick=[this]{selectTrack(-1);};
         nextTrack.onClick=[this]{selectTrack(1);};
         masterLabel.setText("MASTER VOL",juce::dontSendNotification);
@@ -206,6 +215,7 @@ public:
         soloControl.setBounds(mixRow.removeFromLeft(75));
         previousTrack.setBounds(mixRow.removeFromLeft(100));
         nextTrack.setBounds(mixRow.removeFromLeft(100));
+        armControl.setBounds(mixRow.removeFromLeft(105));
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
@@ -464,6 +474,10 @@ private:
         panControl.setValue(track.pan,juce::dontSendNotification);
         muteControl.setToggleState(track.mute,juce::dontSendNotification);
         soloControl.setToggleState(track.solo,juce::dontSendNotification);
+        armControl.setEnabled(track.type==idw::daw::TrackType::audio &&
+            !playing.load() && !recorder.isRecording() && !exportRunning.load());
+        armControl.setToggleState(track.type==idw::daw::TrackType::audio &&
+            armedTracks[selectedTrack],juce::dontSendNotification);
     }
     void selectTrack(int direction){
         if(playing.load() || session.tracks.empty())return;
@@ -685,7 +699,18 @@ private:
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Take saved, import failed",take.getFullPathName());
             return;
         }
-        recordTargetTrack=selectedTrack;
+        // One input stream is currently available; choose the first armed
+        // audio track. Multiple armed tracks do not imply simultaneous capture.
+        recordTargetTrack=session.tracks.size();
+        for(std::size_t i=0;i<session.tracks.size();++i)
+            if(session.tracks[i].type==idw::daw::TrackType::audio && armedTracks[i]){
+                recordTargetTrack=i;break;
+            }
+        if(recordTargetTrack>=session.tracks.size()){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "No armed audio track","Select an audio track and enable ARM INPUT before recording.");
+            return;
+        }
         const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
             .getChildFile("IDW DAW").getChildFile("Recordings");
         folder.createDirectory();
@@ -741,7 +766,8 @@ private:
     std::atomic<float> peakLeft{0.0f},peakRight{0.0f};
     std::atomic<bool> peakClipLeft{false},peakClipRight{false};
     std::atomic<float> masterLevel{1.0f};
-    juce::ToggleButton muteControl,soloControl;
+    juce::ToggleButton muteControl,soloControl,armControl;
+    std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton;
