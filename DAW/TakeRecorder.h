@@ -1,5 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
+#include <cmath>
 // V14 single-input WAV take recorder. Recording is opt-in and occurs via the
 // device callback; samples are queued for disk writing on a background thread.
 class IDWTakeRecorder final : public juce::AudioIODeviceCallback {
@@ -8,7 +9,7 @@ public:
     ~IDWTakeRecorder() override { stop(); diskThread.stopThread(5000); }
     bool start(const juce::File& destination, double sampleRate) {
         stop();
-        if(sampleRate<=0 || destination.existsAsFile())return false;
+        if(!std::isfinite(sampleRate) || sampleRate<=0 || destination.existsAsFile())return false;
         destination.getParentDirectory().createDirectory();
         std::unique_ptr<juce::FileOutputStream> output(destination.createOutputStream());
         if(!output)return false;
@@ -37,7 +38,8 @@ public:
                                           float* const*,int,int samples,
                                           const juce::AudioIODeviceCallbackContext&) override {
         const juce::ScopedTryLock lock(guard);
-        if(!lock.isLocked() || !activeWriter || inputsCount<1 || inputs[0]==nullptr)return;
+        if(!lock.isLocked() || !activeWriter || samples<=0 || inputsCount<1 ||
+           inputs==nullptr || inputs[0]==nullptr)return;
         const float* mono[]{inputs[0]};
         activeWriter->write(mono,samples);
     }
