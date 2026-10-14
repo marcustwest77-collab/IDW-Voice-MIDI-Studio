@@ -523,6 +523,12 @@ int main(){
  if(captureDiagnostics.getDroppedBlocks()!=2 || captureDiagnostics.getRejectedWrites()!=0)
     throw std::runtime_error("missing microphone blocks not counted");
  captureDiagnostics.stop();
+ // Starting a new take must clear the previous take's diagnostics.
+ if(!captureDiagnostics.start(root.getChildFile("callback-reset.wav"),48000.0,1,0))
+    throw std::runtime_error("recorder diagnostic reset setup");
+ if(captureDiagnostics.getDroppedBlocks()!=0 || captureDiagnostics.getRejectedWrites()!=0)
+    throw std::runtime_error("recorder counters leaked into next take");
+ captureDiagnostics.stop();
  const auto sourceAudio=root.getChildFile("source.wav");
  // Construct a genuine 16-bit PCM WAV fixture rather than copying arbitrary bytes.
  juce::WavAudioFormat wav;
