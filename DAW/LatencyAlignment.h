@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <vector>
 
 namespace idw::daw {
 // Pure timing-analysis helper for a known test pulse recorded in loopback.
@@ -35,6 +36,37 @@ inline PulseAlignment locateLoopbackPulse(const float* recorded,std::size_t coun
         return result;
     result.valid=true;
     result.lagSamples=static_cast<int>(delta);
+    return result;
+}
+// Estimate a stable delay from multiple known pulses. Reject outliers beyond
+// tolerance; never silently apply an uncertain offset to a user's take.
+struct RepeatedPulseAlignment {
+    bool valid=false;
+    int lagSamples=0;
+    std::size_t accepted=0;
+    std::size_t total=0;
+};
+inline RepeatedPulseAlignment estimateLoopbackLatency(
+    const float* recorded,std::size_t count,
+    const std::vector<std::size_t>& expectedPulses,
+    std::size_t searchRadius,int toleranceSamples=8) {
+    RepeatedPulseAlignment result;
+    result.total=expectedPulses.size();
+    if(!recorded || expectedPulses.size()<3 || toleranceSamples<0)return result;
+    std::vector<int> delays;
+    for(const auto expected:expectedPulses){
+        const auto pulse=locateLoopbackPulse(recorded,count,expected,searchRadius);
+        if(pulse.valid)delays.push_back(pulse.lagSamples);
+    }
+    if(delays.size()<3)return result;
+    std::sort(delays.begin(),delays.end());
+    const int median=delays[delays.size()/2];
+    for(const auto delay:delays)
+        if(std::abs(static_cast<double>(delay)-median)<=toleranceSamples)
+            ++result.accepted;
+    if(result.accepted<3 || result.accepted*4<result.total*3)return result;
+    result.valid=true;
+    result.lagSamples=median;
     return result;
 }
 inline double alignmentMilliseconds(int lagSamples,double sampleRate){
