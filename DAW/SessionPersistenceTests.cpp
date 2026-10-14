@@ -7,6 +7,7 @@
 #include "LatencyAlignment.h"
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
+#include "LoopbackCapture.h"
 #include "ProjectPackaging.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <stdexcept>
@@ -368,6 +369,23 @@ int main(){
  if(!unstable.valid || unstable.jitterSamples<8 ||
     assessCalibration(unstable,48000.0,0.1)!=CalibrationQuality::repeat)
     throw std::runtime_error("unstable valid calibration was not flagged");
+ // Exercise the real-time engine using a synthetic device callback.
+ IDWLoopbackCapture live;
+ if(!live.prepare(48000.0,0,0) || !live.start())
+    throw std::runtime_error("loopback capture setup");
+ float inputBlock[256]{};
+ float outputBlock[256]{};
+ const float* captureInputs[]{inputBlock};
+ float* captureOutputs[]{outputBlock};
+ int pulseCount=0;
+ for(int offset=0;offset<38400;offset+=256){
+    std::fill(std::begin(outputBlock),std::end(outputBlock),0.0f);
+    live.audioDeviceIOCallbackWithContext(captureInputs,1,captureOutputs,1,256,{});
+    for(const auto value:outputBlock)if(value>0.2f)++pulseCount;
+ }
+ if(!live.isComplete() || live.isActive() || pulseCount!=5 ||
+    live.recordedSamples()!=38400)
+    throw std::runtime_error("live loopback callback pulse schedule");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
