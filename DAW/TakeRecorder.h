@@ -23,7 +23,11 @@ public:
         juce::WavAudioFormat wav;
         auto writer=std::unique_ptr<juce::AudioFormatWriter>(
             wav.createWriterFor(output.get(),sampleRate,(unsigned int)channelsToRecord,24,{},0));
-        if(!writer)return false;
+        if(!writer){
+            output.reset();
+            destination.deleteFile();
+            return false;
+        }
         output.release(); // AudioFormatWriter now owns the stream.
         auto threaded=std::make_unique<juce::AudioFormatWriter::ThreadedWriter>(
             writer.release(),diskThread,32768);
