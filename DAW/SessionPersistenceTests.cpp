@@ -302,6 +302,11 @@ int main(){
  if(!calibration.valid || calibration.lagSamples!=72 || calibration.accepted!=4 ||
     calibration.jitterSamples!=0)
     throw std::runtime_error("repeated loopback estimation");
+ // Three matches out of five are insufficient: at least four are required.
+ std::vector<float> insufficient(8192,0.0f);
+ for(std::size_t i=0;i<3;++i)insufficient[pulsePositions[i]+72]=0.9f;
+ if(estimateLoopbackLatency(insufficient.data(),insufficient.size(),pulsePositions,200).valid)
+    throw std::runtime_error("accepted calibration below 75 percent pulse threshold");
  repeated.assign(8192,0.0f);
  if(estimateLoopbackLatency(repeated.data(),repeated.size(),pulsePositions,200).valid)
     throw std::runtime_error("silent loopback was calibrated");
