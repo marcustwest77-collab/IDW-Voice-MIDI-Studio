@@ -1097,7 +1097,8 @@ private:
                 ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physicalInput)
                 : -1;
             if(!device || physicalInput<0 ||
-               physicalInput>=device->getInputChannelNames().size() || callbackInput<0){
+               physicalInput>=device->getInputChannelNames().size() || callbackInput<0 ||
+               !std::isfinite(deviceRate) || deviceRate<=0.0){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "Input unavailable","Select an existing enabled input in audio device settings.");
                 return;
