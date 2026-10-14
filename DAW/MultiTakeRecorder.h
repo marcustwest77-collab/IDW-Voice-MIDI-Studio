@@ -109,7 +109,7 @@ public:
         // Refuse the whole block when any armed source is missing, so WAV
         // durations remain aligned. Device dropouts need separate diagnostics.
         for(std::size_t i=0;i<count;++i)
-            if(slots[i].channel>=inputsCount || !inputs[slots[i].channel]){
+            if(slots[i].channel<0 || slots[i].channel>=inputsCount || !inputs[slots[i].channel]){
                 droppedBlocks.fetch_add(1,std::memory_order_relaxed);
                 return;
             }
