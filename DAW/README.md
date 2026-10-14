@@ -369,3 +369,7 @@ The **TAKE TRIM ms** control adds a signed correction (-100 to +250 milliseconds
 ### Loopback timing regression (synthetic)
 
 `DAW/LatencyAlignment.h` provides a deterministic pulse locator: supply a recorded float buffer, the expected sample index, and a search radius to obtain a signed sample lag and millisecond conversion. `DAW/SessionPersistenceTests.cpp` checks a pulse 96 samples late, 96 samples early, and absent input at 48 kHz. These are **synthetic unit tests**, not measurements of the user's audio interface. A physical loopback recording, matched clock reference, and safe repeatability tests are still needed before offering automatic latency calibration.
+
+### Repeated-pulse calibration analysis
+
+The timing helper now supports analyzing at least three known loopback pulse positions and rejecting inconsistent pulse delays. It requires at least 75% of expected pulses to match the measured median within eight samples (configurable). Synthetic tests cover four consistent pulses, one outlier, and silence rejection. This is an **offline analysis building block only**, not a working hardware loopback wizard. Nothing changes saved trim automatically; the existing manual TAKE TRIM control stays under user control.
