@@ -1002,6 +1002,15 @@ private:
                 if(failures.isNotEmpty())juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,"Multitrack import incomplete",failures);
             }else{
+                if(playbackFrames>0 && receivedFrames>0 && dropped==0 && rejected==0){
+                    const auto difference=static_cast<juce::int64>(playbackFrames)-
+                        static_cast<juce::int64>(receivedFrames);
+                    juce::Logger::writeToLog("IDW overdub timing diagnostic: playback frames="+
+                        juce::String(static_cast<juce::int64>(playbackFrames))+
+                        ", captured frames="+juce::String(static_cast<juce::int64>(receivedFrames))+
+                        ", frame difference="+juce::String(difference)+
+                        " (callback counters, not a latency correction)");
+                }
                 if(queuedFrames<receivedFrames)juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,"Vocal recording frame mismatch",
                     juce::String(static_cast<juce::int64>(receivedFrames-queuedFrames))+
