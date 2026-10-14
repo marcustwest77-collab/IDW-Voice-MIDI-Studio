@@ -975,8 +975,8 @@ private:
             recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
             monitorControl.setEnabled(false);
             inputLevel.setText("INPUT LEVEL: idle",juce::dontSendNotification);
-            const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : 0;
-            const auto rejected=wasMulti ? multiRecorder.getRejectedWrites() : 0;
+            const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : recorder.getDroppedBlocks();
+            const auto rejected=wasMulti ? multiRecorder.getRejectedWrites() : recorder.getRejectedWrites();
             // Stop the transport before changing the audio graph.
             for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(0);}
             playing.store(false);stopTimer();sessionFrames.store(0);playheadBeats=0;
@@ -996,6 +996,12 @@ private:
                 if(failures.isNotEmpty())juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,"Multitrack import incomplete",failures);
             }else{
+                if(rejected>0)juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,"Vocal WAV buffer overflow",
+                    juce::String(rejected)+" single-take WAV writes were rejected. Inspect the saved recording.");
+                if(dropped>0)juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,"Vocal capture interrupted",
+                    juce::String(dropped)+" audio input blocks were skipped. Check vocal timing.");
                 const auto take=recorder.file();
                 if(!importTake(take))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
