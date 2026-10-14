@@ -532,8 +532,9 @@ int main(){
  const float* missingChannelInputs[]{sample};
  // A selected callback slot outside the provided input span must also count.
  captureDiagnostics.audioDeviceIOCallbackWithContext(missingChannelInputs,0,nullptr,0,256,{});
- if(captureDiagnostics.getDroppedBlocks()!=2 || captureDiagnostics.getRejectedWrites()!=0)
-    throw std::runtime_error("missing microphone blocks not counted");
+ if(captureDiagnostics.getDroppedBlocks()!=2 || captureDiagnostics.getRejectedWrites()!=0 ||
+    captureDiagnostics.getCapturedFrames()!=0)
+    throw std::runtime_error("missing microphone blocks incorrectly counted as captured");
  // A failed restart must not erase evidence from the previous recording.
  if(captureDiagnostics.start(root.getChildFile("failed-restart.wav"),0.0,1,0) ||
     captureDiagnostics.getDroppedBlocks()!=2 || captureDiagnostics.getRejectedWrites()!=0)
