@@ -27,7 +27,10 @@ inline WavLoopbackResult analyzeLoopbackWav(const juce::File& file,
        reader->lengthInSamples<=0 || !std::isfinite(reader->sampleRate) ||
        reader->lengthInSamples>reader->sampleRate*60.0 ||
        reader->lengthInSamples>std::numeric_limits<int>::max() ||
-       reader->numChannels>8)
+       reader->numChannels>8 ||
+       // Limit decoded PCM buffers to 64 MiB on the UI thread.
+       reader->lengthInSamples>
+           (64LL*1024*1024)/(static_cast<juce::int64>(reader->numChannels)*sizeof(float)))
         return result;
     result.sampleRate=reader->sampleRate;
     const auto frames=static_cast<int>(reader->lengthInSamples);
