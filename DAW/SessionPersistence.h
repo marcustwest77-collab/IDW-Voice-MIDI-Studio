@@ -16,6 +16,7 @@ inline juce::var sessionToJson(const Session& s) {
         track->setProperty("type",t.type==TrackType::audio?"audio":"midi");
         track->setProperty("mute",t.mute);
         track->setProperty("solo",t.solo);
+        if(t.type==TrackType::audio)track->setProperty("inputChannel",t.inputChannel);
         track->setProperty("gain",t.gain);
         track->setProperty("pan",t.pan);
         if(t.type==TrackType::midi){track->setProperty("synthPreset",t.synthPreset);track->setProperty("synthAttackMs",t.synthAttackMs);track->setProperty("synthReleaseMs",t.synthReleaseMs);}
@@ -65,6 +66,12 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
         target.name=obj->getProperty("name").toString().toStdString();
         target.mute=(bool)obj->getProperty("mute");
         target.solo=(bool)obj->getProperty("solo");
+        const auto input=obj->getProperty("inputChannel");
+        if(!input.isVoid()){
+            if(type!="audio" || (!input.isInt() && !input.isInt64()) ||
+               (int)input<0 || (int)input>7)return false;
+            target.inputChannel=(int)input;
+        }
         if(!next.setTrackMix(next.tracks.size()-1,(float)(double)obj->getProperty("gain"),(float)(double)obj->getProperty("pan")))return false;
         const auto preset=obj->getProperty("synthPreset");
         if(!preset.isVoid() && (!preset.isInt() || !next.setTrackSynthPreset(next.tracks.size()-1,(int)preset)))return false;
