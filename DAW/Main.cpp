@@ -160,6 +160,17 @@ public:
                recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load())return;
             session.tracks[selectedTrack].inputChannel=inputChannel.getSelectedId()-1;
         };
+        monitorControl.setButtonText("HEADPHONES ONLY");
+        monitorControl.setTooltip("Dry monitoring of the first armed input; headphones required. OFF by default.");
+        monitorControl.setToggleState(false,juce::dontSendNotification);
+        monitorControl.setEnabled(false);
+        addAndMakeVisible(monitorControl);
+        monitorControl.onClick=[this]{
+            const bool enabled=monitorControl.getToggleState() && multiRecorder.isRecording();
+            multiRecorder.setHeadphoneMonitor(enabled,0.1f);
+            if(!multiRecorder.isRecording())
+                monitorControl.setToggleState(false,juce::dontSendNotification);
+        };
         armControl.setButtonText("ARM INPUT");addAndMakeVisible(armControl);
         armedTracks[0]=true; // Existing single-microphone workflow remains ready by default.
         armControl.onClick=[this]{
@@ -230,6 +241,8 @@ public:
         nextTrack.setBounds(mixRow.removeFromLeft(100));
         armControl.setBounds(mixRow.removeFromLeft(105));
         inputChannel.setBounds(mixRow.removeFromLeft(90));
+        auto monitorRow=area.removeFromTop(28);
+        monitorControl.setBounds(monitorRow.removeFromLeft(190));
         inputLevel.setBounds(area.removeFromTop(26));
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
@@ -724,7 +737,10 @@ private:
         if(!(recorder.isRecording() || multiRecorder.isRecording()) && !multiRecorder.isRecording() && playing.load())return;
         if((recorder.isRecording() || multiRecorder.isRecording())){
             const bool wasMulti=multiRecorder.isRecording();
+            multiRecorder.setHeadphoneMonitor(false);
+            monitorControl.setToggleState(false,juce::dontSendNotification);
             recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
+            monitorControl.setEnabled(false);
             inputLevel.setText("INPUT LEVEL: idle",juce::dontSendNotification);
             const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : 0;
             const auto rejected=wasMulti ? multiRecorder.getRejectedWrites() : 0;
@@ -775,6 +791,8 @@ private:
             if(deviceRate>0 && std::isfinite(deviceRate))
                 takeInputLatencySeconds=(double)std::max(0,device->getInputLatencyInSamples())/deviceRate;
         takeStartBeat=deviceRate>0 ? (double)sessionFrames.load()*session.bpm/(deviceRate*60.0) : 0.0;
+        monitorControl.setToggleState(false,juce::dontSendNotification);
+        multiRecorder.setHeadphoneMonitor(false);
         if(selectedInputs.size()>1){
             // A loaded track cannot accept a second AudioSlot reader yet.
             for(const auto index:selectedInputs)
@@ -810,6 +828,7 @@ private:
             }
             if(multiRecorder.start(inputs,deviceRate)){
                 record.setButtonText("STOP RECORD");
+                monitorControl.setEnabled(true);
                 startTimerHz(15); // UI peak updates only; never poll on the audio callback.
             }
             else{
@@ -818,6 +837,7 @@ private:
                     "Multitrack unavailable","Could not start all armed inputs.");
             }
         }else{
+            monitorControl.setEnabled(false);
             auto* device=deviceManager.getCurrentAudioDevice();
             if(!device || !device->getActiveInputChannels()[session.tracks[recordTargetTrack].inputChannel]){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
@@ -871,7 +891,7 @@ private:
     std::atomic<float> peakLeft{0.0f},peakRight{0.0f};
     std::atomic<bool> peakClipLeft{false},peakClipRight{false};
     std::atomic<float> masterLevel{1.0f};
-    juce::ToggleButton muteControl,soloControl,armControl;
+    juce::ToggleButton muteControl,soloControl,armControl,monitorControl;
     juce::ComboBox inputChannel;
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextButton previousTrack,nextTrack;
