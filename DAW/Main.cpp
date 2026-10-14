@@ -817,8 +817,16 @@ private:
         double previous=-1.0;
         for(const auto& token:times){
             const auto entry=token.trim();
-            const double ms=entry.getDoubleValue();
-            if(entry.isEmpty() || !std::isfinite(ms) || ms<=previous || ms<0 || ms>60000){
+            // getDoubleValue() alone accepts malformed entries such as "abc" as 0.
+            bool numeric=!entry.isEmpty();
+            int decimalPoints=0;
+            for(const auto character:entry){
+                if(character=='.')++decimalPoints;
+                else if(character<'0' || character>'9')numeric=false;
+            }
+            if(decimalPoints>1 || entry==".")numeric=false;
+            const double ms=numeric ? entry.getDoubleValue() : -1.0;
+            if(!numeric || !std::isfinite(ms) || ms<=previous || ms<0 || ms>60000){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "Invalid pulse schedule","Enter strictly increasing pulse times between 0 and 60000 ms.");
                 return;
