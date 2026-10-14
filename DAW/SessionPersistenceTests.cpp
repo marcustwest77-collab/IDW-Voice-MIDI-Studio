@@ -543,7 +543,8 @@ int main(){
  // Starting a new take must clear the previous take's diagnostics.
  if(!captureDiagnostics.start(root.getChildFile("callback-reset.wav"),48000.0,1,0))
     throw std::runtime_error("recorder diagnostic reset setup");
- if(captureDiagnostics.getDroppedBlocks()!=0 || captureDiagnostics.getRejectedWrites()!=0)
+ if(captureDiagnostics.getDroppedBlocks()!=0 || captureDiagnostics.getRejectedWrites()!=0 ||
+    captureDiagnostics.getCapturedFrames()!=0 || captureDiagnostics.getQueuedFrames()!=0)
     throw std::runtime_error("recorder counters leaked into next take");
  // Valid input must be accepted without incrementing either error counter.
  const float* validCaptureInputs[]{sample};
