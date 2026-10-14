@@ -386,6 +386,27 @@ int main(){
  if(!live.isComplete() || live.isActive() || pulseCount!=5 ||
     live.recordedSamples()!=38400)
     throw std::runtime_error("live loopback callback pulse schedule");
+ // Synthetic one-buffer hardware return: generated pulses should be
+ // captured 256 samples late and recovered by the same latency estimator.
+ IDWLoopbackCapture liveDelayed;
+ if(!liveDelayed.prepare(44100.0,0,0) || !liveDelayed.start())
+    throw std::runtime_error("delayed live loopback setup");
+ float returnBlock[256]{};
+ float sendBlock[256]{};
+ const float* returnInputs[]{returnBlock};
+ float* sendOutputs[]{sendBlock};
+ for(int offset=0;offset<35280;offset+=256){
+    std::fill(std::begin(sendBlock),std::end(sendBlock),0.0f);
+    liveDelayed.audioDeviceIOCallbackWithContext(returnInputs,1,sendOutputs,1,256,{});
+    std::copy(std::begin(sendBlock),std::end(sendBlock),std::begin(returnBlock));
+ }
+ const std::vector<std::size_t> livePulsePositions{4410,8820,13230,17640,22050};
+ const auto liveAlignment=estimateLoopbackLatency(
+    liveDelayed.getCapturedBuffer().getReadPointer(0),
+    static_cast<std::size_t>(liveDelayed.recordedSamples()),livePulsePositions,512);
+ if(!liveDelayed.isComplete() || !liveAlignment.valid ||
+    liveAlignment.lagSamples!=256 || liveAlignment.accepted!=5)
+    throw std::runtime_error("live loopback simulated return latency");
  // Live device interruption must invalidate the capture exactly once.
  IDWLoopbackCapture interrupted;
  if(!interrupted.prepare(48000.0,0,0) || !interrupted.start())
