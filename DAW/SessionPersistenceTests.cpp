@@ -513,6 +513,12 @@ int main(){
  if(!root.createDirectory())throw std::runtime_error("test directory");
  // A missing input buffer must be counted, not silently treated as a clean take.
  IDWTakeRecorder captureDiagnostics;
+ // Invalid recording setup must not create or overwrite a take file.
+ const auto invalidRateTake=root.getChildFile("invalid-rate.wav");
+ if(captureDiagnostics.start(invalidRateTake,0.0,1,0) || invalidRateTake.existsAsFile())
+    throw std::runtime_error("invalid sample rate created a take");
+ if(captureDiagnostics.start(root.getChildFile("invalid-channel.wav"),48000.0,1,-1))
+    throw std::runtime_error("negative recording input accepted");
  if(!captureDiagnostics.start(root.getChildFile("callback-dropout.wav"),48000.0,1,0))
     throw std::runtime_error("take recorder diagnostics setup");
  captureDiagnostics.audioDeviceIOCallbackWithContext(nullptr,0,nullptr,0,256,{});
