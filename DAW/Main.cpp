@@ -106,6 +106,13 @@ public:
             return true;
         };
         record.setButtonText("RECORD VOCAL");
+        latencyLabel.setText("TAKE TRIM ms",juce::dontSendNotification);
+        addAndMakeVisible(latencyLabel);
+        latencyAdjust.setRange(-100.0,250.0,1.0);
+        latencyAdjust.setValue(0.0);
+        latencyAdjust.setTextBoxStyle(juce::Slider::TextBoxRight,false,65,24);
+        latencyAdjust.setTooltip("Manual adjustment added to driver-reported input latency (milliseconds). Negative values reduce trim.");
+        addAndMakeVisible(latencyAdjust);
         overdubControl.setButtonText("PLAY BEAT WHILE RECORDING");
         overdubControl.setTooltip("Play existing tracks while capturing new takes on empty armed tracks.");
         overdubControl.setToggleState(false,juce::dontSendNotification);
@@ -248,7 +255,10 @@ public:
         auto monitorRow=area.removeFromTop(28);
         monitorControl.setBounds(monitorRow.removeFromLeft(190));
         inputLevel.setBounds(area.removeFromTop(26));
-        overdubControl.setBounds(area.removeFromTop(30).removeFromLeft(285));
+        auto overdubRow=area.removeFromTop(36);
+        overdubControl.setBounds(overdubRow.removeFromLeft(285));
+        latencyLabel.setBounds(overdubRow.removeFromLeft(120));
+        latencyAdjust.setBounds(overdubRow.removeFromLeft(200));
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
@@ -728,7 +738,8 @@ private:
         // Compensate the input device's reported capture latency when importing
         // a new take. The initial delayed frames remain in the WAV master file.
         // This is driver-reported latency only, not measured round-trip calibration.
-        const double trim=std::clamp(takeInputLatencySeconds,0.0,std::max(0.0,duration-1.0/rate));
+        const double adjustedLatency=takeInputLatencySeconds+takeManualTrimSeconds;
+        const double trim=std::clamp(adjustedLatency,0.0,std::max(0.0,duration-1.0/rate));
         const double beatLength=(duration-trim)*session.bpm/60.0;
         if(!session.addClip(target->trackIndex,{take.getFullPathName().toStdString(),takeStartBeat,beatLength,trim}))return false;
         target->transport.setSource(source.get(),0,nullptr,rate);
@@ -809,6 +820,7 @@ private:
         // Use driver-reported input latency to trim delayed capture frames
         // at take import. Real loopback calibration remains future work.
         takeInputLatencySeconds=0.0;
+        takeManualTrimSeconds=latencyAdjust.getValue()/1000.0;
         if(auto* device=deviceManager.getCurrentAudioDevice())
             if(deviceRate>0 && std::isfinite(deviceRate))
                 takeInputLatencySeconds=(double)std::max(0,device->getInputLatencyInSamples())/deviceRate;
@@ -920,8 +932,9 @@ private:
     double takeStartBeat=0.0;
     size_t recordTargetTrack=0;
     double takeInputLatencySeconds=0.0;
-    juce::Label title,tempoLabel,gainLabel,panLabel,inputLevel;
-    juce::Slider gainControl,panControl,masterGain;
+    double takeManualTrimSeconds=0.0;
+    juce::Label title,tempoLabel,gainLabel,panLabel,inputLevel,latencyLabel;
+    juce::Slider gainControl,panControl,masterGain,latencyAdjust;
     juce::Label masterLabel,eqLabel,limitLabel;
     juce::Slider ceilingControl;
     std::atomic<float> ceilingDb{-1.0f};
