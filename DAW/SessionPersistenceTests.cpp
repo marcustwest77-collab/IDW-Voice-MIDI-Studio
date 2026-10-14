@@ -336,6 +336,13 @@ int main(){
  stableQuality.jitterSamples=4;
  if(assessCalibration(stableQuality,48000.0)!=CalibrationQuality::consistent)
     throw std::runtime_error("stable loopback quality");
+ stableQuality.accepted=2;
+ if(assessCalibration(stableQuality,48000.0)!=CalibrationQuality::invalid)
+    throw std::runtime_error("insufficient pulse consensus metadata");
+ stableQuality.accepted=5;
+ stableQuality.jitterSamples=-1;
+ if(assessCalibration(stableQuality,48000.0)!=CalibrationQuality::invalid)
+    throw std::runtime_error("negative timing deviation metadata");
  stableQuality.jitterSamples=20;
  if(assessCalibration(stableQuality,48000.0)!=CalibrationQuality::repeat ||
     assessCalibration(stableQuality,0.0)!=CalibrationQuality::invalid)
