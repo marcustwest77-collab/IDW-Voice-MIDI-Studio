@@ -53,7 +53,7 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
         return frequencies;
     }();
     std::size_t activeVoices=0;
-    const double bufferEndBeat=(double)(startFrame+samples)/framesPerBeat;
+    const double bufferEndBeat=((double)startFrame+(double)samples)/framesPerBeat;
     const double bufferStartBeat=(double)startFrame/framesPerBeat;
     for(const auto& track:s.tracks){
         if(track.type!=TrackType::midi || track.mute || (anySolo && !track.solo))continue;
