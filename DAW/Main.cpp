@@ -977,6 +977,8 @@ private:
             inputLevel.setText("INPUT LEVEL: idle",juce::dontSendNotification);
             const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : recorder.getDroppedBlocks();
             const auto rejected=wasMulti ? multiRecorder.getRejectedWrites() : recorder.getRejectedWrites();
+            const auto receivedFrames=wasMulti ? std::uint64_t{0} : recorder.getCapturedFrames();
+            const auto queuedFrames=wasMulti ? std::uint64_t{0} : recorder.getQueuedFrames();
             // Stop the transport before changing the audio graph.
             for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(0);}
             playing.store(false);stopTimer();sessionFrames.store(0);playheadBeats=0;
@@ -996,6 +998,10 @@ private:
                 if(failures.isNotEmpty())juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,"Multitrack import incomplete",failures);
             }else{
+                if(queuedFrames<receivedFrames)juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,"Vocal recording frame mismatch",
+                    juce::String(static_cast<juce::int64>(receivedFrames-queuedFrames))+
+                    " captured audio frames were not accepted by the WAV queue. Inspect take timing.");
                 if(rejected>0)juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,"Vocal WAV buffer overflow",
                     juce::String(rejected)+" single-take WAV writes were rejected. Inspect the saved recording.");
