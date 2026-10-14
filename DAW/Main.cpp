@@ -577,7 +577,7 @@ private:
             liveCalibration.setEnabled(true);
             const auto quality=idw::daw::assessCalibration(alignment,rate);
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
-                "Live loopback result",alignment.valid
+                "Live loopback result",quality!=idw::daw::CalibrationQuality::invalid
                     ? "Measured "+juce::String(idw::daw::alignmentMilliseconds(alignment.lagSamples,rate),3)+
                       " ms, matched "+juce::String((int)alignment.accepted)+"/5 pulses. Quality: "+
                       juce::String(quality==idw::daw::CalibrationQuality::consistent?"consistent":"repeat test")+
