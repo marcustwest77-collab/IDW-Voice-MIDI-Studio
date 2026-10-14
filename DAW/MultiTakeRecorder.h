@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -28,6 +29,7 @@ public:
     // creation closes writers opened during this attempt.
     bool start(const std::vector<Input>& inputs, double sampleRate) {
         stop();
+        droppedBlocks.store(0,std::memory_order_relaxed);
         if(!std::isfinite(sampleRate) || sampleRate <= 0 ||
            inputs.empty() || inputs.size() > maxTracks)return false;
         for(std::size_t i=0;i<inputs.size();++i){
@@ -71,6 +73,9 @@ public:
         for(auto& slot:slots)slot.writer.reset();
         count=0;
     }
+    std::uint64_t getDroppedBlocks() const noexcept {
+        return droppedBlocks.load(std::memory_order_relaxed);
+    }
     bool isRecording() const {
         const juce::ScopedLock lock(guard);
         return count!=0;
@@ -79,11 +84,19 @@ public:
                                           float* const*,int,int samples,
                                           const juce::AudioIODeviceCallbackContext&) override {
         const juce::ScopedTryLock lock(guard);
-        if(!lock.isLocked() || count==0 || !inputs || samples<=0)return;
+        if(!lock.isLocked()){
+            droppedBlocks.fetch_add(1,std::memory_order_relaxed);
+            return;
+        }
+        if(count==0 || samples<=0)return;
+        if(!inputs){droppedBlocks.fetch_add(1,std::memory_order_relaxed);return;}
         // Refuse the whole block when any armed source is missing, so WAV
         // durations remain aligned. Device dropouts need separate diagnostics.
         for(std::size_t i=0;i<count;++i)
-            if(slots[i].channel>=inputsCount || !inputs[slots[i].channel])return;
+            if(slots[i].channel>=inputsCount || !inputs[slots[i].channel]){
+                droppedBlocks.fetch_add(1,std::memory_order_relaxed);
+                return;
+            }
         for(std::size_t i=0;i<count;++i){
             const float* mono[] { inputs[slots[i].channel] };
             slots[i].writer->write(mono,samples);
@@ -108,4 +121,5 @@ private:
     juce::TimeSliceThread diskThread;
     std::array<Slot,maxTracks> slots;
     std::size_t count=0;
+    std::atomic<std::uint64_t> droppedBlocks{0};
 };
