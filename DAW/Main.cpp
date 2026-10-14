@@ -1073,7 +1073,8 @@ private:
             for(std::size_t i=0;i<selectedInputs.size();++i){
                 const auto path=folder.getNonexistentChildFile(
                     "Take "+juce::String(selectedInputs[i]+1)+" "+juce::String(juce::Time::getCurrentTime().toMilliseconds()),".wav",false);
-                inputs.push_back({path,session.tracks[selectedInputs[i]].inputChannel});
+                inputs.push_back({path,IDWLoopbackCapture::callbackIndexForChannel(active,
+                    session.tracks[selectedInputs[i]].inputChannel)});
                 multiTakes.emplace_back(selectedInputs[i],path);
             }
             if(multiRecorder.start(inputs,deviceRate)){
@@ -1090,12 +1091,16 @@ private:
         }else{
             monitorControl.setEnabled(false);
             auto* device=deviceManager.getCurrentAudioDevice();
-            if(!device || !device->getActiveInputChannels()[session.tracks[recordTargetTrack].inputChannel]){
+            const int physicalInput=session.tracks[recordTargetTrack].inputChannel;
+            const int callbackInput=device
+                ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physicalInput)
+                : -1;
+            if(callbackInput<0){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "Input unavailable","Enable the selected input in audio device settings.");
                 return;
             }
-            if(recorder.start(destination,deviceRate,1,session.tracks[recordTargetTrack].inputChannel)){
+            if(recorder.start(destination,deviceRate,1,callbackInput)){
                 record.setButtonText("STOP RECORD");
                 if(overdubControl.getToggleState())startOverdubPlayback();
             }
