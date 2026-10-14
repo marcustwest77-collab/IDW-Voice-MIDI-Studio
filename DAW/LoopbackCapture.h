@@ -26,7 +26,7 @@ public:
         written.store(0);complete.store(false);failed.store(false);active.store(true);
         return true;
     }
-    void cancel(){active.store(false);}
+    void cancel(){active.store(false);complete.store(false);failed.store(false);}
     bool isActive()const{return active.load();}
     bool isComplete()const{return complete.load();}
     // The UI must consume each finished capture once to avoid repeat dialogs.
