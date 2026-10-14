@@ -19,7 +19,11 @@ public:
            (channelsToRecord!=1 && channelsToRecord!=2) || firstInputChannel<0)return false;
         destination.getParentDirectory().createDirectory();
         std::unique_ptr<juce::FileOutputStream> output(destination.createOutputStream());
-        if(!output)return false;
+        if(!output){
+            // File creation may leave an empty or partial destination behind.
+            if(destination.existsAsFile())destination.deleteFile();
+            return false;
+        }
         juce::WavAudioFormat wav;
         auto writer=std::unique_ptr<juce::AudioFormatWriter>(
             wav.createWriterFor(output.get(),sampleRate,(unsigned int)channelsToRecord,24,{},0));
