@@ -11,6 +11,15 @@ class IDWLoopbackCapture final : public juce::AudioIODeviceCallback {
 public:
     static constexpr int maxSeconds=2;
     static constexpr int maxRate=192000;
+    // Return the compact callback slot for a physical device channel.
+    // Disabled channels do not occupy slots in JUCE's callback arrays.
+    static int callbackIndexForChannel(const juce::BigInteger& active,int physicalChannel){
+        if(physicalChannel<0 || !active[physicalChannel])return -1;
+        int index=0;
+        for(int channel=0;channel<physicalChannel;++channel)
+            if(active[channel])++index;
+        return index;
+    }
     bool prepare(double rate,int input,int output) {
         // A completed or interrupted take must be acknowledged first.
         if(complete.load() || failed.load())return false;
