@@ -12,6 +12,8 @@ public:
     static constexpr int maxSeconds=2;
     static constexpr int maxRate=192000;
     bool prepare(double rate,int input,int output) {
+        // A completed or interrupted take must be acknowledged first.
+        if(complete.load() || failed.load())return false;
         if(active.load() || !std::isfinite(rate) || rate<8000.0 || rate>maxRate ||
            input<0 || output<0)return false;
         sampleRate=rate;inputChannel=input;outputChannel=output;
