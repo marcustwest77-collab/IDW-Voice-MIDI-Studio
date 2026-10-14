@@ -347,3 +347,7 @@ The buffer-size benchmark reports `first_over_budget_block` (0-based, or -1 if n
 ### Missed block interval diagnostics
 
 The low-buffer benchmark now reports `last_over_budget_block` in addition to the first missed block. Both use zero-based indices, or -1 when no block exceeds the nominal deadline. These fields help identify the span of observed scheduling spikes; they do not measure actual sound-card underruns.
+
+### Cached pitch frequencies in voice counting
+
+The MIDI renderer now uses its existing 128-entry equal-temperament pitch lookup table when deciding whether notes can sound below Nyquist during active-voice normalization. This avoids calling `pow` for every note during every audio block; the same table is also used for note rendering. Cross-platform build and regression validation is required for this optimization.
