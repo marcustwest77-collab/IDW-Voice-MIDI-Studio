@@ -1,6 +1,7 @@
 #include "MidiSineSynth.h"
 #include "PlaybackTiming.h"
 #include "LoopbackWavAnalysis.h"
+#include "LoopbackReference.h"
 #include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
@@ -118,6 +119,10 @@ public:
         analyzeCalibration.setTooltip("Measure known test-pulse positions in an existing WAV. Does not change take trim.");
         addAndMakeVisible(analyzeCalibration);
         analyzeCalibration.onClick=[this]{analyzeCalibrationWav();};
+        generateCalibration.setButtonText("CREATE PULSE WAV");
+        generateCalibration.setTooltip("Generate a safe-level 48 kHz test WAV with pulses at 100, 200, 300, 400, 500 ms.");
+        addAndMakeVisible(generateCalibration);
+        generateCalibration.onClick=[this]{createCalibrationReference();};
         overdubControl.setButtonText("PLAY BEAT WHILE RECORDING");
         overdubControl.setTooltip("Play existing tracks while capturing new takes on empty armed tracks.");
         overdubControl.setToggleState(false,juce::dontSendNotification);
@@ -265,6 +270,7 @@ public:
         latencyLabel.setBounds(overdubRow.removeFromLeft(120));
         latencyAdjust.setBounds(overdubRow.removeFromLeft(200));
         analyzeCalibration.setBounds(overdubRow.removeFromLeft(200).reduced(3));
+        generateCalibration.setBounds(overdubRow.removeFromLeft(170).reduced(3));
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
@@ -753,6 +759,36 @@ private:
         selectedTrack=target->trackIndex;
         refreshMixer();repaint();return true;
     }
+    void createCalibrationReference(){
+        if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load())return;
+        referenceChooser=std::make_unique<juce::FileChooser>(
+            "Save loopback test pulse WAV",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                .getChildFile("IDW Loopback Reference.wav"),"*.wav");
+        referenceChooser->launchAsync(juce::FileBrowserComponent::saveMode |
+            juce::FileBrowserComponent::canSelectFiles |
+            juce::FileBrowserComponent::warnAboutOverwriting,
+            [this](const juce::FileChooser& picker){
+                const auto file=picker.getResult();
+                if(file==juce::File{} || playing.load() || recorder.isRecording() ||
+                   multiRecorder.isRecording() || exportRunning.load())return;
+                const auto destination=file.withFileExtension(".wav");
+                // The generator never overwrites existing files, even if the
+                // file chooser has confirmed replacement.
+                if(destination.existsAsFile()){
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                        "File exists","Choose a new filename. Existing reference WAVs are preserved.");
+                    return;
+                }
+                const bool ok=idw::daw::writeLoopbackReference(destination,48000.0,
+                    {100.0,200.0,300.0,400.0,500.0});
+                juce::AlertWindow::showMessageBoxAsync(
+                    ok?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
+                    ok?"Reference WAV saved":"Reference WAV failed",
+                    ok?"Saved 48 kHz pulse WAV. Expected pulse times: 100, 200, 300, 400, 500 ms.":
+                       "Unable to create the reference WAV.");
+            });
+    }
     void analyzeCalibrationWav(){
         if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load())return;
         juce::AlertWindow prompt("Offline loopback WAV",
@@ -1017,7 +1053,7 @@ private:
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration;
     juce::ComboBox synthPreset;
     juce::Label attackLabel,releaseLabel;
     juce::Slider attackControl,releaseControl;
@@ -1034,7 +1070,7 @@ private:
     double deviceRate=48000.0;
     int preparedBlockSize=0;
     std::vector<std::unique_ptr<AudioSlot>> sources;
-    std::unique_ptr<juce::FileChooser> chooser,projectChooser,calibrationChooser;
+    std::unique_ptr<juce::FileChooser> chooser,projectChooser,calibrationChooser,referenceChooser;
     juce::Slider tempo;
 };
 class DAWApplication final : public juce::JUCEApplication {
