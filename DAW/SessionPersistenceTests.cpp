@@ -452,6 +452,16 @@ int main(){
     throw std::runtime_error("pending failure should gate restart");
  pendingStatus.cancel();
  // A device-restart notification without a valid device is an aborted test.
+ juce::BigInteger enabledInputs;
+ enabledInputs.setBit(0);
+ enabledInputs.setBit(2);
+ enabledInputs.setBit(5);
+ if(IDWLoopbackCapture::callbackIndexForChannel(enabledInputs,0)!=0 ||
+    IDWLoopbackCapture::callbackIndexForChannel(enabledInputs,2)!=1 ||
+    IDWLoopbackCapture::callbackIndexForChannel(enabledInputs,5)!=2 ||
+    IDWLoopbackCapture::callbackIndexForChannel(enabledInputs,3)!=-1 ||
+    IDWLoopbackCapture::callbackIndexForChannel(enabledInputs,-1)!=-1)
+    throw std::runtime_error("noncontiguous physical input channel mapping");
  IDWLoopbackCapture restarted;
  if(!restarted.prepare(48000.0,0,0) || !restarted.start())
     throw std::runtime_error("restarted loopback setup");
