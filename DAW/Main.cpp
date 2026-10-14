@@ -979,6 +979,10 @@ private:
             const auto rejected=wasMulti ? multiRecorder.getRejectedWrites() : recorder.getRejectedWrites();
             const auto receivedFrames=wasMulti ? std::uint64_t{0} : recorder.getCapturedFrames();
             const auto queuedFrames=wasMulti ? std::uint64_t{0} : recorder.getQueuedFrames();
+            // Playback and capture counters currently run in separate callbacks;
+            // this discrepancy is diagnostic, not an automatic alignment offset.
+            const auto playbackFrames=static_cast<std::uint64_t>(
+                std::max<std::int64_t>(0,sessionFrames.load(std::memory_order_relaxed)));
             // Stop the transport before changing the audio graph.
             for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(0);}
             playing.store(false);stopTimer();sessionFrames.store(0);playheadBeats=0;
