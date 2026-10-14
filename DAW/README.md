@@ -381,3 +381,7 @@ The timing helper now supports analyzing at least three known loopback pulse pos
 ### Analyze loopback WAV in the DAW
 
 Use **ANALYZE LOOPBACK WAV** while idle, enter the *known* pulse timestamps in milliseconds and a 1-based WAV channel, then choose an existing recorded WAV (currently limited to approximately 60 seconds at 48 kHz). The app reports sample lag, milliseconds and matched pulse count; it does **not** change TAKE TRIM. This analysis is only meaningful if the chosen WAV came from playback with precisely known pulse emission times on the same timeline. A real interface calibration wizard that generates, plays, records and verifies loopback impulses is not yet available. Never plug a powered speaker output directly into a microphone input; follow your interface's supported line-level routing.
+
+### Reference pulse WAV generation
+
+`DAW/LoopbackReference.h` can generate a mono 16-bit PCM WAV containing five or more known pulse positions (for example 100, 200, 300, 400, 500 ms at 48 kHz). Output pulse amplitude defaults to 0.25 (not full scale). The generator is currently a tested code helper, **not yet a UI control**. For an actual loopback, play the reference WAV through a supported interface line output routed to a line input, record the return in the DAW, and compare against the known pulse schedule; observe audio-interface electrical specifications. Do not connect amplified speaker outputs to an audio input. Automatic synchronized capture is still outstanding.
