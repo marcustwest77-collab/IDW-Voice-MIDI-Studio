@@ -86,7 +86,9 @@ inline RepeatedPulseAlignment estimateLoopbackLatency(
             result.jitterSamples=std::max(result.jitterSamples,
                 static_cast<int>(std::abs(static_cast<double>(delay)-median)));
         }
-    if(result.accepted<3 || result.accepted*4<result.total*3)return result;
+    // Compute the 75% threshold without multiplication overflow.
+    const std::size_t required=result.total-result.total/4;
+    if(result.accepted<3 || result.accepted<required)return result;
     result.valid=true;
     result.lagSamples=median;
     return result;
