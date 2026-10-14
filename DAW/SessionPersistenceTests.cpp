@@ -446,6 +446,8 @@ int main(){
  if(!pendingStatus.prepare(48000.0,0,0) || !pendingStatus.start())
     throw std::runtime_error("pending-status capture setup");
  pendingStatus.audioDeviceStopped();
+ if(pendingStatus.prepare(48000.0,0,0))
+    throw std::runtime_error("prepare erased an unread failed capture");
  if(pendingStatus.start() || !pendingStatus.consumeFailed() || !pendingStatus.start())
     throw std::runtime_error("pending failure should gate restart");
  pendingStatus.cancel();
