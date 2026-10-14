@@ -396,6 +396,17 @@ int main(){
  if(interrupted.isActive() || !interrupted.consumeFailed() || interrupted.consumeFailed() ||
     interrupted.consumeComplete())
     throw std::runtime_error("device interruption did not abort capture once");
+ // A device shutdown during live calibration must emit exactly one failure.
+ IDWLoopbackCapture stoppedCapture;
+ if(!stoppedCapture.prepare(44100.0,0,0) || !stoppedCapture.start())
+    throw std::runtime_error("stopped capture setup");
+ stoppedCapture.audioDeviceStopped();
+ if(stoppedCapture.isActive() || !stoppedCapture.consumeFailed() ||
+    stoppedCapture.consumeFailed() || stoppedCapture.consumeComplete())
+    throw std::runtime_error("device stop did not invalidate calibration exactly once");
+ // Completion is a one-shot notification and should not be reprocessed.
+ if(!live.consumeComplete() || live.consumeComplete())
+    throw std::runtime_error("completed loopback should only be consumed once");
  Session original;original.setTempo(137);original.addTrack(TrackType::audio);
  original.tracks[0].name="Lead Vocal";
  original.tracks[0].solo=true;
