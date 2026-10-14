@@ -810,11 +810,17 @@ private:
         }
         auto* device=deviceManager.getCurrentAudioDevice();
         const int input=session.tracks[selectedTrack].inputChannel;
+        // JUCE callback channel arrays are packed by enabled hardware channels.
+        // Translate the selected physical input index to its callback slot.
+        int callbackInput=0;
+        if(device && input>=0)
+            for(int channel=0;channel<input;++channel)
+                if(device->getActiveInputChannels()[channel])++callbackInput;
         if(!device || input<0 || input>=device->getInputChannelNames().size() ||
            device->getOutputChannelNames().isEmpty() ||
            !device->getActiveInputChannels()[input] ||
            !device->getActiveOutputChannels()[0] ||
-           !loopbackCapture.prepare(device->getCurrentSampleRate(),input,0) ||
+           !loopbackCapture.prepare(device->getCurrentSampleRate(),callbackInput,0) ||
            !loopbackCapture.start()){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                 "Live loopback unavailable","Select a track with an enabled line input and enable output channel 1.");
