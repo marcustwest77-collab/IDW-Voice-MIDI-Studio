@@ -1058,7 +1058,8 @@ private:
             bool validInputs=device!=nullptr;
             for(std::size_t i=0;i<selectedInputs.size();++i){
                 const int channel=session.tracks[selectedInputs[i]].inputChannel;
-                if(channel<0 || !active[channel])validInputs=false;
+                if(channel<0 || (device && channel>=device->getInputChannelNames().size()) ||
+                   IDWLoopbackCapture::callbackIndexForChannel(active,channel)<0)validInputs=false;
                 for(std::size_t j=0;j<i;++j)
                     if(session.tracks[selectedInputs[j]].inputChannel==channel)validInputs=false;
             }
