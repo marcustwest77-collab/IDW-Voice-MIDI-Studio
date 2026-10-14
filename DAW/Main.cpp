@@ -816,6 +816,10 @@ private:
         monitorControl.setToggleState(false,juce::dontSendNotification);
         multiRecorder.setHeadphoneMonitor(false);
         if(overdubControl.getToggleState()){
+            // The recording writer starts before transport playback. Reset the
+            // reference beat to the beginning of the playback arrangement.
+            // Physical capture/playback alignment still needs loopback QA.
+            takeStartBeat=0.0;
             // Overdubs must use empty destination tracks. Existing material
             // is preserved and never overwritten by the recording operation.
             for(const auto index:selectedInputs)
