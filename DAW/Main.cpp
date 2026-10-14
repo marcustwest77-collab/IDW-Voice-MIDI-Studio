@@ -791,16 +791,23 @@ private:
     }
     void analyzeCalibrationWav(){
         if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load())return;
-        juce::AlertWindow prompt("Offline loopback WAV",
-            "Enter known emitted pulse positions in milliseconds, separated by commas (minimum three). The analysis will not change take trim.",
+        auto* prompt=new juce::AlertWindow("Offline loopback WAV",
+            "Enter known pulse times in milliseconds, separated by commas (minimum three). Analysis will not modify take trim.",
             juce::MessageBoxIconType::InfoIcon);
-        prompt.addTextEditor("pulses","100,200,300,400,500","Expected pulse times (ms)");
-        prompt.addTextEditor("channel","1","WAV channel (1-based)");
-        prompt.addButton("Continue",1,juce::KeyPress(juce::KeyPress::returnKey));
-        prompt.addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
-        if(prompt.runModalLoop()!=1)return;
-        const auto times=juce::StringArray::fromTokens(prompt.getTextEditorContents("pulses"),",","");
-        const int channel=prompt.getTextEditorContents("channel").getIntValue()-1;
+        prompt->addTextEditor("pulses","100,200,300,400,500","Expected pulse times (ms)");
+        prompt->addTextEditor("channel","1","WAV channel (1-based)");
+        prompt->addButton("Continue",1,juce::KeyPress(juce::KeyPress::returnKey));
+        prompt->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
+        prompt->enterModalState(true,juce::ModalCallbackFunction::create(
+            [this,prompt](int result){
+                if(result!=1){delete prompt;return;}
+                const auto times=juce::StringArray::fromTokens(prompt->getTextEditorContents("pulses"),",","");
+                const int channel=prompt->getTextEditorContents("channel").getIntValue()-1;
+                delete prompt;
+                continueCalibrationAnalysis(times,channel);
+            }),false);
+    }
+    void continueCalibrationAnalysis(const juce::StringArray& times,int channel){
         if(times.size()<3 || times.size()>64 || channel<0 || channel>7){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                 "Invalid calibration","Specify 3–64 pulse times and a valid WAV channel (1–8).");
