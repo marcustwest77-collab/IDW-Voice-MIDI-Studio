@@ -385,3 +385,7 @@ Use **ANALYZE LOOPBACK WAV** while idle, enter the *known* pulse timestamps in m
 ### Reference pulse WAV generation
 
 `DAW/LoopbackReference.h` can generate a mono 16-bit PCM WAV containing five or more known pulse positions (for example 100, 200, 300, 400, 500 ms at 48 kHz). Output pulse amplitude defaults to 0.25 (not full scale). The generator is currently a tested code helper, **not yet a UI control**. For an actual loopback, play the reference WAV through a supported interface line output routed to a line input, record the return in the DAW, and compare against the known pulse schedule; observe audio-interface electrical specifications. Do not connect amplified speaker outputs to an audio input. Automatic synchronized capture is still outstanding.
+
+### Generate a calibration reference in the app
+
+Click **CREATE PULSE WAV** while transport and recording are stopped, choose a new output filename, and save. The generated mono 48 kHz reference contains five known pulses at 100, 200, 300, 400, and 500 milliseconds. The generator does not overwrite existing WAV files. Play it externally through the interface's supported line-level output, record the returned signal on an input, then click **ANALYZE LOOPBACK WAV** and enter `100,200,300,400,500` to inspect the detected lag. Reference playback and capture are not automated or sample-clock synchronized yet; no correction is automatically applied. Use only electrically compatible line-level loopback connections.
