@@ -406,6 +406,33 @@ int main(){
  if(std::abs(referenceSamples.getSample(0,1000))>0.001f)
     throw std::runtime_error("reference silence not preserved");
 
+ // End-to-end: generated WAV is zero-lag against its own pulse schedule.
+ const std::vector<std::size_t> referencePositions{4800,9600,14400,19200,24000};
+ referenceReader.reset();
+ const auto noLag=analyzeLoopbackWav(referenceFile,0,referencePositions,128);
+ if(!noLag.alignment.valid || noLag.alignment.lagSamples!=0 ||
+    noLag.alignment.accepted!=5 || std::abs(noLag.lagMilliseconds)>1.0e-10)
+    throw std::runtime_error("generated reference WAV must have zero pulse lag");
+ // Simulate a physical return with 120 samples (2.5 ms) of extra latency.
+ const auto delayedFile=root.getChildFile("delayed-reference.wav");
+ auto delayedStream=std::unique_ptr<juce::FileOutputStream>(delayedFile.createOutputStream());
+ if(!delayedStream)throw std::runtime_error("delayed fixture stream");
+ auto delayedWriter=std::unique_ptr<juce::AudioFormatWriter>(
+    wav.createWriterFor(delayedStream.get(),48000.0,1,16,{},0));
+ if(!delayedWriter)throw std::runtime_error("delayed fixture writer");
+ delayedStream.release();
+ juce::AudioBuffer<float> delayedSamples(1,30000);
+ delayedSamples.clear();
+ for(const auto position:referencePositions)
+    delayedSamples.setSample(0,static_cast<int>(position+120),0.25f);
+ const float* delayedChannels[]{delayedSamples.getReadPointer(0)};
+ if(!delayedWriter->writeFromFloatArrays(delayedChannels,1,30000))
+    throw std::runtime_error("delayed fixture write");
+ delayedWriter.reset();
+ const auto delayedMeasurement=analyzeLoopbackWav(delayedFile,0,referencePositions,200);
+ if(!delayedMeasurement.alignment.valid || delayedMeasurement.alignment.lagSamples!=120 ||
+    std::abs(delayedMeasurement.lagMilliseconds-2.5)>0.01)
+    throw std::runtime_error("generated pulse delayed capture analysis");
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
 }
