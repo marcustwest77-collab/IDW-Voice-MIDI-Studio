@@ -19,9 +19,13 @@ inline WavLoopbackResult analyzeLoopbackWav(const juce::File& file,
                                             const std::vector<std::size_t>& expectedPulses,
                                             std::size_t searchRadius) {
     WavLoopbackResult result;
+    // Avoid trying to decode an absent file or a failed input stream.
+    if(!file.existsAsFile())return result;
+    auto input=file.createInputStream();
+    if(!input)return result;
     juce::WavAudioFormat format;
     auto reader=std::unique_ptr<juce::AudioFormatReader>(
-        format.createReaderFor(file.createInputStream().release(),true));
+        format.createReaderFor(input.release(),true));
     if(!reader || reader->sampleRate<=0 || channel<0 ||
        channel>=static_cast<int>(reader->numChannels) ||
        reader->lengthInSamples<=0 || !std::isfinite(reader->sampleRate) ||
