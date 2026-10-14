@@ -152,6 +152,8 @@ public:
         inputChannel.addItemList({"INPUT 1","INPUT 2","INPUT 3","INPUT 4",
             "INPUT 5","INPUT 6","INPUT 7","INPUT 8"},1);
         inputChannel.setSelectedId(1,juce::dontSendNotification);
+        inputLevel.setText("INPUT LEVEL: idle",juce::dontSendNotification);
+        addAndMakeVisible(inputLevel);
         addAndMakeVisible(inputChannel);
         inputChannel.onChange=[this]{
             if(selectedTrack>=session.tracks.size() || playing.load() ||
@@ -228,6 +230,7 @@ public:
         nextTrack.setBounds(mixRow.removeFromLeft(100));
         armControl.setBounds(mixRow.removeFromLeft(105));
         inputChannel.setBounds(mixRow.removeFromLeft(90));
+        inputLevel.setBounds(area.removeFromTop(26));
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
@@ -507,10 +510,16 @@ private:
     }
     void timerCallback() override {
         if(multiRecorder.isRecording()){
-            float peak=0.0f;
-            for(std::size_t i=0;i<multiTakes.size();++i)
-                peak=std::max(peak,multiRecorder.getInputPeak(i));
-            const double db=20.0*std::log10(std::max(1.0e-6f,peak));
+            juce::String levels("RECORDING INPUTS  ");
+            float maximum=0.0f;
+            for(std::size_t i=0;i<multiTakes.size();++i){
+                const float peak=multiRecorder.getInputPeak(i);
+                maximum=std::max(maximum,peak);
+                const double db=20.0*std::log10(std::max(1.0e-6f,peak));
+                levels+="T"+juce::String((int)multiTakes[i].first+1)+": "+juce::String(db,0)+" dBFS  ";
+            }
+            inputLevel.setText(levels,juce::dontSendNotification);
+            const double db=20.0*std::log10(std::max(1.0e-6f,maximum));
             record.setButtonText("REC PEAK "+juce::String(db,0)+" dBFS");
         }
         // Device shutdown can suspend playback from the audio thread.
@@ -715,6 +724,7 @@ private:
         if((recorder.isRecording() || multiRecorder.isRecording())){
             const bool wasMulti=multiRecorder.isRecording();
             recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
+            inputLevel.setText("INPUT LEVEL: idle",juce::dontSendNotification);
             const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : 0;
             const auto rejected=wasMulti ? multiRecorder.getRejectedWrites() : 0;
             // Stop the transport before changing the audio graph.
@@ -848,7 +858,7 @@ private:
     double takeStartBeat=0.0;
     size_t recordTargetTrack=0;
     double takeInputLatencySeconds=0.0;
-    juce::Label title,tempoLabel,gainLabel,panLabel;
+    juce::Label title,tempoLabel,gainLabel,panLabel,inputLevel;
     juce::Slider gainControl,panControl,masterGain;
     juce::Label masterLabel,eqLabel,limitLabel;
     juce::Slider ceilingControl;
