@@ -441,6 +441,14 @@ int main(){
  if(stoppedCapture.isActive() || !stoppedCapture.consumeFailed() ||
     stoppedCapture.consumeFailed() || stoppedCapture.consumeComplete())
     throw std::runtime_error("device stop did not invalidate calibration exactly once");
+ // Captures with unread status must not be restarted until consumed.
+ IDWLoopbackCapture pendingStatus;
+ if(!pendingStatus.prepare(48000.0,0,0) || !pendingStatus.start())
+    throw std::runtime_error("pending-status capture setup");
+ pendingStatus.audioDeviceStopped();
+ if(pendingStatus.start() || !pendingStatus.consumeFailed() || !pendingStatus.start())
+    throw std::runtime_error("pending failure should gate restart");
+ pendingStatus.cancel();
  // Completion is a one-shot notification and should not be reprocessed.
  if(!live.consumeComplete() || live.consumeComplete())
     throw std::runtime_error("completed loopback should only be consumed once");
