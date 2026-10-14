@@ -1,5 +1,6 @@
 #include "MidiSineSynth.h"
 #include "PlaybackTiming.h"
+#include "LoopbackWavAnalysis.h"
 #include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
@@ -113,6 +114,10 @@ public:
         latencyAdjust.setTextBoxStyle(juce::Slider::TextBoxRight,false,65,24);
         latencyAdjust.setTooltip("Manual adjustment added to driver-reported input latency (milliseconds). Negative values reduce trim.");
         addAndMakeVisible(latencyAdjust);
+        analyzeCalibration.setButtonText("ANALYZE LOOPBACK WAV");
+        analyzeCalibration.setTooltip("Measure known test-pulse positions in an existing WAV. Does not change take trim.");
+        addAndMakeVisible(analyzeCalibration);
+        analyzeCalibration.onClick=[this]{analyzeCalibrationWav();};
         overdubControl.setButtonText("PLAY BEAT WHILE RECORDING");
         overdubControl.setTooltip("Play existing tracks while capturing new takes on empty armed tracks.");
         overdubControl.setToggleState(false,juce::dontSendNotification);
@@ -259,6 +264,7 @@ public:
         overdubControl.setBounds(overdubRow.removeFromLeft(285));
         latencyLabel.setBounds(overdubRow.removeFromLeft(120));
         latencyAdjust.setBounds(overdubRow.removeFromLeft(200));
+        analyzeCalibration.setBounds(overdubRow.removeFromLeft(200).reduced(3));
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
@@ -747,6 +753,67 @@ private:
         selectedTrack=target->trackIndex;
         refreshMixer();repaint();return true;
     }
+    void analyzeCalibrationWav(){
+        if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load())return;
+        juce::AlertWindow prompt("Offline loopback WAV",
+            "Enter known emitted pulse positions in milliseconds, separated by commas (minimum three). The analysis will not change take trim.",
+            juce::MessageBoxIconType::InfoIcon);
+        prompt.addTextEditor("pulses","100,200,300,400,500","Expected pulse times (ms)");
+        prompt.addTextEditor("channel","1","WAV channel (1-based)");
+        prompt.addButton("Continue",1,juce::KeyPress(juce::KeyPress::returnKey));
+        prompt.addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
+        if(prompt.runModalLoop()!=1)return;
+        const auto times=juce::StringArray::fromTokens(prompt.getTextEditorContents("pulses"),",","");
+        const int channel=prompt.getTextEditorContents("channel").getIntValue()-1;
+        if(times.size()<3 || times.size()>64 || channel<0 || channel>7){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Invalid calibration","Specify 3–64 pulse times and a valid WAV channel (1–8).");
+            return;
+        }
+        std::vector<double> milliseconds;
+        double previous=-1.0;
+        for(const auto& token:times){
+            const auto entry=token.trim();
+            const double ms=entry.getDoubleValue();
+            if(entry.isEmpty() || !std::isfinite(ms) || ms<=previous || ms<0 || ms>600000){
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "Invalid pulse schedule","Enter strictly increasing pulse times between 0 and 600000 ms.");
+                return;
+            }
+            milliseconds.push_back(ms);previous=ms;
+        }
+        calibrationChooser=std::make_unique<juce::FileChooser>("Choose recorded loopback WAV",juce::File{},"*.wav");
+        calibrationChooser->launchAsync(juce::FileBrowserComponent::openMode |
+            juce::FileBrowserComponent::canSelectFiles,
+            [this,milliseconds,channel](const juce::FileChooser& picker){
+                const auto file=picker.getResult();
+                if(!file.existsAsFile() || playing.load() || recorder.isRecording() ||
+                   multiRecorder.isRecording() || exportRunning.load())return;
+                juce::WavAudioFormat wav;
+                auto reader=std::unique_ptr<juce::AudioFormatReader>(
+                    wav.createReaderFor(file.createInputStream().release(),true));
+                if(!reader || reader->sampleRate<=0 || reader->lengthInSamples>48000LL*60 ||
+                   reader->lengthInSamples<=0){
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                        "Invalid WAV","Select a valid recorded WAV no longer than the supported 48000-sample/minute limit.");
+                    return;
+                }
+                std::vector<std::size_t> positions;
+                for(const auto ms:milliseconds)
+                    positions.push_back(static_cast<std::size_t>(std::llround(ms*reader->sampleRate/1000.0)));
+                const auto radius=static_cast<std::size_t>(std::llround(reader->sampleRate*0.04));
+                const auto measured=idw::daw::analyzeLoopbackWav(file,channel,positions,radius);
+                const auto message=measured.alignment.valid
+                    ? "Measured pulse lag: "+juce::String(measured.alignment.lagSamples)+
+                      " samples ("+juce::String(measured.lagMilliseconds,3)+" ms). Matched "+
+                      juce::String((int)measured.alignment.accepted)+"/"+
+                      juce::String((int)measured.alignment.total)+
+                      " pulses. No trim setting was changed."
+                    : "Could not establish a consistent pulse offset. Confirm the channel, sample rate, pulse schedule and recording.";
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                    "Loopback analysis",message);
+            });
+    }
     void startOverdubPlayback(){
         const bool hasMaterial=loadedCount()>0 ||
             std::any_of(session.tracks.begin(),session.tracks.end(),
@@ -950,7 +1017,7 @@ private:
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
-    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton;
+    juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration;
     juce::ComboBox synthPreset;
     juce::Label attackLabel,releaseLabel;
     juce::Slider attackControl,releaseControl;
@@ -967,7 +1034,7 @@ private:
     double deviceRate=48000.0;
     int preparedBlockSize=0;
     std::vector<std::unique_ptr<AudioSlot>> sources;
-    std::unique_ptr<juce::FileChooser> chooser,projectChooser;
+    std::unique_ptr<juce::FileChooser> chooser,projectChooser,calibrationChooser;
     juce::Slider tempo;
 };
 class DAWApplication final : public juce::JUCEApplication {
