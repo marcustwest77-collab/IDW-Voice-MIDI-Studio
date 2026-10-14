@@ -20,7 +20,7 @@ public:
     Workstation() {
         setSize(1100,700);
         formats.registerBasicFormats();
-        setAudioChannels(1,2);
+        setAudioChannels(8,2); // Request up to eight available hardware inputs.
         deviceManager.addAudioCallback(&recorder);
         deviceManager.addAudioCallback(&multiRecorder);
         title.setText("IDW  |  VOICE MIDI STUDIO DAW  |  V14 FOUNDATION",juce::dontSendNotification);
@@ -149,6 +149,15 @@ public:
         previousTrack.setButtonText("< TRACK");
         nextTrack.setButtonText("TRACK >");
         addAndMakeVisible(previousTrack);addAndMakeVisible(nextTrack);
+        inputChannel.addItemList({"INPUT 1","INPUT 2","INPUT 3","INPUT 4",
+            "INPUT 5","INPUT 6","INPUT 7","INPUT 8"},1);
+        inputChannel.setSelectedId(1,juce::dontSendNotification);
+        addAndMakeVisible(inputChannel);
+        inputChannel.onChange=[this]{
+            if(selectedTrack>=session.tracks.size() || playing.load() ||
+               recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load())return;
+            inputAssignments[selectedTrack]=inputChannel.getSelectedId()-1;
+        };
         armControl.setButtonText("ARM INPUT");addAndMakeVisible(armControl);
         armedTracks[0]=true; // Existing single-microphone workflow remains ready by default.
         armControl.onClick=[this]{
@@ -218,6 +227,7 @@ public:
         previousTrack.setBounds(mixRow.removeFromLeft(100));
         nextTrack.setBounds(mixRow.removeFromLeft(100));
         armControl.setBounds(mixRow.removeFromLeft(105));
+        inputChannel.setBounds(mixRow.removeFromLeft(90));
         auto masterRow=area.removeFromTop(38);
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
@@ -480,6 +490,10 @@ private:
             !playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load());
         armControl.setToggleState(track.type==idw::daw::TrackType::audio &&
             armedTracks[selectedTrack],juce::dontSendNotification);
+        inputChannel.setEnabled(track.type==idw::daw::TrackType::audio &&
+            !playing.load() && !recorder.isRecording() &&
+            !multiRecorder.isRecording() && !exportRunning.load());
+        inputChannel.setSelectedId(inputAssignments[selectedTrack]+1,juce::dontSendNotification);
     }
     void selectTrack(int direction){
         if(playing.load() || session.tracks.empty())return;
@@ -746,9 +760,16 @@ private:
                         return;
                     }
             auto* device=deviceManager.getCurrentAudioDevice();
-            const int available=device ? device->getActiveInputChannels().countNumberOfSetBits() : 0;
+            const auto active=device ? device->getActiveInputChannels() : juce::BigInteger();
+            bool validInputs=device!=nullptr;
+            for(std::size_t i=0;i<selectedInputs.size();++i){
+                const int channel=inputAssignments[selectedInputs[i]];
+                if(channel<0 || !active[channel])validInputs=false;
+                for(std::size_t j=0;j<i;++j)
+                    if(inputAssignments[selectedInputs[j]]==channel)validInputs=false;
+            }
             if(selectedInputs.size()>IDWMultiTakeRecorder::maxTracks ||
-               (int)selectedInputs.size()>available){
+               !validInputs){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "More inputs needed","Enable one physical input per armed audio track in audio device settings.");
                 return;
@@ -758,7 +779,7 @@ private:
             for(std::size_t i=0;i<selectedInputs.size();++i){
                 const auto path=folder.getNonexistentChildFile(
                     "Take "+juce::String(selectedInputs[i]+1)+" "+juce::String(juce::Time::getCurrentTime().toMilliseconds()),".wav",false);
-                inputs.push_back({path,(int)i});
+                inputs.push_back({path,inputAssignments[selectedInputs[i]]});
                 multiTakes.emplace_back(selectedInputs[i],path);
             }
             if(multiRecorder.start(inputs,deviceRate))record.setButtonText("STOP RECORD");
@@ -767,7 +788,7 @@ private:
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "Multitrack unavailable","Could not start all armed inputs.");
             }
-        }else if(recorder.start(destination,deviceRate))record.setButtonText("STOP RECORD");
+        }else if(recorder.start(destination,deviceRate,1,inputAssignments[recordTargetTrack]))record.setButtonText("STOP RECORD");
         else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
             "Recording unavailable","Check microphone permission, device input and destination directory.");
     }
@@ -813,6 +834,8 @@ private:
     std::atomic<bool> peakClipLeft{false},peakClipRight{false};
     std::atomic<float> masterLevel{1.0f};
     juce::ToggleButton muteControl,soloControl,armControl;
+    juce::ComboBox inputChannel;
+    std::array<int,128> inputAssignments{};
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
