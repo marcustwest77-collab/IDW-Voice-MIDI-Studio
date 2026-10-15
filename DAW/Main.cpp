@@ -964,10 +964,19 @@ private:
                 "Calibration running","Finish the live loopback test before starting a recording.");
             return;
         }
-        if(exportRunning.load())return;
+        if(exportRunning.load()){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Recording unavailable","Finish exporting before starting a recording.");
+            return;
+        }
         // Recording may stop while the transport runs, but must not start
-        // while ordinary playback is active.
-        if(!recorder.isRecording() && !multiRecorder.isRecording() && playing.load())return;
+        // while ordinary playback is active. Explain this instead of silently ignoring RECORD.
+        if(!recorder.isRecording() && !multiRecorder.isRecording() && playing.load()){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Stop playback first",
+                "Press STOP, arm an empty audio track, enable PLAY BEAT WHILE RECORDING, then press RECORD VOCAL. Do not press PLAY first.");
+            return;
+        }
         if((recorder.isRecording() || multiRecorder.isRecording())){
             const bool wasMulti=multiRecorder.isRecording();
             multiRecorder.setHeadphoneMonitor(false);
