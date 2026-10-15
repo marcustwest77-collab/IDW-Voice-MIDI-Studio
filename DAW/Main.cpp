@@ -538,8 +538,11 @@ private:
         soloControl.setToggleState(track.solo,juce::dontSendNotification);
         armControl.setEnabled(track.type==idw::daw::TrackType::audio &&
             !playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load());
-        armControl.setToggleState(track.type==idw::daw::TrackType::audio &&
-            armedTracks[selectedTrack],juce::dontSendNotification);
+        const bool trackArmed=track.type==idw::daw::TrackType::audio && armedTracks[selectedTrack];
+        armControl.setToggleState(trackArmed,juce::dontSendNotification);
+        armControl.setButtonText(trackArmed ? "ARM INPUT - ON" : "ARM INPUT - OFF");
+        armControl.setTooltip("Selected track: "+juce::String(track.name)+
+            (trackArmed ? " (armed for recording)" : " (not armed). Click to arm before RECORD VOCAL."));
         inputChannel.setEnabled(track.type==idw::daw::TrackType::audio &&
             !playing.load() && !recorder.isRecording() &&
             !multiRecorder.isRecording() && !exportRunning.load());
@@ -1050,7 +1053,10 @@ private:
         recordTargetTrack=selectedInputs.empty()?session.tracks.size():selectedInputs.front();
         if(recordTargetTrack>=session.tracks.size()){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-                "No armed audio track","Select an audio track and enable ARM INPUT before recording.");
+                "No armed audio track",
+                "No audio track is armed. Press STOP, select an empty AUDIO track with the track arrows, "
+                "and click ARM INPUT until it reads ARM INPUT - ON. "
+                "Then press RECORD VOCAL directly without pressing PLAY.");
             return;
         }
         const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
