@@ -638,6 +638,11 @@ private:
         slot->trackIndex=session.tracks.size()-1;
         if(preparedBlockSize>0){slot->scratch.setSize(2,preparedBlockSize,false,true,false);slot->transport.prepareToPlay(preparedBlockSize,deviceRate);}
         sources.push_back(std::move(slot));
+        // Select the newly added track so ARM INPUT targets it immediately.
+        // Do not arm it automatically: arming must remain an explicit user action.
+        selectedTrack=session.tracks.size()-1;
+        refreshMixer();
+        repaint();
     }
     int loadedCount() const {
         int count=0;for(auto& slot:sources)if(slot->reader)++count;
