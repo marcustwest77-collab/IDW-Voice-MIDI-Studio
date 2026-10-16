@@ -399,15 +399,17 @@ public:
            aiPanel.isVisible() || connectPanel.isVisible())return;
         // The Neo Mixer overview doubles as a channel selector when stopped.
         // Handle this before hit-testing clips beneath the overview.
-        const int mixerTop=getHeight()-160;
-        if(e.y>=mixerTop && e.y<mixerTop+112 && e.x>=30 && !session.tracks.empty()){
+        const int mixerHeight=neoMixerExpanded ? 190 : 112;
+        const int mixerTop=getHeight()-mixerHeight-48;
+        if(e.y>=mixerTop && e.y<mixerTop+mixerHeight && e.x>=30 && !session.tracks.empty()){ 
+            if(e.y<mixerTop+22 && e.x<360){neoMixerExpanded=!neoMixerExpanded;repaint();return;}
             const int count=juce::jmin(10,(int)session.tracks.size());
             const int width=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
             const int index=(e.x-30)/width;
             if(index>=0 && index<count && e.x<30+(index+1)*width){
                 selectedTrack=(size_t)index;
                 const int faderX=30+index*width+width-19;
-                if(e.x>=faderX-9 && e.x<=faderX+9 && e.y>=mixerTop+47){
+                if(e.x>=faderX-9 && e.x<=faderX+9 && e.y>=mixerTop+47 && e.y<mixerTop+mixerHeight-8){
                     draggingMixerFader=true;
                     updateMixerFader(e.y);
                 }else if(e.y>=mixerTop+42 && e.y<=mixerTop+58 && e.x>=30+index*width+5 && e.x<faderX-12){
@@ -563,7 +565,7 @@ public:
             g.setColour(juce::Colours::white);g.drawText(ch==0?"L":"R",meterLeft-20,y,18,11,juce::Justification::centred);
         }
         // Compact bottom mixer overview. Display-only: no audio-thread mutation.
-        const int mixHeight=112;
+        const int mixHeight=neoMixerExpanded ? 190 : 112;
         const int mixTop=getHeight()-mixHeight-48;
         if(mixTop>top+90){
             const int count=juce::jmin(10,(int)session.tracks.size());
@@ -572,7 +574,7 @@ public:
             g.fillRoundedRectangle(20.0f,(float)mixTop,(float)getWidth()-40.0f,(float)mixHeight,8.0f);
             g.setColour(juce::Colour(0xff47cffa));
             g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
-            g.drawText("NEO MIXER  /  CLICK A CHANNEL TO SELECT",30,mixTop+4,320,18,juce::Justification::centredLeft);
+            g.drawText(neoMixerExpanded ? "NEO MIXER  /  EXPANDED  (CLICK TO COLLAPSE)" : "NEO MIXER  /  CLICK TO EXPAND",30,mixTop+4,320,18,juce::Justification::centredLeft);
             for(int i=0;i<count;++i){
                 const auto& track=session.tracks[(size_t)i];
                 if((size_t)i==selectedTrack){
@@ -584,10 +586,10 @@ public:
                 const int faderX=x+stripWidth-19;
                 const float channelPeak=channelPeaks[(size_t)i].load(std::memory_order_relaxed);
                 g.setColour(juce::Colour(0xff203647));
-                g.fillRect(faderX-13,mixTop+56,3,36);
+                g.fillRect(faderX-13,mixTop+56,3,mixHeight-76);
                 g.setColour(juce::Colour(0xff1be9ad));
-                const int peakHeight=juce::roundToInt(36.0f*juce::jlimit(0.0f,1.0f,channelPeak));
-                g.fillRect(faderX-13,mixTop+92-peakHeight,3,peakHeight);
+                const int peakHeight=juce::roundToInt((float)(mixHeight-76)*juce::jlimit(0.0f,1.0f,channelPeak));
+                g.fillRect(faderX-13,mixTop+mixHeight-20-peakHeight,3,peakHeight);
                 g.setColour(juce::Colour(0xff38546c));
                 g.drawHorizontalLine(mixTop+49,(float)x+8,(float)faderX-13);
                 const float panPosition=juce::jlimit(0.0f,1.0f,(track.pan+1.0f)/2.0f);
@@ -595,9 +597,9 @@ public:
                 g.setColour(juce::Colour(0xffa782ff));
                 g.fillEllipse(panX-4.0f,(float)mixTop+45,8.0f,8.0f);
                 g.setColour(juce::Colour(0xff36576b));
-                g.fillRoundedRectangle((float)faderX-2,(float)mixTop+49,4.0f,44.0f,2.0f);
+                g.fillRoundedRectangle((float)faderX-2,(float)mixTop+49,4.0f,(float)mixHeight-68,2.0f);
                 const float normalized=juce::jlimit(0.0f,1.0f,track.gain/1.5f);
-                const float thumbY=(float)mixTop+92.0f-normalized*42.0f;
+                const float thumbY=(float)mixTop+mixHeight-20.0f-normalized*(float)(mixHeight-70);
                 g.setColour(juce::Colour(0xff21d6f7));
                 g.fillRoundedRectangle((float)faderX-9,thumbY-4,18.0f,8.0f,3.0f);
                 // Numeric mix readouts are gain/pan settings, not live audio meters.
@@ -632,6 +634,7 @@ public:
         g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline playback prototype; drag clips to move or resize their right edge." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
     }
 private:
+    bool neoMixerExpanded=false;
     bool draggingMixerFader=false,draggingMixerPan=false;
     void updateMixerPan(int mouseX,int stripX,int stripWidth){
         if(selectedTrack>=session.tracks.size())return;
@@ -643,7 +646,7 @@ private:
     void updateMixerFader(int mouseY){
         if(selectedTrack>=session.tracks.size())return;
         const float normalized=juce::jlimit(0.0f,1.0f,
-            (float)(getHeight()-160+92-mouseY)/42.0f);
+            (float)(getHeight()-48-20-mouseY)/(float)((neoMixerExpanded ? 190 : 112)-70));
         const float newGain=normalized*1.5f;
         session.setTrackMix(selectedTrack,newGain,session.tracks[selectedTrack].pan);
         refreshMixer();
