@@ -582,6 +582,12 @@ public:
                 }
                 const int x=30+i*stripWidth;
                 const int faderX=x+stripWidth-19;
+                const float channelPeak=channelPeaks[(size_t)i].load(std::memory_order_relaxed);
+                g.setColour(juce::Colour(0xff203647));
+                g.fillRect(faderX-13,mixTop+56,3,36);
+                g.setColour(juce::Colour(0xff1be9ad));
+                const int peakHeight=juce::roundToInt(36.0f*juce::jlimit(0.0f,1.0f,channelPeak));
+                g.fillRect(faderX-13,mixTop+92-peakHeight,3,peakHeight);
                 g.setColour(juce::Colour(0xff38546c));
                 g.drawHorizontalLine(mixTop+49,(float)x+8,(float)faderX-13);
                 const float panPosition=juce::jlimit(0.0f,1.0f,(track.pan+1.0f)/2.0f);
@@ -668,6 +674,7 @@ private:
         const auto snapshot=std::atomic_load_explicit(&playbackSession,std::memory_order_acquire);
         if(!snapshot)return;
         const auto& playback=*snapshot;
+        for(auto& peak:channelPeaks)peak.store(0.0f,std::memory_order_relaxed);
         const auto blockStart=sessionFrames.load(std::memory_order_relaxed);
         const bool anySolo=std::any_of(playback.tracks.begin(),playback.tracks.end(),[](const auto& t){return t.solo;});
         for(auto& slot:sources) {
@@ -685,6 +692,17 @@ private:
             const float pan=juce::jlimit(-1.0f,1.0f,track.pan);
             const float leftGain=gain*(pan>0.0f?1.0f-pan:1.0f);
             const float rightGain=gain*(pan<0.0f?1.0f+pan:1.0f);
+            // Peak of this track's rendered audio, after track gain/pan, before master FX.
+            // Fixed atomic slots avoid allocations and locks on the audio thread.
+            if(slot->trackIndex<channelPeaks.size()){
+                float peak=0.0f;
+                for(int ch=0;ch<juce::jmin(2,slot->scratch.getNumChannels());++ch){
+                    const float level=slot->scratch.getMagnitude(ch,0,window.frames) *
+                        (ch==0?leftGain:rightGain);
+                    peak=juce::jmax(peak,level);
+                }
+                channelPeaks[slot->trackIndex].store(peak,std::memory_order_relaxed);
+            }
             for(int channel=0;channel<info.buffer->getNumChannels();++channel)
                 info.buffer->addFrom(channel,info.startSample+window.offset,slot->scratch,channel,0,window.frames,channel==0?leftGain:rightGain);
         }
@@ -1442,6 +1460,7 @@ private:
     float eqState[2]{0.0f,0.0f};
     juce::TextButton clearClips,audioDevices;
     std::atomic<float> peakLeft{0.0f},peakRight{0.0f};
+    std::array<std::atomic<float>,128> channelPeaks{}; // Audio playback peaks, not input monitoring.
     std::atomic<bool> peakClipLeft{false},peakClipRight{false};
     std::atomic<float> masterLevel{1.0f};
     juce::ToggleButton muteControl,soloControl,armControl,monitorControl,overdubControl;
