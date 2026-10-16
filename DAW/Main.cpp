@@ -199,12 +199,15 @@ public:
                 monitorControl.setToggleState(false,juce::dontSendNotification);
         };
         armControl.setButtonText("ARM INPUT");addAndMakeVisible(armControl);
-        armedTracks[0]=true; // Existing single-microphone workflow remains ready by default.
+        // Tracks start disarmed; the user explicitly arms the intended destination.
+        armedTracks.fill(false);
         armControl.onClick=[this]{
             if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() ||
                selectedTrack>=session.tracks.size() ||
                session.tracks[selectedTrack].type!=idw::daw::TrackType::audio)return;
-            armedTracks[selectedTrack]=armControl.getToggleState();
+            // Treat our per-track arm state as authoritative; do not depend on the
+            // button toggle state, which can be refreshed when selection changes.
+            armedTracks[selectedTrack]=!armedTracks[selectedTrack];
             refreshMixer();
         };
         previousTrack.onClick=[this]{selectTrack(-1);};
