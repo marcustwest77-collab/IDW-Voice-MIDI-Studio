@@ -410,6 +410,9 @@ public:
                 if(e.x>=faderX-9 && e.x<=faderX+9 && e.y>=mixerTop+47){
                     draggingMixerFader=true;
                     updateMixerFader(e.y);
+                }else if(e.y>=mixerTop+42 && e.y<=mixerTop+58 && e.x>=30+index*width+5 && e.x<faderX-12){
+                    draggingMixerPan=true;
+                    updateMixerPan(e.x,30+index*width,width);
                 }
                 refreshMixer();
                 repaint();
@@ -439,6 +442,15 @@ public:
         }
     }
     void mouseDrag(const juce::MouseEvent& e) override {
+        if(draggingMixerPan){
+            if(!playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() &&
+               !exportRunning.load()){
+                const int count=juce::jmin(10,(int)session.tracks.size());
+                const int width=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
+                updateMixerPan(e.x,30+(int)selectedTrack*width,width);
+            }
+            return;
+        }
         if(draggingMixerFader){
             if(!playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() &&
                !exportRunning.load())updateMixerFader(e.y);
@@ -455,7 +467,7 @@ public:
             session.moveClip(dragTrack,dragIndex,snap(dragOriginalStart+delta));
         repaint();
     }
-    void mouseUp(const juce::MouseEvent&) override { draggingClip=false; draggingMixerFader=false; }
+    void mouseUp(const juce::MouseEvent&) override { draggingClip=false; draggingMixerFader=false; draggingMixerPan=false; }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff080f1c));
         // Neo Studio control decks: visual grouping stays outside the audio callback.
@@ -570,6 +582,12 @@ public:
                 }
                 const int x=30+i*stripWidth;
                 const int faderX=x+stripWidth-19;
+                g.setColour(juce::Colour(0xff38546c));
+                g.drawHorizontalLine(mixTop+49,(float)x+8,(float)faderX-13);
+                const float panPosition=juce::jlimit(0.0f,1.0f,(track.pan+1.0f)/2.0f);
+                const float panX=(float)x+8+panPosition*(float)juce::jmax(1,stripWidth-47);
+                g.setColour(juce::Colour(0xffa782ff));
+                g.fillEllipse(panX-4.0f,(float)mixTop+45,8.0f,8.0f);
                 g.setColour(juce::Colour(0xff36576b));
                 g.fillRoundedRectangle((float)faderX-2,(float)mixTop+49,4.0f,44.0f,2.0f);
                 const float normalized=juce::jlimit(0.0f,1.0f,track.gain/1.5f);
@@ -600,7 +618,14 @@ public:
         g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline playback prototype; drag clips to move or resize their right edge." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
     }
 private:
-    bool draggingMixerFader=false;
+    bool draggingMixerFader=false,draggingMixerPan=false;
+    void updateMixerPan(int mouseX,int stripX,int stripWidth){
+        if(selectedTrack>=session.tracks.size())return;
+        const float range=(float)juce::jmax(1,stripWidth-47);
+        const float pan=2.0f*juce::jlimit(0.0f,1.0f,(float)(mouseX-stripX-8)/range)-1.0f;
+        session.setTrackMix(selectedTrack,session.tracks[selectedTrack].gain,pan);
+        refreshMixer();repaint();
+    }
     void updateMixerFader(int mouseY){
         if(selectedTrack>=session.tracks.size())return;
         const float normalized=juce::jlimit(0.0f,1.0f,
