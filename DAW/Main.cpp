@@ -185,7 +185,14 @@ public:
         inputChannel.onChange=[this]{
             if(selectedTrack>=session.tracks.size() || playing.load() ||
                recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load())return;
-            session.tracks[selectedTrack].inputChannel=inputChannel.getSelectedId()-1;
+            const int selectedId=inputChannel.getSelectedId();
+            if(selectedId<=0)return; // Device change may clear the selection.
+            if(auto* device=deviceManager.getCurrentAudioDevice()){
+                const int physicalInput=selectedId-1;
+                if(physicalInput>=device->getInputChannelNames().size() ||
+                   !device->getActiveInputChannels()[physicalInput])return;
+            }else return;
+            session.tracks[selectedTrack].inputChannel=selectedId-1;
         };
         monitorControl.setButtonText("HEADPHONES ONLY");
         monitorControl.setTooltip("Dry monitoring of the first armed input; headphones required. OFF by default.");
@@ -1094,9 +1101,12 @@ private:
         if(recordTargetTrack>=session.tracks.size()){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                 "No armed audio track",
-                "No audio track is armed. Press STOP, select an empty AUDIO track with the track arrows, "
-                "and click ARM INPUT until it reads ARM INPUT - ON. "
-                "Then press RECORD VOCAL directly without pressing PLAY.");
+                "No audio track is armed. Currently selected: "+
+                (selectedTrack<session.tracks.size()
+                    ? juce::String(session.tracks[selectedTrack].name)
+                    : juce::String("none"))+
+                ". Press STOP, select an empty AUDIO track, and click ARM INPUT until "
+                "it reads ARM INPUT - ON. Then press RECORD VOCAL without pressing PLAY.");
             return;
         }
         const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
