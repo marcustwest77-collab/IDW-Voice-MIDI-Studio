@@ -449,8 +449,21 @@ public:
         for(const auto& track:session.tracks){
             g.setColour(juce::Colour((y/trackHeight)%2 ? 0xff16283d : 0xff102033));
             g.fillRect(20,y,getWidth()-40,trackHeight-2);
-            g.setColour(track.type==idw::daw::TrackType::audio ? juce::Colour(0xffef486d) : juce::Colour(0xff17cfff));
-            g.fillRect(20,y,5,trackHeight-2);
+            const bool selected=renderedTrackIndex==selectedTrack;
+            const bool armed=track.type==idw::daw::TrackType::audio &&
+                renderedTrackIndex<armedTracks.size() && armedTracks[renderedTrackIndex];
+            const auto laneAccent=armed ? juce::Colour(0xfff44368) :
+                (track.type==idw::daw::TrackType::audio ? juce::Colour(0xff159cdb) : juce::Colour(0xffa66cff));
+            g.setColour(laneAccent);
+            g.fillRect(20,y,selected?6:4,trackHeight-2);
+            if(selected){
+                g.setColour(juce::Colour(0xff1bd5ff).withAlpha(0.75f));
+                g.drawRect(20,y,getWidth()-40,trackHeight-2,1);
+            }
+            if(armed){
+                g.setColour(juce::Colour(0xfff44368));
+                g.fillEllipse(177.0f,(float)y+24.0f,12.0f,12.0f);
+            }
             g.setColour(juce::Colours::white);
             g.drawText(juce::String(track.name),35,y+10,155,35,juce::Justification::centredLeft);
             size_t renderedClipIndex=0;
@@ -458,10 +471,10 @@ public:
                 const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
                 const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*12.0));
                 if(clipX>=getWidth()-25){++renderedClipIndex;continue;}
-                g.setColour(juce::Colour(0xff89551e));
+                g.setColour(track.type==idw::daw::TrackType::audio ? juce::Colour(0xff164f86) : juce::Colour(0xff513494));
                 g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
                 if(selectedClipValid && renderedTrackIndex==selectedClipTrack && renderedClipIndex==selectedClipIndex){
-                    g.setColour(juce::Colours::gold);
+                    g.setColour(juce::Colour(0xff17d9ff));
                     g.drawRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX),(float)trackHeight-18,4.0f,2.0f);
                 }
                 ++renderedClipIndex;
@@ -474,7 +487,7 @@ public:
         }
         const int head=left+(int)(playheadBeats*12.0);
         if(head<getWidth()-30){
-            g.setColour(juce::Colours::gold);
+            g.setColour(juce::Colour(0xff17d9ff));
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
         }
         // Peak bars are updated from atomics, never directly from the audio thread.
@@ -484,7 +497,7 @@ public:
             const auto clipped=ch==0?peakClipLeft.load():peakClipRight.load();
             const int y=meterTop+ch*17;
             g.setColour(juce::Colours::darkgrey);g.fillRect(meterLeft,y,meterWidth,11);
-            g.setColour(clipped?juce::Colours::red:juce::Colours::limegreen);
+            g.setColour(clipped?juce::Colour(0xfff44368):juce::Colour(0xff10d5f9));
             g.fillRect(meterLeft,y,juce::roundToInt(meterWidth*juce::jlimit(0.0f,1.0f,peak)),11);
             g.setColour(juce::Colours::white);g.drawText(ch==0?"L":"R",meterLeft-20,y,18,11,juce::Justification::centred);
         }
