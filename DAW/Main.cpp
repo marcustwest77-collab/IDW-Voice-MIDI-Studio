@@ -401,7 +401,7 @@ public:
         // Handle this before hit-testing clips beneath the overview.
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
         const int mixerTop=getHeight()-mixerHeight-48;
-        if(e.y>=mixerTop && e.y<mixerTop+mixerHeight && e.x>=30 && !session.tracks.empty()){ 
+        if(mixerTop>420 && e.y>=mixerTop && e.y<mixerTop+mixerHeight && e.x>=30 && !session.tracks.empty()){ 
             if(e.y<mixerTop+22 && e.x<360){neoMixerExpanded=!neoMixerExpanded;repaint();return;}
             const int count=juce::jmin(10,(int)session.tracks.size());
             const int width=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
@@ -567,7 +567,7 @@ public:
         // Compact bottom mixer overview. Display-only: no audio-thread mutation.
         const int mixHeight=neoMixerExpanded ? 190 : 112;
         const int mixTop=getHeight()-mixHeight-48;
-        if(mixTop>top+90){
+        if(mixTop>420){
             const int count=juce::jmin(10,(int)session.tracks.size());
             const int stripWidth=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
             g.setColour(juce::Colour(0xff101f32));
@@ -645,8 +645,10 @@ private:
     }
     void updateMixerFader(int mouseY){
         if(selectedTrack>=session.tracks.size())return;
+        const int mixerHeight=neoMixerExpanded ? 190 : 112;
+        const int mixerTop=getHeight()-mixerHeight-48;
         const float normalized=juce::jlimit(0.0f,1.0f,
-            (float)(getHeight()-48-20-mouseY)/(float)((neoMixerExpanded ? 190 : 112)-70));
+            (float)(mixerTop+mixerHeight-20-mouseY)/(float)(mixerHeight-70));
         const float newGain=normalized*1.5f;
         session.setTrackMix(selectedTrack,newGain,session.tracks[selectedTrack].pan);
         refreshMixer();
