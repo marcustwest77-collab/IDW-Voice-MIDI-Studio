@@ -392,6 +392,22 @@ public:
         if(changed)repaint();
         return changed;
     }
+    void mouseWheelMove(const juce::MouseEvent& event,
+                        const juce::MouseWheelDetails& wheel) override {
+        const int mixerHeight=neoMixerExpanded ? 190 : 112;
+        const int mixerTop=getHeight()-mixerHeight-48;
+        const int arrangementBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
+        if(event.y>=366 && event.y<arrangementBottom && session.tracks.size()>0){
+            const int visible=juce::jmax(1,(arrangementBottom-366)/70);
+            const size_t maximum=session.tracks.size()>(size_t)visible ?
+                session.tracks.size()-(size_t)visible : 0;
+            if(wheel.deltaY<0 && arrangementScrollTrack<maximum)++arrangementScrollTrack;
+            else if(wheel.deltaY>0 && arrangementScrollTrack>0)--arrangementScrollTrack;
+            repaint();
+            return;
+        }
+        juce::AudioAppComponent::mouseWheelMove(event,wheel);
+    }
     void mouseDown(const juce::MouseEvent& e) override {
         draggingClip=false;
         selectedClipValid=false;
@@ -427,15 +443,15 @@ public:
         const int visibleMixerTop=getHeight()-visibleMixerHeight-48;
         const int arrangementLimit=visibleMixerTop>420 ? visibleMixerTop-8 : getHeight()-48;
         if(e.y>=arrangementLimit)return;
-        const auto ti=(size_t)((e.y-top)/height);
+        const auto ti=(size_t)((e.y-top)/height)+arrangementScrollTrack;
         if(ti>=session.tracks.size())return;
         const auto& clips=session.tracks[ti].clips;
         for(size_t i=clips.size();i>0;--i){
             const auto& c=clips[i-1];
             const int x=left+juce::roundToInt(c.startBeat*12.0);
             const int w=juce::jmax(2,juce::roundToInt(c.lengthBeats*12.0));
-            if(e.x>=x && e.x<x+w && e.y>=top+(int)ti*height+8 &&
-               e.y<top+(int)(ti+1)*height-10){
+            if(e.x>=x && e.x<x+w && e.y>=top+((int)ti-(int)arrangementScrollTrack)*height+8 &&
+               e.y<top+((int)ti-(int)arrangementScrollTrack+1)*height-10){
                 dragTrack=ti;dragIndex=i-1;dragOriginX=e.x;
                 selectedClipTrack=ti;selectedClipIndex=i-1;selectedClipValid=true;
                 dragOriginalStart=c.startBeat;dragOriginalLength=c.lengthBeats;
@@ -510,6 +526,7 @@ public:
         int y=top+36;
         size_t renderedTrackIndex=0;
         for(const auto& track:session.tracks){
+            if(renderedTrackIndex<arrangementScrollTrack){++renderedTrackIndex;continue;}
             g.setColour(juce::Colour((y/trackHeight)%2 ? 0xff16283d : 0xff102033));
             g.fillRect(20,y,getWidth()-40,trackHeight-2);
             const bool selected=renderedTrackIndex==selectedTrack;
@@ -647,6 +664,7 @@ public:
     }
 private:
     bool neoMixerExpanded=false;
+    size_t arrangementScrollTrack=0;
     bool draggingMixerFader=false,draggingMixerPan=false;
     void updateMixerPan(int mouseX,int stripX,int stripWidth){
         if(selectedTrack>=session.tracks.size())return;
