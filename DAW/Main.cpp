@@ -1381,7 +1381,14 @@ private:
         }
         const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
             .getChildFile("IDW DAW").getChildFile("Recordings");
-        folder.createDirectory();
+        const auto folderResult=folder.createDirectory();
+        if(folderResult.failed() || !folder.isDirectory()){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Recording folder unavailable",
+                "Unable to create or access the recording folder:\n"+
+                folder.getFullPathName()+"\n"+folderResult.getErrorMessage());
+            return;
+        }
         auto destination=folder.getNonexistentChildFile("Vocal Take",".wav",false);
         // Use driver-reported input latency to trim delayed capture frames
         // at take import. Real loopback calibration remains future work.
