@@ -479,7 +479,18 @@ public:
                 g.fillEllipse(177.0f,(float)y+24.0f,12.0f,12.0f);
             }
             g.setColour(juce::Colours::white);
-            g.drawText(juce::String(track.name),35,y+10,155,35,juce::Justification::centredLeft);
+            g.drawText(juce::String(track.name),35,y+5,145,25,juce::Justification::centredLeft);
+            // Compact Neo Studio mixer strip in each track header.
+            const float stripX=36.0f,stripY=(float)y+45.0f,stripW=120.0f;
+            g.setColour(juce::Colour(0xff304456));
+            g.fillRoundedRectangle(stripX,stripY,stripW,5.0f,2.0f);
+            g.setColour(laneAccent.withAlpha(0.9f));
+            g.fillRoundedRectangle(stripX,stripY,stripW*juce::jlimit(0.0f,1.0f,track.gain/2.0f),5.0f,2.0f);
+            g.setColour(juce::Colour(0xff94bbd1));
+            g.setFont(juce::Font(juce::FontOptions(10.0f)));
+            g.drawText("VOL",36,y+32,37,12,juce::Justification::centredLeft);
+            g.drawText(track.mute ? "MUTED" : (track.solo ? "SOLO" : (armed ? "REC READY" : "READY")),
+                       83,y+32,100,12,juce::Justification::centredRight);
             size_t renderedClipIndex=0;
             for(const auto& clip:track.clips){
                 const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
