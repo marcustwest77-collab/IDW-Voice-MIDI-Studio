@@ -526,6 +526,36 @@ public:
             g.fillRect(meterLeft,y,juce::roundToInt(meterWidth*juce::jlimit(0.0f,1.0f,peak)),11);
             g.setColour(juce::Colours::white);g.drawText(ch==0?"L":"R",meterLeft-20,y,18,11,juce::Justification::centred);
         }
+        // Compact bottom mixer overview. Display-only: no audio-thread mutation.
+        const int mixHeight=112;
+        const int mixTop=getHeight()-mixHeight-48;
+        if(mixTop>top+90){
+            const int count=juce::jmin(10,(int)session.tracks.size());
+            const int stripWidth=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
+            g.setColour(juce::Colour(0xff101f32));
+            g.fillRoundedRectangle(20.0f,(float)mixTop,(float)getWidth()-40.0f,(float)mixHeight,8.0f);
+            g.setColour(juce::Colour(0xff47cffa));
+            g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
+            g.drawText("NEO MIXER  /  CHANNEL OVERVIEW",30,mixTop+4,320,18,juce::Justification::centredLeft);
+            for(int i=0;i<count;++i){
+                const auto& track=session.tracks[(size_t)i];
+                const int x=30+i*stripWidth;
+                g.setColour(juce::Colour(0xff29445c));
+                g.drawVerticalLine(x+stripWidth-4,(float)mixTop+23,(float)mixTop+mixHeight-8);
+                const bool armed=track.type==idw::daw::TrackType::audio && armedTracks[(size_t)i];
+                g.setColour(armed ? juce::Colour(0xffef486d) : juce::Colour(0xffd2e8f5));
+                g.setFont(juce::Font(juce::FontOptions(10.0f)));
+                g.drawFittedText(juce::String(track.name),x+3,mixTop+27,stripWidth-14,17,juce::Justification::centredLeft,1);
+                g.setColour(juce::Colour(0xff203447));
+                g.fillRoundedRectangle((float)x+8,(float)mixTop+57,(float)stripWidth-26,7.0f,3.0f);
+                g.setColour(armed ? juce::Colour(0xffef486d) : juce::Colour(0xff18bde8));
+                g.fillRoundedRectangle((float)x+8,(float)mixTop+57,
+                    (float)(stripWidth-26)*juce::jlimit(0.0f,1.0f,track.gain/2.0f),7.0f,3.0f);
+                g.setColour(juce::Colour(0xff8cb6cb));
+                g.drawText(track.mute ? "MUTE" : (track.solo ? "SOLO" : (armed ? "ARMED" : "CH "+juce::String(i+1))),
+                    x+4,mixTop+75,stripWidth-14,20,juce::Justification::centredLeft);
+            }
+        }
         if(exportRunning.load()){
             g.setColour(juce::Colours::gold);
             g.drawText("Export: "+juce::String((int)(exportProgress.load()*100.0f))+"%",getWidth()-230,80,205,24,juce::Justification::centredRight);
