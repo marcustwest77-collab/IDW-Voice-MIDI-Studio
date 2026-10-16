@@ -397,7 +397,7 @@ public:
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
         const int mixerTop=getHeight()-mixerHeight-48;
         const int arrangementBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
-        if(event.y>=366 && event.y<arrangementBottom && session.tracks.size()>0){
+        if(event.x>=20 && event.x<getWidth()-20 && event.y>=366 && event.y<arrangementBottom && !session.tracks.empty() && !aiPanel.isVisible() && !connectPanel.isVisible()){
             const int visible=juce::jmax(1,(arrangementBottom-366)/70);
             const size_t maximum=session.tracks.size()>(size_t)visible ?
                 session.tracks.size()-(size_t)visible : 0;
@@ -582,6 +582,17 @@ public:
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
         }
         g.restoreState();
+        // Show which tracks are visible in large sessions without blocking the mixer.
+        if(!session.tracks.empty() && arrangementBottom>366){
+            const size_t visible=(size_t)juce::jmax(1,(arrangementBottom-366)/70);
+            const size_t first=juce::jmin(arrangementScrollTrack,session.tracks.size()-1);
+            const size_t last=juce::jmin(session.tracks.size(),first+visible);
+            g.setColour(juce::Colour(0xff7baec8));
+            g.setFont(juce::Font(juce::FontOptions(10.0f)));
+            g.drawText("TRACKS "+juce::String((int)first+1)+"-"+juce::String((int)last)+
+                       " / "+juce::String((int)session.tracks.size()),
+                       getWidth()-177,top+5,154,19,juce::Justification::centredRight);
+        }
         // Peak bars are updated from atomics, never directly from the audio thread.
         const int meterLeft=getWidth()-220,meterTop=215,meterWidth=80;
         for(int ch=0;ch<2;++ch){
