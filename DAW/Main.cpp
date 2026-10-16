@@ -1354,7 +1354,7 @@ private:
             return;
         }
         std::vector<std::size_t> selectedInputs;
-        for(std::size_t i=0;i<session.tracks.size();++i)
+        for(std::size_t i=0;i<session.tracks.size() && i<armedTracks.size();++i)
             if(session.tracks[i].type==idw::daw::TrackType::audio && armedTracks[i])
                 selectedInputs.push_back(i);
         // RECORD VOCAL is itself an explicit recording action. If the user has
@@ -1475,7 +1475,11 @@ private:
                physicalInput>=device->getInputChannelNames().size() || callbackInput<0 ||
                !std::isfinite(deviceRate) || deviceRate<=0.0){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-                    "Input unavailable","Select an existing enabled input in audio device settings.");
+                    "Input unavailable",
+                    "Selected recording track: "+juce::String(session.tracks[recordTargetTrack].name)+
+                    "\nPhysical input index: "+juce::String(physicalInput)+
+                    "\nActive audio device: "+(device ? device->getName() : juce::String("none"))+
+                    "\nOpen AUDIO DEVICES and enable a microphone input, then select that input on the track.");
                 return;
             }
             if(recorder.start(destination,deviceRate,1,callbackInput)){
