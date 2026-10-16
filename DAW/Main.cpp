@@ -423,6 +423,10 @@ public:
         }
         constexpr int top=366, height=70, left=205;
         if(e.y<top || e.x<left || session.tracks.empty())return;
+        const int visibleMixerHeight=neoMixerExpanded ? 190 : 112;
+        const int visibleMixerTop=getHeight()-visibleMixerHeight-48;
+        const int arrangementLimit=visibleMixerTop>420 ? visibleMixerTop-8 : getHeight()-48;
+        if(e.y>=arrangementLimit)return;
         const auto ti=(size_t)((e.y-top)/height);
         if(ti>=session.tracks.size())return;
         const auto& clips=session.tracks[ti].clips;
@@ -496,6 +500,13 @@ public:
             g.drawVerticalLine(x,(float)top,(float)(getHeight()-30));
             g.drawText(juce::String(bar+1),x+3,top,40,30,juce::Justification::centredLeft);
         }
+        const int mixerHeight=neoMixerExpanded ? 190 : 112;
+        const int mixerTop=getHeight()-mixerHeight-48;
+        const int arrangementBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
+        // Clip all arrangement drawing so expanding the mixer does not obscure
+        // or receive stray clicks from timeline regions below its viewport.
+        g.saveState();
+        g.reduceClipRegion(20,top,getWidth()-40,juce::jmax(0,arrangementBottom-top));
         int y=top+36;
         size_t renderedTrackIndex=0;
         for(const auto& track:session.tracks){
@@ -553,6 +564,7 @@ public:
             g.setColour(juce::Colour(0xff17d9ff));
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
         }
+        g.restoreState();
         // Peak bars are updated from atomics, never directly from the audio thread.
         const int meterLeft=getWidth()-220,meterTop=215,meterWidth=80;
         for(int ch=0;ch<2;++ch){
