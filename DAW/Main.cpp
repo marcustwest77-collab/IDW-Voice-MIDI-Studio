@@ -307,8 +307,8 @@ public:
         setWantsKeyboardFocus(true);
         title.setBounds(area.removeFromTop(42));
         auto controls=area.removeFromTop(44);
-        play.setBounds(controls.removeFromLeft(90).reduced(3));
-        stop.setBounds(controls.removeFromLeft(90).reduced(3));
+        play.setBounds(controls.removeFromLeft(110).reduced(4));
+        stop.setBounds(controls.removeFromLeft(100).reduced(4));
         tempoLabel.setBounds(controls.removeFromLeft(45));
         tempo.setBounds(controls.removeFromLeft(195));
         audio.setBounds(controls.removeFromLeft(160).reduced(3));
@@ -434,6 +434,20 @@ public:
     void mouseUp(const juce::MouseEvent&) override { draggingClip=false; }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff080f1c));
+        // Neo Studio control decks: visual grouping stays outside the audio callback.
+        const auto deck=[&g](juce::Rectangle<float> bounds,const juce::String& label){
+            g.setColour(juce::Colour(0xff101f32));
+            g.fillRoundedRectangle(bounds,10.0f);
+            g.setColour(juce::Colour(0xff224560));
+            g.drawRoundedRectangle(bounds,10.0f,1.0f);
+            g.setColour(juce::Colour(0xff47cffa));
+            g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
+            g.drawText(label,bounds.removeFromTop(16.0f).reduced(10.0f,0.0f),juce::Justification::centredLeft);
+        };
+        const auto fullWidth=(float)juce::jmax(100,getWidth()-40);
+        deck({20.0f,68.0f,fullWidth,93.0f},"TRANSPORT  /  PROJECT");
+        deck({20.0f,164.0f,fullWidth,84.0f},"TRACK CONTROL  /  INPUT ROUTING");
+        deck({20.0f,251.0f,fullWidth,74.0f},"MASTER  /  SYNTH  /  PROCESSING");
         const auto rect=getLocalBounds().reduced(20);
         const int top=330, trackHeight=70, left=205;
         g.setColour(juce::Colour(0xff122338));g.fillRect(20,top,getWidth()-40,36);
