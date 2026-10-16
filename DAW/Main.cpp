@@ -832,10 +832,22 @@ private:
         }
         inputChannel.setSelectedId(track.inputChannel+1,juce::dontSendNotification);
     }
+    void ensureSelectedTrackVisible(){
+        const int mixerHeight=neoMixerExpanded ? 190 : 112;
+        const int mixerTop=getHeight()-mixerHeight-48;
+        const int arrangementBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
+        const size_t visible=(size_t)juce::jmax(1,(arrangementBottom-366)/70);
+        const size_t maxScroll=session.tracks.size()>visible ? session.tracks.size()-visible : 0;
+        arrangementScrollTrack=juce::jmin(arrangementScrollTrack,maxScroll);
+        if(selectedTrack<arrangementScrollTrack)arrangementScrollTrack=selectedTrack;
+        else if(selectedTrack>=arrangementScrollTrack+visible)
+            arrangementScrollTrack=juce::jmin(maxScroll,selectedTrack-visible+1);
+    }
     void selectTrack(int direction){
         if(playing.load() || session.tracks.empty())return;
         const auto current=(int)selectedTrack;
         selectedTrack=(size_t)juce::jlimit(0,(int)session.tracks.size()-1,current+direction);
+        ensureSelectedTrackVisible();
         refreshMixer();repaint();
     }
     void updateFirstTrackMix(){
