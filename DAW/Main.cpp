@@ -418,7 +418,7 @@ public:
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
         const int mixerTop=getHeight()-mixerHeight-48;
         if(mixerTop>420 && e.y>=mixerTop && e.y<mixerTop+mixerHeight && e.x>=30 && !session.tracks.empty()){ 
-            if(e.y<mixerTop+22 && e.x<360){neoMixerExpanded=!neoMixerExpanded;repaint();return;}
+            if(e.y<mixerTop+22 && e.x<360){neoMixerExpanded=!neoMixerExpanded;ensureSelectedTrackVisible();repaint();return;}
             const int count=juce::jmin(10,(int)session.tracks.size());
             const int width=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
             const int index=(e.x-30)/width;
