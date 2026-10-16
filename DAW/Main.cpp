@@ -192,6 +192,27 @@ public:
         monitorControl.setToggleState(false,juce::dontSendNotification);
         monitorControl.setEnabled(false);
         addAndMakeVisible(monitorControl);
+        audioDevices.setButtonText("AUDIO DEVICES");
+        audioDevices.setTooltip("Select a Windows ASIO driver and enable your PreSonus AudioBox microphone input.");
+        addAndMakeVisible(audioDevices);
+        audioDevices.onClick=[this]{
+            if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load()){
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "Stop audio first","Stop recording and playback before changing the audio interface.");
+                return;
+            }
+            auto* selector=new juce::AudioDeviceSelectorComponent(
+                deviceManager,0,8,1,2,false,false,false,false);
+            selector->setSize(540,440);
+            juce::DialogWindow::LaunchOptions options;
+            options.dialogTitle="IDW Audio Devices - Select PreSonus AudioBox";
+            options.content.setOwned(selector);
+            options.dialogBackgroundColour=juce::Colours::darkgrey;
+            options.escapeKeyTriggersCloseButton=true;
+            options.useNativeTitleBar=true;
+            options.resizable=false;
+            options.launchAsync();
+        };
         monitorControl.onClick=[this]{
             const bool enabled=monitorControl.getToggleState() && multiRecorder.isRecording();
             multiRecorder.setHeadphoneMonitor(enabled,0.1f);
@@ -273,6 +294,7 @@ public:
         inputChannel.setBounds(mixRow.removeFromLeft(90));
         auto monitorRow=area.removeFromTop(28);
         monitorControl.setBounds(monitorRow.removeFromLeft(190));
+        audioDevices.setBounds(monitorRow.removeFromLeft(155).reduced(2));
         inputLevel.setBounds(area.removeFromTop(26));
         auto overdubRow=area.removeFromTop(36);
         overdubControl.setBounds(overdubRow.removeFromLeft(285));
@@ -1208,7 +1230,7 @@ private:
     juce::Slider lowEq,highEq;
     std::atomic<float> lowDb{0.0f},highDb{0.0f};
     float eqState[2]{0.0f,0.0f};
-    juce::TextButton clearClips;
+    juce::TextButton clearClips,audioDevices;
     std::atomic<float> peakLeft{0.0f},peakRight{0.0f};
     std::atomic<bool> peakClipLeft{false},peakClipRight{false};
     std::atomic<float> masterLevel{1.0f};
