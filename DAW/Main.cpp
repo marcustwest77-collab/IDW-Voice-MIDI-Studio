@@ -1347,9 +1347,19 @@ private:
                     juce::MessageBoxIconType::WarningIcon,"Vocal capture interrupted",
                     juce::String(dropped)+" audio input blocks were skipped. Check vocal timing.");
                 const auto take=recorder.file();
-                if(!importTake(take))
-                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-                        "Take saved, import failed",take.getFullPathName());
+                if(receivedFrames==0 || !take.existsAsFile() || take.getSize()<=44){
+                    juce::AlertWindow::showMessageBoxAsync(
+                        juce::MessageBoxIconType::WarningIcon,"No vocal audio captured",
+                        "Recording stopped, but no audio frames were received or the WAV file is empty. "+
+                        juce::String("Check the enabled microphone input and Windows microphone permissions.\n")+
+                        "Destination: "+take.getFullPathName());
+                }else if(!importTake(take)){
+                    juce::AlertWindow::showMessageBoxAsync(
+                        juce::MessageBoxIconType::WarningIcon,"Vocal take import failed",
+                        "Captured "+juce::String(static_cast<juce::int64>(receivedFrames))+
+                        " audio frames, but the saved take could not be imported.\n"+
+                        take.getFullPathName());
+                }
             }
             return;
         }
