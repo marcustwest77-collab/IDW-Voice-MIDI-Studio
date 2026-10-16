@@ -397,6 +397,20 @@ public:
         selectedClipValid=false;
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() ||
            aiPanel.isVisible() || connectPanel.isVisible())return;
+        // The Neo Mixer overview doubles as a channel selector when stopped.
+        // Handle this before hit-testing clips beneath the overview.
+        const int mixerTop=getHeight()-160;
+        if(e.y>=mixerTop && e.y<mixerTop+112 && e.x>=30 && !session.tracks.empty()){
+            const int count=juce::jmin(10,(int)session.tracks.size());
+            const int width=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
+            const int index=(e.x-30)/width;
+            if(index>=0 && index<count && e.x<30+(index+1)*width){
+                selectedTrack=(size_t)index;
+                refreshMixer();
+                repaint();
+            }
+            return;
+        }
         constexpr int top=366, height=70, left=205;
         if(e.y<top || e.x<left || session.tracks.empty())return;
         const auto ti=(size_t)((e.y-top)/height);
@@ -536,9 +550,14 @@ public:
             g.fillRoundedRectangle(20.0f,(float)mixTop,(float)getWidth()-40.0f,(float)mixHeight,8.0f);
             g.setColour(juce::Colour(0xff47cffa));
             g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
-            g.drawText("NEO MIXER  /  CHANNEL OVERVIEW",30,mixTop+4,320,18,juce::Justification::centredLeft);
+            g.drawText("NEO MIXER  /  CLICK A CHANNEL TO SELECT",30,mixTop+4,320,18,juce::Justification::centredLeft);
             for(int i=0;i<count;++i){
                 const auto& track=session.tracks[(size_t)i];
+                if((size_t)i==selectedTrack){
+                    g.setColour(juce::Colour(0xff16cefa).withAlpha(0.16f));
+                    g.fillRoundedRectangle((float)(30+i*stripWidth), (float)mixTop+23,
+                        (float)stripWidth-5, (float)mixHeight-29,5.0f);
+                }
                 const int x=30+i*stripWidth;
                 g.setColour(juce::Colour(0xff29445c));
                 g.drawVerticalLine(x+stripWidth-4,(float)mixTop+23,(float)mixTop+mixHeight-8);
