@@ -1522,6 +1522,15 @@ private:
                 return;
             }
             if(recorder.start(destination,deviceRate,1,callbackInput)){
+                // Preserve the precise routing used by the take for Windows QA.
+                juce::Logger::writeToLog(
+                    "IDW vocal capture started | track="+
+                    juce::String((int)recordTargetTrack+1)+
+                    " | device="+device->getName()+
+                    " | physical input="+juce::String(physicalInput)+
+                    " | callback input="+juce::String(callbackInput)+
+                    " | sample rate="+juce::String(deviceRate,0)+
+                    " | WAV="+destination.getFullPathName());
                 record.setButtonText("STOP RECORD");
                 if(overdubControl.getToggleState())startOverdubPlayback();
             }
