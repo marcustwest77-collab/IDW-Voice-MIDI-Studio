@@ -18,17 +18,54 @@
 #include <atomic>
 #include <memory>
 #include <thread>
+// Neo Studio: visual-only styling; recording and audio callbacks remain unchanged.
+class IDWNeoLookAndFeel final : public juce::LookAndFeel_V4 {
+public:
+    IDWNeoLookAndFeel() {
+        setColour(juce::TextButton::buttonColourId,juce::Colour(0xff152638));
+        setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff007fa9));
+        setColour(juce::TextButton::textColourOffId,juce::Colour(0xffd6ebf8));
+        setColour(juce::TextButton::textColourOnId,juce::Colours::white);
+        setColour(juce::ComboBox::backgroundColourId,juce::Colour(0xff111e2e));
+        setColour(juce::ComboBox::outlineColourId,juce::Colour(0xff28506a));
+        setColour(juce::ComboBox::textColourId,juce::Colour(0xffd6ebf8));
+        setColour(juce::Slider::thumbColourId,juce::Colour(0xff15d4ff));
+        setColour(juce::Slider::trackColourId,juce::Colour(0xff127a9e));
+        setColour(juce::Slider::backgroundColourId,juce::Colour(0xff182739));
+        setColour(juce::Label::textColourId,juce::Colour(0xffd6ebf8));
+        setColour(juce::ToggleButton::textColourId,juce::Colour(0xffd6ebf8));
+        setColour(juce::ToggleButton::tickColourId,juce::Colour(0xff10d8ff));
+        setColour(juce::TextEditor::backgroundColourId,juce::Colour(0xff101b2b));
+        setColour(juce::TextEditor::textColourId,juce::Colours::white);
+        setColour(juce::PopupMenu::backgroundColourId,juce::Colour(0xff101b2b));
+        setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(0xff176b94));
+    }
+    void drawButtonBackground(juce::Graphics& g,juce::Button& button,
+                              const juce::Colour& background,
+                              bool highlighted,bool down) override {
+        const auto area=button.getLocalBounds().toFloat().reduced(1.5f);
+        const bool recording=button.getButtonText().containsIgnoreCase("RECORD") ||
+            button.getButtonText().containsIgnoreCase("STOP RECORD");
+        const auto accent=recording ? juce::Colour(0xffe94565) : juce::Colour(0xff12c9ff);
+        const auto fill=down ? accent.withAlpha(0.36f) :
+            (highlighted ? juce::Colour(0xff214463) : background);
+        g.setColour(fill);g.fillRoundedRectangle(area,7.0f);
+        g.setColour(accent.withAlpha(highlighted || down ? 0.95f : 0.44f));
+        g.drawRoundedRectangle(area,7.0f,highlighted ? 1.6f : 1.0f);
+    }
+};
 class Workstation final : public juce::AudioAppComponent, private juce::Timer {
 public:
     Workstation() {
-        setSize(1100,700);
+        setSize(1450,850);
+        setLookAndFeel(&neoTheme);
         formats.registerBasicFormats();
         setAudioChannels(8,2); // Request up to eight available hardware inputs.
         deviceManager.addAudioCallback(&recorder);
         deviceManager.addAudioCallback(&multiRecorder);
         deviceManager.addAudioCallback(&loopbackCapture);
-        title.setText("IDW  |  VOICE MIDI STUDIO DAW  |  V14 FOUNDATION",juce::dontSendNotification);
-        title.setColour(juce::Label::textColourId,juce::Colours::gold);
+        title.setText("IDW  |  VOICE MIDI STUDIO  |  NEO STUDIO BETA",juce::dontSendNotification);
+        title.setColour(juce::Label::textColourId,juce::Colour(0xff4adfff));
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
         for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject,&bounce,&cancelBounce,&connectButton,&aiButton}) addAndMakeVisible(*b);
@@ -396,10 +433,10 @@ public:
     }
     void mouseUp(const juce::MouseEvent&) override { draggingClip=false; }
     void paint(juce::Graphics& g) override {
-        g.fillAll(juce::Colour(0xff101318));
+        g.fillAll(juce::Colour(0xff080f1c));
         const auto rect=getLocalBounds().reduced(20);
         const int top=330, trackHeight=70, left=205;
-        g.setColour(juce::Colour(0xff1b222b));g.fillRect(20,top,getWidth()-40,36);
+        g.setColour(juce::Colour(0xff122338));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
             const int x=left+bar*48;
@@ -410,9 +447,9 @@ public:
         int y=top+36;
         size_t renderedTrackIndex=0;
         for(const auto& track:session.tracks){
-            g.setColour(juce::Colour((y/trackHeight)%2 ? 0xff252b35 : 0xff1c222a));
+            g.setColour(juce::Colour((y/trackHeight)%2 ? 0xff16283d : 0xff102033));
             g.fillRect(20,y,getWidth()-40,trackHeight-2);
-            g.setColour(track.type==idw::daw::TrackType::audio ? juce::Colours::orange : juce::Colours::deepskyblue);
+            g.setColour(track.type==idw::daw::TrackType::audio ? juce::Colour(0xffef486d) : juce::Colour(0xff17cfff));
             g.fillRect(20,y,5,trackHeight-2);
             g.setColour(juce::Colours::white);
             g.drawText(juce::String(track.name),35,y+10,155,35,juce::Justification::centredLeft);
@@ -1234,7 +1271,8 @@ private:
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    IDWNeoLookAndFeel neoTheme;
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
     std::atomic<bool> exportCancel{false};
