@@ -1111,6 +1111,10 @@ private:
         target->transport.setSource(source.get(),0,nullptr,rate);
         target->file=take;target->reader=std::move(source);
         selectedTrack=target->trackIndex;
+        ensureSelectedTrackVisible();
+        juce::Logger::writeToLog("IDW vocal take imported: "+take.getFullPathName()+
+            " | target track "+juce::String((int)selectedTrack+1)+
+            " | duration "+juce::String(duration,2)+" s");
         refreshMixer();repaint();return true;
     }
     void startLiveCalibration(){
