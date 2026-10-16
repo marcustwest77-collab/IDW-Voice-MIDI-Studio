@@ -594,6 +594,14 @@ public:
                 const float thumbY=(float)mixTop+92.0f-normalized*42.0f;
                 g.setColour(juce::Colour(0xff21d6f7));
                 g.fillRoundedRectangle((float)faderX-9,thumbY-4,18.0f,8.0f,3.0f);
+                // Numeric mix readouts are gain/pan settings, not live audio meters.
+                g.setColour(juce::Colour(0xffa9cadb));
+                g.setFont(juce::Font(juce::FontOptions(9.0f)));
+                const auto gainDb=track.gain>0.0001f
+                    ? juce::String(20.0*std::log10((double)track.gain),1)+" dB"
+                    : juce::String("-inf dB");
+                g.drawFittedText(gainDb,x+4,mixTop+96,stripWidth-12,12,
+                                 juce::Justification::centredLeft,1);
                 g.setColour(juce::Colour(0xff29445c));
                 g.drawVerticalLine(x+stripWidth-4,(float)mixTop+23,(float)mixTop+mixHeight-8);
                 const bool armed=track.type==idw::daw::TrackType::audio && armedTracks[(size_t)i];
