@@ -571,6 +571,21 @@ private:
         inputChannel.setEnabled(track.type==idw::daw::TrackType::audio &&
             !playing.load() && !recorder.isRecording() &&
             !multiRecorder.isRecording() && !exportRunning.load());
+        // Show the active device's physical channel names and enabled state.
+        // Recording translates physical indices into JUCE's packed callback indices.
+        if(auto* device=deviceManager.getCurrentAudioDevice()){
+            const auto names=device->getInputChannelNames();
+            const auto active=device->getActiveInputChannels();
+            inputChannel.clear(juce::dontSendNotification);
+            for(int i=0;i<names.size();++i){
+                inputChannel.addItem(names[i]+(active[i] ? " (ON)" : " (disabled)"),i+1);
+                inputChannel.setItemEnabled(i+1,active[i]);
+            }
+        }else{
+            inputChannel.clear(juce::dontSendNotification);
+            inputChannel.addItem("No audio input device",1);
+            inputChannel.setItemEnabled(1,false);
+        }
         inputChannel.setSelectedId(track.inputChannel+1,juce::dontSendNotification);
     }
     void selectTrack(int direction){
