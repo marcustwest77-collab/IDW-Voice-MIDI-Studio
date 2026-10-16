@@ -1357,6 +1357,16 @@ private:
         for(std::size_t i=0;i<session.tracks.size();++i)
             if(session.tracks[i].type==idw::daw::TrackType::audio && armedTracks[i])
                 selectedInputs.push_back(i);
+        // RECORD VOCAL is itself an explicit recording action. If the user has
+        // selected an audio track but no arm toggle survived the UI transition,
+        // use that selected track instead of rejecting a valid recording target.
+        if(selectedInputs.empty() && selectedTrack<session.tracks.size() &&
+           selectedTrack<armedTracks.size() &&
+           session.tracks[selectedTrack].type==idw::daw::TrackType::audio){
+            armedTracks[selectedTrack]=true;
+            selectedInputs.push_back(selectedTrack);
+            refreshMixer();
+        }
         recordTargetTrack=selectedInputs.empty()?session.tracks.size():selectedInputs.front();
         if(recordTargetTrack>=session.tracks.size()){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
