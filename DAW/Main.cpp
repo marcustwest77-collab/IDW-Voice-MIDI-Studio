@@ -1351,7 +1351,16 @@ private:
                     juce::MessageBoxIconType::WarningIcon,"Vocal capture interrupted",
                     juce::String(dropped)+" audio input blocks were skipped. Check vocal timing.");
                 const auto take=recorder.file();
-                if(receivedFrames==0 || !take.existsAsFile() || take.getSize()<=44){
+                const auto savedBytes=take.existsAsFile() ? take.getSize() : juce::int64{0};
+                juce::Logger::writeToLog(
+                    "IDW vocal capture summary: received="+
+                    juce::String(static_cast<juce::int64>(receivedFrames))+
+                    " frames, queued="+juce::String(static_cast<juce::int64>(queuedFrames))+
+                    " frames, dropped="+juce::String(static_cast<juce::int64>(dropped))+
+                    " blocks, rejected="+juce::String(static_cast<juce::int64>(rejected))+
+                    " writes, WAV bytes="+juce::String(savedBytes)+
+                    ", path="+take.getFullPathName());
+                if(receivedFrames==0 || !take.existsAsFile() || savedBytes<=44){
                     juce::AlertWindow::showMessageBoxAsync(
                         juce::MessageBoxIconType::WarningIcon,"No vocal audio captured",
                         "Recording stopped, but no audio frames were received or the WAV file is empty. "+
