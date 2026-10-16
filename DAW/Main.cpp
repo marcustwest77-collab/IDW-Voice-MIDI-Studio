@@ -1372,6 +1372,15 @@ private:
                         "Captured "+juce::String(static_cast<juce::int64>(receivedFrames))+
                         " audio frames, but the saved take could not be imported.\n"+
                         take.getFullPathName());
+                }else{
+                    // Confirm the full record -> save -> import path during beta QA.
+                    // A successful import is not proof that the microphone was audible.
+                    juce::AlertWindow::showMessageBoxAsync(
+                        juce::MessageBoxIconType::InfoIcon,"Vocal take imported",
+                        "WAV saved and added to track "+juce::String((int)selectedTrack+1)+
+                        ".\nFrames received: "+juce::String(static_cast<juce::int64>(receivedFrames))+
+                        "\nFile: "+take.getFullPathName()+
+                        "\nPlay the take to check that microphone audio is audible.");
                 }
             }
             return;
