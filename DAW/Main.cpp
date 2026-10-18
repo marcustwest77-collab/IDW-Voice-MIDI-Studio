@@ -93,6 +93,41 @@ public:
         addAndMakeVisible(deleteSkinButton);
         addAndMakeVisible(exportSkinButton);
         addAndMakeVisible(importSkinButton);
+        addAndMakeVisible(skinToolsButton);
+        skinToolsButton.setButtonText("SKIN TOOLS");
+        skinToolsButton.setTooltip("Customize, save, load, import and export Neo Studio skins.");
+        skinToolsButton.onClick=[this]{
+            juce::PopupMenu menu;
+            menu.addItem(1,"Accent color");
+            menu.addItem(2,"Background color");
+            menu.addItem(3,"Panel color");
+            menu.addSeparator();
+            menu.addItem(4,"Save skin");
+            menu.addItem(5,"Load skin");
+            menu.addItem(6,"Delete skin");
+            menu.addItem(7,"Export skin");
+            menu.addItem(8,"Import skin");
+            juce::Component::SafePointer<Workstation> safeThis(this);
+            menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&skinToolsButton),
+                [safeThis](int selection){
+                    if(safeThis==nullptr)return;
+                    switch(selection){
+                        case 1:safeThis->customAccentButton.triggerClick();break;
+                        case 2:safeThis->customBackgroundButton.triggerClick();break;
+                        case 3:safeThis->customPanelButton.triggerClick();break;
+                        case 4:safeThis->saveSkinButton.triggerClick();break;
+                        case 5:safeThis->loadSkinButton.triggerClick();break;
+                        case 6:safeThis->deleteSkinButton.triggerClick();break;
+                        case 7:safeThis->exportSkinButton.triggerClick();break;
+                        case 8:safeThis->importSkinButton.triggerClick();break;
+                        default:break;
+                    }
+                });
+        };
+        for(auto* action:{&customAccentButton,&customBackgroundButton,&customPanelButton,
+                          &saveSkinButton,&loadSkinButton,&deleteSkinButton,
+                          &exportSkinButton,&importSkinButton})
+            action->setVisible(false);
         importSkinButton.setButtonText("IMPORT SKIN");
         importSkinButton.setTooltip("Import a validated IDW skin JSON file; existing presets are not overwritten.");
         importSkinButton.onClick=[this]{
@@ -673,15 +708,8 @@ public:
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
-        importSkinButton.setBounds(header.removeFromRight(110).reduced(3));
-        exportSkinButton.setBounds(header.removeFromRight(110).reduced(3));
-        deleteSkinButton.setBounds(header.removeFromRight(110).reduced(3));
-        loadSkinButton.setBounds(header.removeFromRight(100).reduced(3));
-        saveSkinButton.setBounds(header.removeFromRight(100).reduced(3));
-        customPanelButton.setBounds(header.removeFromRight(80).reduced(3));
-        customBackgroundButton.setBounds(header.removeFromRight(95).reduced(3));
-        customAccentButton.setBounds(header.removeFromRight(85).reduced(3));
-        skinSelector.setBounds(header.removeFromRight(180).reduced(3));
+        skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
+        skinSelector.setBounds(header.removeFromRight(165).reduced(3));
         title.setBounds(header);
         auto controls=area.removeFromTop(44);
         play.setBounds(controls.removeFromLeft(110).reduced(4));
@@ -2198,7 +2226,7 @@ private:
     ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
-    juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton;
+    juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton,skinToolsButton;
     juce::Colour customPanel{0xff101f32};
     bool useCustomPanel=false;
     juce::Colour customBackground{0xff080f1c};
