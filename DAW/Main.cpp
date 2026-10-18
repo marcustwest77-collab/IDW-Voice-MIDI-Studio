@@ -91,6 +91,42 @@ public:
         addAndMakeVisible(saveSkinButton);
         addAndMakeVisible(loadSkinButton);
         addAndMakeVisible(deleteSkinButton);
+        addAndMakeVisible(exportSkinButton);
+        exportSkinButton.setButtonText("EXPORT SKIN");
+        exportSkinButton.setTooltip("Export a saved custom skin JSON file to a chosen folder.");
+        exportSkinButton.onClick=[this]{
+            const auto root=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                .getChildFile("IDW Neo Studio").getChildFile("skins");
+            const auto files=root.findChildFiles(juce::File::findFiles,false,"*.json");
+            if(files.isEmpty()){
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                    "Export Skin","Save a named skin first.");
+                return;
+            }
+            juce::PopupMenu menu;
+            for(int i=0;i<files.size();++i)menu.addItem(i+1,files[i].getFileNameWithoutExtension());
+            juce::Component::SafePointer<Workstation> safeThis(this);
+            menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&exportSkinButton),
+                [safeThis,files](int choice){
+                    if(safeThis==nullptr || choice<1 || choice>files.size())return;
+                    const auto source=files[choice-1];
+                    auto chooser=std::make_shared<juce::FileChooser>("Export IDW Skin",
+                        juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                            .getChildFile(source.getFileName()),"*.json");
+                    chooser->launchAsync(juce::FileBrowserComponent::saveMode |
+                        juce::FileBrowserComponent::canSelectFiles |
+                        juce::FileBrowserComponent::warnAboutOverwriting,
+                        [safeThis,source,chooser](const juce::FileChooser& result){
+                            if(safeThis==nullptr)return;
+                            const auto target=result.getResult();
+                            if(target==juce::File())return;
+                            if(!source.copyFileTo(target))
+                                juce::AlertWindow::showMessageBoxAsync(
+                                    juce::MessageBoxIconType::WarningIcon,
+                                    "Export failed","Could not export skin to "+target.getFullPathName());
+                        });
+                });
+        };
         deleteSkinButton.setButtonText("DELETE SKIN");
         deleteSkinButton.setTooltip("Delete a named skin preset after confirmation. The active colors remain unchanged.");
         deleteSkinButton.onClick=[this]{
@@ -587,6 +623,7 @@ public:
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
+        exportSkinButton.setBounds(header.removeFromRight(110).reduced(3));
         deleteSkinButton.setBounds(header.removeFromRight(110).reduced(3));
         loadSkinButton.setBounds(header.removeFromRight(100).reduced(3));
         saveSkinButton.setBounds(header.removeFromRight(100).reduced(3));
@@ -2110,7 +2147,7 @@ private:
     ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
-    juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton;
+    juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton;
     juce::Colour customPanel{0xff101f32};
     bool useCustomPanel=false;
     juce::Colour customBackground{0xff080f1c};
