@@ -52,6 +52,10 @@ public:
         setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(0xff176b94));
     }
     juce::Colour accentColour() const {return findColour(juce::Slider::thumbColourId);}
+    void setCustomAccent(juce::Colour accent){
+        setColour(juce::Slider::thumbColourId,accent);
+        setColour(juce::ToggleButton::tickColourId,accent);
+    }
     void drawButtonBackground(juce::Graphics& g,juce::Button& button,
                               const juce::Colour& background,
                               bool highlighted,bool down) override {
@@ -81,6 +85,13 @@ public:
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
         addAndMakeVisible(skinSelector);
+        addAndMakeVisible(customAccentButton);
+        customAccentButton.setButtonText("ACCENT");
+        customAccentButton.onClick=[this]{
+            juce::ColourSelector selector;
+            selector.setCurrentColour(neoTheme.accentColour());
+            juce::CallOutBox::launchAsynchronously(std::make_unique<juce::ColourSelector>(selector),customAccentButton.getScreenBounds(),nullptr);
+        };
         skinSelector.addItem("Neo Cyan",1);
         skinSelector.addItem("Royal Gold",2);
         skinSelector.addItem("Emerald Circuit",3);
@@ -369,6 +380,7 @@ public:
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
+        customAccentButton.setBounds(header.removeFromRight(85).reduced(3));
         skinSelector.setBounds(header.removeFromRight(180).reduced(3));
         title.setBounds(header);
         auto controls=area.removeFromTop(44);
@@ -1886,6 +1898,7 @@ private:
     ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
+    juce::TextButton customAccentButton;
     int activeSkin=0;
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
