@@ -92,6 +92,56 @@ public:
         addAndMakeVisible(loadSkinButton);
         addAndMakeVisible(deleteSkinButton);
         addAndMakeVisible(exportSkinButton);
+        addAndMakeVisible(importSkinButton);
+        importSkinButton.setButtonText("IMPORT SKIN");
+        importSkinButton.setTooltip("Import a validated IDW skin JSON file; existing presets are not overwritten.");
+        importSkinButton.onClick=[this]{
+            auto chooser=std::make_shared<juce::FileChooser>("Import IDW Skin",
+                juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*.json");
+            juce::Component::SafePointer<Workstation> safeThis(this);
+            chooser->launchAsync(juce::FileBrowserComponent::openMode |
+                juce::FileBrowserComponent::canSelectFiles,
+                [safeThis,chooser](const juce::FileChooser& result){
+                    if(safeThis==nullptr)return;
+                    const auto source=result.getResult();
+                    if(source==juce::File())return;
+                    const auto parsed=juce::JSON::parse(source);
+                    auto* object=parsed.getDynamicObject();
+                    auto invalid=[&](){
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                            "Invalid Skin","The selected file is not a valid IDW skin preset.");
+                    };
+                    if(object==nullptr){invalid();return;}
+                    const auto name=object->getProperty("name").toString().trim();
+                    if(name.isEmpty() || name.length()>40 ||
+                       !name.containsOnly("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-")){
+                        invalid();return;
+                    }
+                    const auto skinProperty=object->getProperty("skin");
+                    const auto skinText=skinProperty.toString();
+                    if(skinText.length()!=1 || !skinText.containsOnly("0123")){invalid();return;}
+                    for(const char* key:{"background","panel","accent"}){
+                        const auto rgb=object->getProperty(key).toString();
+                        if(rgb.length()!=6 || !rgb.containsOnly("0123456789abcdefABCDEF")){
+                            invalid();return;
+                        }
+                    }
+                    const auto root=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                        .getChildFile("IDW Neo Studio").getChildFile("skins");
+                    const auto target=root.getChildFile(name+".json");
+                    if(!root.createDirectory().wasOk() || target.exists()){
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                            "Import Skin","Unable to import: destination unavailable or a preset with this name already exists.");
+                        return;
+                    }
+                    if(!target.replaceWithText(juce::JSON::toString(parsed)))
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                            "Import Skin","Unable to write the selected skin.");
+                    else
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                            "Skin Imported","Open LOAD SKIN to apply '"+name+"'.");
+                });
+        };
         exportSkinButton.setButtonText("EXPORT SKIN");
         exportSkinButton.setTooltip("Export a saved custom skin JSON file to a chosen folder.");
         exportSkinButton.onClick=[this]{
@@ -623,6 +673,7 @@ public:
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
+        importSkinButton.setBounds(header.removeFromRight(110).reduced(3));
         exportSkinButton.setBounds(header.removeFromRight(110).reduced(3));
         deleteSkinButton.setBounds(header.removeFromRight(110).reduced(3));
         loadSkinButton.setBounds(header.removeFromRight(100).reduced(3));
@@ -2147,7 +2198,7 @@ private:
     ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
-    juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton;
+    juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton;
     juce::Colour customPanel{0xff101f32};
     bool useCustomPanel=false;
     juce::Colour customBackground{0xff080f1c};
