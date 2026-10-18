@@ -881,13 +881,13 @@ private:
                 : -1;
             const bool armed=audioTrack && selectedTrack<armedTracks.size() && armedTracks[selectedTrack];
             const auto details="Track: "+(validTrack ? juce::String(session.tracks[selectedTrack].name) : juce::String("none"))+
-                "\\nAudio track: "+(audioTrack ? juce::String("yes") : juce::String("no"))+
-                "\\nArmed: "+(armed ? juce::String("yes") : juce::String("no"))+
-                "\\nDevice: "+(device ? device->getName() : juce::String("none"))+
-                "\\nPhysical input: "+juce::String(physical)+
-                "\\nEnabled callback input: "+juce::String(packed)+
-                "\\nSample rate: "+juce::String(deviceRate,0)+
-                "\\nRecording active: "+((recorder.isRecording() || multiRecorder.isRecording()) ? juce::String("yes") : juce::String("no"));
+                "\nAudio track: "+(audioTrack ? juce::String("yes") : juce::String("no"))+
+                "\nArmed: "+(armed ? juce::String("yes") : juce::String("no"))+
+                "\nDevice: "+(device ? device->getName() : juce::String("none"))+
+                "\nPhysical input: "+juce::String(physical)+
+                "\nEnabled callback input: "+juce::String(packed)+
+                "\nSample rate: "+juce::String(deviceRate,0)+
+                "\nRecording active: "+((recorder.isRecording() || multiRecorder.isRecording()) ? juce::String("yes") : juce::String("no"));
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                 "IDW Recording Status",details);
             feedback="Displayed current input and recording status";
