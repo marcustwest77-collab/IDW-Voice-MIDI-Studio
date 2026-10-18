@@ -74,10 +74,10 @@ public:
         // can feed the same dispatcher later; no always-listening mic is implied.
         addAndMakeVisible(voiceCommandInput);
         voiceCommandInput.setTextToShowWhenEmpty("type command",juce::Colours::grey);
-        voiceCommandInput.setTooltip("Try: record status, input status, play, stop, next track, previous track, mute, solo, expand mixer.");
+        voiceCommandInput.setTooltip("Say: IDW play, IDW stop, IDW arm track, IDW record vocals, IDW next track, IDW voice help. Windows: press Win+H to dictate.");
         addAndMakeVisible(runVoiceCommand);
         addAndMakeVisible(commandStatus);
-        commandStatus.setText("VOICE: Win+H to dictate, Enter to run",juce::dontSendNotification);
+        commandStatus.setText("VOICE READY: click field, Win+H, speak, Enter",juce::dontSendNotification);
         commandStatus.setTooltip("Windows: focus the command field, use Win+H for speech-to-text, then Enter to run. No always-listening microphone.");
         runVoiceCommand.setButtonText("COMMAND");
         runVoiceCommand.onClick=[this]{
@@ -878,11 +878,24 @@ private:
         command=command.trimCharactersAtEnd(".!?");
         if(command.startsWith("idw "))command=command.fromFirstOccurrenceOf("idw ",false,false);
         if(command.startsWith("studio "))command=command.fromFirstOccurrenceOf("studio ",false,false);
+        if(command.startsWith("hey idw "))command=command.substring(8).trim();
+        if(command.startsWith("please "))command=command.substring(7).trim();
         if(command.isEmpty())return;
         const bool busy=recorder.isRecording() || multiRecorder.isRecording() ||
             exportRunning.load() || loopbackCapture.isActive();
         juce::String feedback="Unknown command: "+command;
-        if(command=="record status" || command=="input status"){
+        if(command=="voice help" || command=="help" || command=="list commands"){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                "IDW Voice Commands",
+                "Click the command field, press Win+H, dictate a phrase, then press Enter.\n"
+                "Transport: play, stop, record vocals, stop recording.\n"
+                "Recording: arm track, disarm track, input status, overdub on/off.\n"
+                "Tracks: next track, previous track, add audio track.\n"
+                "Mixing: mute/unmute, solo/unsolo, expand/collapse mixer.\n"
+                "Projects: save project.\n"
+                "Voice recognition uses Windows dictation; the DAW is not always listening.");
+            feedback="Voice command list displayed";
+        }else if(command=="record status" || command=="input status" || command=="microphone status"){
             auto* device=deviceManager.getCurrentAudioDevice();
             const bool validTrack=selectedTrack<session.tracks.size();
             const bool audioTrack=validTrack && session.tracks[selectedTrack].type==idw::daw::TrackType::audio;
@@ -908,9 +921,9 @@ private:
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                 "IDW Recording Status",details);
             feedback="Displayed current input and recording status";
-        }else if(command=="stop" || command=="stop playback"){
+        }else if(command=="stop" || command=="stop playback" || command=="stop the beat"){
             stop.triggerClick();feedback="STOP requested";
-        }else if(command=="play" || command=="start playback"){
+        }else if(command=="play" || command=="start playback" || command=="play the beat"){
             if(!busy){play.triggerClick();feedback="PLAY requested";}
             else feedback="Playback command blocked: recording/export busy";
         }else if(command=="arm track" || command=="arm input" || command=="disarm track" || command=="disarm input"){
@@ -921,16 +934,32 @@ private:
                 refreshMixer();repaint();
                 feedback=armedTracks[selectedTrack] ? "Audio track armed" : "Audio track disarmed";
             }else feedback="Select an audio track and stop playback before changing arm state";
-        }else if(command=="start recording" || command=="record vocal" || command=="record vocals"){
+        }else if(command=="start recording" || command=="record vocal" || command=="record vocals" || command=="start vocal recording"){
             if(!busy && !playing.load()){toggleRecording();feedback="Recording start requested";}
             else feedback="Recording cannot start while transport or export is busy";
         }else if(command=="stop recording" || command=="stop record"){
             if(recorder.isRecording() || multiRecorder.isRecording()){toggleRecording();feedback="Recording stop requested";}
             else feedback="No recording is active";
-        }else if(command=="next track" || command=="track next"){
+        }else if(command=="overdub on" || command=="enable overdub" ||
+                 command=="overdub off" || command=="disable overdub"){
+            if(!busy && !playing.load()){
+                const bool enabled=command=="overdub on" || command=="enable overdub";
+                overdubControl.setToggleState(enabled,juce::dontSendNotification);
+                feedback=enabled ? "Overdub enabled" : "Overdub disabled";
+            }else feedback="Stop playback or recording before changing overdub";
+        }else if(command=="add audio track" || command=="new audio track"){
+            if(!busy && !playing.load()){
+                addAudioTrack();refreshMixer();repaint();
+                feedback="New audio track added and selected";
+            }else feedback="Cannot add a track while playback or recording is active";
+        }else if(command=="save project" || command=="save session"){
+            if(!busy && !playing.load()){
+                saveProjectFile();feedback="Project save dialog requested";
+            }else feedback="Stop playback or recording before saving the project";
+        }else if(command=="next track" || command=="track next" || command=="go to next track"){
             if(!busy){selectTrack(1);feedback="Selected next track";}
             else feedback="Track selection unavailable while busy";
-        }else if(command=="previous track" || command=="last track" || command=="track previous"){
+        }else if(command=="previous track" || command=="last track" || command=="track previous" || command=="go to previous track"){
             if(!busy){selectTrack(-1);feedback="Selected previous track";}
             else feedback="Track selection unavailable while busy";
         }else if(command=="expand mixer" || command=="open mixer"){
