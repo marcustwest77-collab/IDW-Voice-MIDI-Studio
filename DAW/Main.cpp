@@ -76,8 +76,15 @@ public:
         voiceCommandInput.setTextToShowWhenEmpty("type command",juce::Colours::grey);
         voiceCommandInput.setTooltip("Try: record status, input status, play, stop, next track, previous track, mute, solo, expand mixer.");
         addAndMakeVisible(runVoiceCommand);
+        addAndMakeVisible(commandStatus);
+        commandStatus.setText("VOICE: Win+H to dictate, Enter to run",juce::dontSendNotification);
+        commandStatus.setTooltip("Windows: focus the command field, use Win+H for speech-to-text, then Enter to run. No always-listening microphone.");
         runVoiceCommand.setButtonText("COMMAND");
-        runVoiceCommand.onClick=[this]{executeStudioCommand(voiceCommandInput.getText());};
+        runVoiceCommand.onClick=[this]{
+            voiceCommandInput.grabKeyboardFocus();
+            executeStudioCommand(voiceCommandInput.getText());
+        };
+        runVoiceCommand.setTooltip("Voice-ready command input: on Windows press Win+H and dictate a command, then press Enter. Native speech recognition is not yet integrated.");
         voiceCommandInput.onReturnKey=[this]{executeStudioCommand(voiceCommandInput.getText());};
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN PROJECT");
@@ -336,6 +343,7 @@ public:
         synthPreset.setBounds(projectRow.removeFromLeft(100).reduced(3));
         voiceCommandInput.setBounds(projectRow.removeFromLeft(145).reduced(3));
         runVoiceCommand.setBounds(projectRow.removeFromLeft(80).reduced(3));
+        commandStatus.setBounds(projectRow.removeFromLeft(185).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(165));
@@ -866,7 +874,10 @@ private:
             arrangementScrollTrack=juce::jmin(maxScroll,selectedTrack-visible+1);
     }
     void executeStudioCommand(juce::String spoken){
-        const auto command=spoken.trim().toLowerCase().replaceCharacter('-', ' ');
+        auto command=spoken.trim().toLowerCase().replaceCharacter('-', ' ');
+        command=command.trimCharactersAtEnd(".!?");
+        if(command.startsWith("idw "))command=command.fromFirstOccurrenceOf("idw ",false,false);
+        if(command.startsWith("studio "))command=command.fromFirstOccurrenceOf("studio ",false,false);
         if(command.isEmpty())return;
         const bool busy=recorder.isRecording() || multiRecorder.isRecording() ||
             exportRunning.load() || loopbackCapture.isActive();
@@ -902,6 +913,20 @@ private:
         }else if(command=="play" || command=="start playback"){
             if(!busy){play.triggerClick();feedback="PLAY requested";}
             else feedback="Playback command blocked: recording/export busy";
+        }else if(command=="arm track" || command=="arm input" || command=="disarm track" || command=="disarm input"){
+            if(!busy && !playing.load() && selectedTrack<session.tracks.size() &&
+               selectedTrack<armedTracks.size() &&
+               session.tracks[selectedTrack].type==idw::daw::TrackType::audio){
+                armedTracks[selectedTrack]=command.startsWith("arm");
+                refreshMixer();repaint();
+                feedback=armedTracks[selectedTrack] ? "Audio track armed" : "Audio track disarmed";
+            }else feedback="Select an audio track and stop playback before changing arm state";
+        }else if(command=="start recording" || command=="record vocal" || command=="record vocals"){
+            if(!busy && !playing.load()){toggleRecording();feedback="Recording start requested";}
+            else feedback="Recording cannot start while transport or export is busy";
+        }else if(command=="stop recording" || command=="stop record"){
+            if(recorder.isRecording() || multiRecorder.isRecording()){toggleRecording();feedback="Recording stop requested";}
+            else feedback="No recording is active";
         }else if(command=="next track" || command=="track next"){
             if(!busy){selectTrack(1);feedback="Selected next track";}
             else feedback="Track selection unavailable while busy";
@@ -925,6 +950,7 @@ private:
             }else feedback="Mix command unavailable during playback or recording";
         }
         voiceCommandInput.setTooltip(feedback);
+        commandStatus.setText(feedback,juce::dontSendNotification);
         juce::Logger::writeToLog("IDW command: "+command+" -> "+feedback);
         voiceCommandInput.selectAll();
     }
@@ -1674,6 +1700,7 @@ private:
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextEditor voiceCommandInput;
     juce::TextButton runVoiceCommand;
+    juce::Label commandStatus;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration,liveCalibration;
