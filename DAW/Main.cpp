@@ -970,20 +970,21 @@ private:
         }else if(command=="start recording" || command=="record vocal" || command=="record vocals" || command=="start vocal recording"){
             if(!busy && !playing.load()){
                 pendingVoiceRecord=true;
+                voiceRecordRequestedAt=juce::Time::getMillisecondCounter();
                 feedback="Confirm recording: say CONFIRM RECORDING or type it and press Enter";
             }else{
                 pendingVoiceRecord=false;
                 feedback="Recording cannot start while transport or export is busy";
             }
         }else if(command=="confirm recording" || command=="confirm record"){
-            if(pendingVoiceRecord && !busy && !playing.load()){
+            if(pendingVoiceRecord && (juce::Time::getMillisecondCounter()-voiceRecordRequestedAt)<=15000u && !busy && !playing.load()){
                 pendingVoiceRecord=false;
                 toggleRecording();
                 feedback=(recorder.isRecording() || multiRecorder.isRecording())
                     ? "Recording started" : "Recording not started - review input and track warnings";
             }else{
                 pendingVoiceRecord=false;
-                feedback="No pending recording request, or transport is busy";
+                feedback="No recent recording request (15-second limit), or transport is busy";
             }
         }else if(command=="cancel recording command" || command=="cancel record"){
             pendingVoiceRecord=false;
@@ -1801,6 +1802,7 @@ private:
     juce::Label commandStatus;
     juce::StringArray commandHistory; // Session-only; not written into project files.
     bool pendingVoiceRecord=false; // Spoken record requires a second explicit command.
+    juce::uint32 voiceRecordRequestedAt=0; // Confirmation expires after 15 seconds.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration,liveCalibration;
