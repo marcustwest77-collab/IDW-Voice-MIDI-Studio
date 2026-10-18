@@ -884,7 +884,16 @@ private:
         const bool busy=recorder.isRecording() || multiRecorder.isRecording() ||
             exportRunning.load() || loopbackCapture.isActive();
         juce::String feedback="Unknown command: "+command;
-        if(command=="voice help" || command=="help" || command=="list commands"){
+        if(command=="command history" || command=="voice history" || command=="show history"){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                "IDW Command History",
+                commandHistory.isEmpty() ? juce::String("No commands submitted yet.")
+                                         : commandHistory.joinIntoString("\n"));
+            feedback="Displayed recent commands";
+        }else if(command=="clear command history" || command=="clear voice history"){
+            commandHistory.clear();
+            feedback="Command history cleared";
+        }else if(command=="voice help" || command=="help" || command=="list commands"){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                 "IDW Voice Commands",
                 "Click the command field, press Win+H, dictate a phrase, then press Enter.\n"
@@ -994,6 +1003,8 @@ private:
                 refreshMixer();repaint();feedback="Track mix command applied";
             }else feedback="Mix command unavailable during playback or recording";
         }
+        if(commandHistory.size()>=15)commandHistory.remove(0);
+        commandHistory.add(command+" -> "+feedback);
         voiceCommandInput.setTooltip(feedback);
         commandStatus.setText(feedback,juce::dontSendNotification);
         juce::Logger::writeToLog("IDW command: "+command+" -> "+feedback);
@@ -1746,6 +1757,7 @@ private:
     juce::TextEditor voiceCommandInput;
     juce::TextButton runVoiceCommand;
     juce::Label commandStatus;
+    juce::StringArray commandHistory; // Session-only; not written into project files.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration,liveCalibration;
