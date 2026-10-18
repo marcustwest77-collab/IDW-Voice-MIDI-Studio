@@ -422,6 +422,7 @@ public:
             ISpRecoContext* context=nullptr;
             ISpRecoGrammar* grammar=nullptr;
             bool recognized=false;
+            bool recognizerReady=false;
             juce::String transcript;
             if(SUCCEEDED(initialized) &&
                SUCCEEDED(CoCreateInstance(CLSID_SpSharedRecognizer,nullptr,CLSCTX_ALL,
@@ -432,6 +433,7 @@ public:
                SUCCEEDED(context->CreateGrammar(1,&grammar)) &&
                SUCCEEDED(grammar->LoadDictation(nullptr,SPLO_STATIC)) &&
                SUCCEEDED(grammar->SetDictationState(SPRS_ACTIVE))){
+                recognizerReady=true;
                 const auto endAt=juce::Time::getMillisecondCounter()+8000u;
                 while(voiceListening.load() &&
                       static_cast<juce::int32>(endAt-juce::Time::getMillisecondCounter())>0){
@@ -460,14 +462,17 @@ public:
             if(recognizer)recognizer->Release();
             if(SUCCEEDED(initialized))CoUninitialize();
             const bool active=voiceListening.exchange(false);
-            juce::MessageManager::callAsync([safeThis,transcript,recognized,active]{
+            juce::MessageManager::callAsync([safeThis,transcript,recognized,recognizerReady,active]{
                 if(safeThis==nullptr)return;
                 safeThis->pushToTalkButton.setButtonText("TALK");
                 if(!active)return; // User cancelled: discard any buffered words.
                 if(recognized){
                     safeThis->voiceCommandInput.setText(transcript,juce::dontSendNotification);
                     safeThis->executeStudioCommand(transcript);
-                }else
+                }else if(!recognizerReady)
+                    safeThis->commandStatus.setText("VOICE: Windows Speech recognizer unavailable; check speech settings",
+                                                    juce::dontSendNotification);
+                else
                     safeThis->commandStatus.setText("VOICE: no speech recognized; try TALK again",
                                                     juce::dontSendNotification);
             });
