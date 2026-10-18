@@ -2075,6 +2075,27 @@ private:
             selectedInputs.push_back(selectedTrack);
             refreshMixer();
         }
+        // When there is exactly one audio track, RECORD VOCAL has an
+        // unambiguous destination even if MIDI or no track is selected.
+        // Never guess among multiple unarmed audio tracks.
+        if(selectedInputs.empty()){
+            size_t onlyAudio=session.tracks.size();
+            int audioCount=0;
+            for(size_t i=0;i<session.tracks.size() && i<armedTracks.size();++i){
+                if(session.tracks[i].type==idw::daw::TrackType::audio){
+                    onlyAudio=i;
+                    ++audioCount;
+                }
+            }
+            if(audioCount==1){
+                selectedTrack=onlyAudio;
+                armedTracks[onlyAudio]=true;
+                selectedInputs.push_back(onlyAudio);
+                refreshMixer();
+                juce::Logger::writeToLog("IDW RECORD VOCAL: auto-selected sole audio track "+
+                    juce::String((int)onlyAudio+1));
+            }
+        }
         recordTargetTrack=selectedInputs.empty()?session.tracks.size():selectedInputs.front();
         if(recordTargetTrack>=session.tracks.size()){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
