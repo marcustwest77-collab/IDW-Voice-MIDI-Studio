@@ -77,7 +77,14 @@ public:
         voiceCommandInput.setTooltip("Say: IDW play, IDW stop, IDW arm track, IDW record vocals, IDW next track, IDW voice help. Windows: press Win+H to dictate.");
         addAndMakeVisible(runVoiceCommand);
         addAndMakeVisible(voiceHistoryButton);
+        addAndMakeVisible(pushToTalkButton);
         addAndMakeVisible(commandStatus);
+        pushToTalkButton.setButtonText("TALK");
+        pushToTalkButton.setTooltip("Focus dictation field. Press Windows+H to speak; Enter submits. Shortcut: F9.");
+        pushToTalkButton.onClick=[this]{
+            voiceCommandInput.grabKeyboardFocus();
+            commandStatus.setText("TALK READY: Win+H, speak, Enter",juce::dontSendNotification);
+        };
         voiceHistoryButton.setButtonText("HISTORY");
         voiceHistoryButton.setTooltip("Show recent voice and typed commands with their results.");
         voiceHistoryButton.onClick=[this]{executeStudioCommand("command history");};
@@ -348,7 +355,8 @@ public:
         voiceCommandInput.setBounds(projectRow.removeFromLeft(145).reduced(3));
         runVoiceCommand.setBounds(projectRow.removeFromLeft(80).reduced(3));
         voiceHistoryButton.setBounds(projectRow.removeFromLeft(80).reduced(3));
-        commandStatus.setBounds(projectRow.removeFromLeft(110).reduced(3));
+        pushToTalkButton.setBounds(projectRow.removeFromLeft(70).reduced(3));
+        commandStatus.setBounds(projectRow.removeFromLeft(95).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(165));
@@ -392,6 +400,12 @@ public:
         pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
     }
     bool keyPressed(const juce::KeyPress& key) override {
+        if(key.getKeyCode()==juce::KeyPress::F9Key && !key.getModifiers().isAltDown() &&
+           !key.getModifiers().isCommandDown()){
+            voiceCommandInput.grabKeyboardFocus();
+            commandStatus.setText("TALK READY: Win+H, speak, Enter",juce::dontSendNotification);
+            return true;
+        }
         if(!selectedClipValid || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) ||
            exportRunning.load() || aiPanel.isVisible() || connectPanel.isVisible())
             return false;
@@ -1760,7 +1774,7 @@ private:
     juce::ComboBox inputChannel;
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextEditor voiceCommandInput;
-    juce::TextButton runVoiceCommand,voiceHistoryButton;
+    juce::TextButton runVoiceCommand,voiceHistoryButton,pushToTalkButton;
     juce::Label commandStatus;
     juce::StringArray commandHistory; // Session-only; not written into project files.
     juce::TextButton previousTrack,nextTrack;
