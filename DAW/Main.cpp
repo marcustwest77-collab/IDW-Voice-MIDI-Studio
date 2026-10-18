@@ -1345,6 +1345,22 @@ private:
             inputChannel.setItemEnabled(1,false);
         }
         inputChannel.setSelectedId(track.inputChannel+1,juce::dontSendNotification);
+        // Keep a route-specific diagnosis accessible before pressing RECORD.
+        const auto* device=deviceManager.getCurrentAudioDevice();
+        const int physical=track.inputChannel;
+        const bool audioTrack=track.type==idw::daw::TrackType::audio;
+        const auto names=device ? device->getInputChannelNames() : juce::StringArray{};
+        const bool validInput=audioTrack && device && physical>=0 &&
+            physical<names.size() && device->getActiveInputChannels()[physical];
+        const auto route="Device: "+(device ? device->getName() : juce::String("none"))+
+            "\\nTrack: "+juce::String(track.name)+
+            (audioTrack ? (trackArmed ? " (ARMED)" : " (not armed)") : " (MIDI, not recordable)")+
+            "\\nInput: "+(validInput ? names[physical]+" (enabled)" :
+                juce::String("not selected or disabled"))+
+            "\\n"+(validInput ? juce::String("Ready to capture when RECORD VOCAL is pressed.") :
+                juce::String("Open AUDIO DEVICES, enable an input, and select it on an audio track."));
+        record.setTooltip(route);
+        inputChannel.setTooltip(route);
     }
     void ensureSelectedTrackVisible(){
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
