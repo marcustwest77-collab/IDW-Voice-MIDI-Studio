@@ -90,7 +90,7 @@ public:
         customAccentButton.onClick=[this]{
             auto* dialog=new juce::AlertWindow("Custom Accent",
                 "Enter 6-digit RGB hex (example FF6600)",juce::MessageBoxIconType::InfoIcon);
-            dialog->addTextEditor("rgb","15D4FF","RGB hex");
+            dialog->addTextEditor("rgb",neoTheme.accentColour().toDisplayString(false),"RGB hex");
             dialog->addButton("Apply",1);
             dialog->addButton("Cancel",0);
             dialog->enterModalState(true,juce::ModalCallbackFunction::create([this,dialog](int result){
@@ -99,6 +99,11 @@ public:
                     if(rgb.length()==6 && rgb.containsOnly("0123456789abcdefABCDEF")){
                         customAccent=juce::Colour::fromString("ff"+rgb);
                         neoTheme.setCustomAccent(customAccent);
+                        const auto customFile=juce::File::getSpecialLocation(
+                            juce::File::userApplicationDataDirectory)
+                            .getChildFile("IDW Neo Studio").getChildFile("accent.txt");
+                        if(customFile.getParentDirectory().createDirectory().wasOk())
+                            customFile.replaceWithText(rgb.toUpperCase());
                         title.setColour(juce::Label::textColourId,customAccent);
                         repaint();
                         for(auto* child:getChildren())child->repaint();
@@ -119,6 +124,14 @@ public:
         activeSkin=juce::jlimit(0,3,storedSkin);
         skinSelector.setSelectedId(activeSkin+1,juce::dontSendNotification);
         neoTheme.applySkin(activeSkin);
+        const auto customFile=preferences.getSiblingFile("accent.txt");
+        if(customFile.existsAsFile()){
+            const auto rgb=customFile.loadFileAsString().trim();
+            if(rgb.length()==6 && rgb.containsOnly("0123456789abcdefABCDEF")){
+                customAccent=juce::Colour::fromString("ff"+rgb);
+                neoTheme.setCustomAccent(customAccent);
+            }
+        }
         title.setColour(juce::Label::textColourId,neoTheme.accentColour());
         skinSelector.setTooltip("Change the visual skin without affecting audio or session content.");
         skinSelector.onChange=[this]{
