@@ -1377,7 +1377,11 @@ private:
         record.setTooltip(route);
         inputChannel.setTooltip(route);
         const auto ready=audioTrack && trackArmed && validInput;
-        recordReadiness.setText(ready ?
+        const bool recordingNow=recorder.isRecording() || multiRecorder.isRecording();
+        recordReadiness.setText(recordingNow ?
+            ("RECORDING  |  "+(device ? device->getName() : juce::String("No device"))+
+             "  |  "+juce::String(track.name)) :
+            ready ?
             ("READY  |  "+device->getName()+"  |  "+juce::String(track.name)+
              "  |  "+names[physical]) :
             ("NOT READY  |  "+(device ? device->getName() : juce::String("No device"))+
@@ -1386,6 +1390,7 @@ private:
              (validInput ? "  |  Input ON" : "  |  Input unavailable")),
             juce::dontSendNotification);
         recordReadiness.setColour(juce::Label::textColourId,
+            recordingNow ? juce::Colour(0xfff44368) :
             ready ? juce::Colour(0xff73f9ae) : juce::Colour(0xffffc857));
     }
     void ensureSelectedTrackVisible(){
@@ -2233,6 +2238,7 @@ private:
             }
             if(multiRecorder.start(inputs,deviceRate)){
                 record.setButtonText("STOP RECORD");
+                refreshMixer();
                 monitorControl.setEnabled(true);
                 if(overdubControl.getToggleState())startOverdubPlayback();
                 startTimerHz(15); // UI peak updates only; never poll on the audio callback.
