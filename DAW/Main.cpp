@@ -95,7 +95,6 @@ public:
             auto root=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
                 .getChildFile("IDW Neo Studio").getChildFile("skins");
             auto files=root.findChildFiles(juce::File::findFiles,false,"*.json");
-            files.sort();
             if(files.isEmpty()){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                     "Load Skin","No saved skins yet. Use SAVE SKIN first.");
