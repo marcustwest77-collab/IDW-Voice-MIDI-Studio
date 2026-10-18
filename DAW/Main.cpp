@@ -76,7 +76,11 @@ public:
         voiceCommandInput.setTextToShowWhenEmpty("type command",juce::Colours::grey);
         voiceCommandInput.setTooltip("Say: IDW play, IDW stop, IDW arm track, IDW record vocals, IDW next track, IDW voice help. Windows: press Win+H to dictate.");
         addAndMakeVisible(runVoiceCommand);
+        addAndMakeVisible(voiceHistoryButton);
         addAndMakeVisible(commandStatus);
+        voiceHistoryButton.setButtonText("HISTORY");
+        voiceHistoryButton.setTooltip("Show recent voice and typed commands with their results.");
+        voiceHistoryButton.onClick=[this]{executeStudioCommand("command history");};
         commandStatus.setText("VOICE READY: click field, Win+H, speak, Enter",juce::dontSendNotification);
         commandStatus.setTooltip("Windows: focus the command field, use Win+H for speech-to-text, then Enter to run. No always-listening microphone.");
         runVoiceCommand.setButtonText("COMMAND");
@@ -343,7 +347,8 @@ public:
         synthPreset.setBounds(projectRow.removeFromLeft(100).reduced(3));
         voiceCommandInput.setBounds(projectRow.removeFromLeft(145).reduced(3));
         runVoiceCommand.setBounds(projectRow.removeFromLeft(80).reduced(3));
-        commandStatus.setBounds(projectRow.removeFromLeft(185).reduced(3));
+        voiceHistoryButton.setBounds(projectRow.removeFromLeft(80).reduced(3));
+        commandStatus.setBounds(projectRow.removeFromLeft(110).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(165));
@@ -1755,7 +1760,7 @@ private:
     juce::ComboBox inputChannel;
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
     juce::TextEditor voiceCommandInput;
-    juce::TextButton runVoiceCommand;
+    juce::TextButton runVoiceCommand,voiceHistoryButton;
     juce::Label commandStatus;
     juce::StringArray commandHistory; // Session-only; not written into project files.
     juce::TextButton previousTrack,nextTrack;
