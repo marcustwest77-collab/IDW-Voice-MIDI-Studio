@@ -1380,7 +1380,11 @@ private:
                         "WAV saved and added to track "+juce::String((int)selectedTrack+1)+
                         ".\nFrames received: "+juce::String(static_cast<juce::int64>(receivedFrames))+
                         "\nFile: "+take.getFullPathName()+
-                        "\nPlay the take to check that microphone audio is audible.");
+                        "\nApprox. captured duration: "+
+                        juce::String(deviceRate>0.0 ? (double)receivedFrames/deviceRate : 0.0,2)+" seconds"+
+                        "\nDropped input blocks: "+juce::String(static_cast<juce::int64>(dropped))+
+                        "\nRejected writes: "+juce::String(static_cast<juce::int64>(rejected))+
+                        "\nPlay the take to confirm that microphone audio is audible.");
                 }
             }
             return;
