@@ -126,6 +126,17 @@ public:
                     safeThis->useCustomBackground=true;safeThis->useCustomPanel=true;
                     safeThis->neoTheme.setCustomAccent(safeThis->customAccent);
                     safeThis->title.setColour(juce::Label::textColourId,safeThis->customAccent);
+                    const auto preferences=juce::File::getSpecialLocation(
+                        juce::File::userApplicationDataDirectory).getChildFile("IDW Neo Studio");
+                    if(preferences.createDirectory().wasOk()){
+                        preferences.getChildFile("preferences.txt").replaceWithText(juce::String(skin));
+                        preferences.getChildFile("background.txt").replaceWithText(
+                            safeThis->customBackground.toDisplayString(false));
+                        preferences.getChildFile("panel.txt").replaceWithText(
+                            safeThis->customPanel.toDisplayString(false));
+                        preferences.getChildFile("accent.txt").replaceWithText(
+                            safeThis->customAccent.toDisplayString(false));
+                    }
                     safeThis->repaint();
                     for(auto* child:safeThis->getChildren())child->repaint();
                 });
