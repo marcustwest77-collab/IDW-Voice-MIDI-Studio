@@ -91,7 +91,8 @@ public:
             activeSkin=juce::jlimit(0,3,skinSelector.getSelectedId()-1);
             neoTheme.applySkin(activeSkin);
             title.setColour(juce::Label::textColourId,neoTheme.accentColour());
-            repaint();repaintAllChildren();
+            repaint();
+            for(auto* child:getChildren())child->repaint();
         };
         for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject,&bounce,&cancelBounce,&connectButton,&aiButton}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
