@@ -70,6 +70,15 @@ public:
         addAndMakeVisible(title);
         for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject,&bounce,&cancelBounce,&connectButton,&aiButton}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
+        // Text command console is a microphone-free test harness. Speech recognition
+        // can feed the same dispatcher later; no always-listening mic is implied.
+        addAndMakeVisible(voiceCommandInput);
+        voiceCommandInput.setTextToShowWhenEmpty("type command",juce::Colours::grey);
+        voiceCommandInput.setTooltip("Try: play, stop, next track, previous track, mute, unmute, solo, unsolo, expand mixer, collapse mixer.");
+        addAndMakeVisible(runVoiceCommand);
+        runVoiceCommand.setButtonText("COMMAND");
+        runVoiceCommand.onClick=[this]{executeStudioCommand(voiceCommandInput.getText());};
+        voiceCommandInput.onReturnKey=[this]{executeStudioCommand(voiceCommandInput.getText());};
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN PROJECT");
         exportProject.setButtonText("EXPORT PORTABLE");
@@ -325,6 +334,8 @@ public:
         aiButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         pianoButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         synthPreset.setBounds(projectRow.removeFromLeft(100).reduced(3));
+        voiceCommandInput.setBounds(projectRow.removeFromLeft(145).reduced(3));
+        runVoiceCommand.setBounds(projectRow.removeFromLeft(80).reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(165));
@@ -853,6 +864,43 @@ private:
         if(selectedTrack<arrangementScrollTrack)arrangementScrollTrack=selectedTrack;
         else if(selectedTrack>=arrangementScrollTrack+visible)
             arrangementScrollTrack=juce::jmin(maxScroll,selectedTrack-visible+1);
+    }
+    void executeStudioCommand(juce::String spoken){
+        const auto command=spoken.trim().toLowerCase().replaceCharacter('-', ' ');
+        if(command.isEmpty())return;
+        const bool busy=recorder.isRecording() || multiRecorder.isRecording() ||
+            exportRunning.load() || loopbackCapture.isActive();
+        juce::String feedback="Unknown command: "+command;
+        if(command=="stop" || command=="stop playback"){
+            stop.triggerClick();feedback="STOP requested";
+        }else if(command=="play" || command=="start playback"){
+            if(!busy){play.triggerClick();feedback="PLAY requested";}
+            else feedback="Playback command blocked: recording/export busy";
+        }else if(command=="next track" || command=="track next"){
+            if(!busy){selectTrack(1);feedback="Selected next track";}
+            else feedback="Track selection unavailable while busy";
+        }else if(command=="previous track" || command=="last track" || command=="track previous"){
+            if(!busy){selectTrack(-1);feedback="Selected previous track";}
+            else feedback="Track selection unavailable while busy";
+        }else if(command=="expand mixer" || command=="open mixer"){
+            neoMixerExpanded=true;ensureSelectedTrackVisible();repaint();feedback="Mixer expanded";
+        }else if(command=="collapse mixer" || command=="close mixer"){
+            neoMixerExpanded=false;ensureSelectedTrackVisible();repaint();feedback="Mixer collapsed";
+        }else if(command=="mute" || command=="mute track" || command=="unmute" ||
+                 command=="unmute track" || command=="solo" || command=="solo track" ||
+                 command=="unsolo" || command=="unsolo track"){
+            if(!playing.load() && !busy && selectedTrack<session.tracks.size()){
+                auto& track=session.tracks[selectedTrack];
+                if(command=="mute" || command=="mute track")track.mute=true;
+                if(command=="unmute" || command=="unmute track")track.mute=false;
+                if(command=="solo" || command=="solo track")track.solo=true;
+                if(command=="unsolo" || command=="unsolo track")track.solo=false;
+                refreshMixer();repaint();feedback="Track mix command applied";
+            }else feedback="Mix command unavailable during playback or recording";
+        }
+        voiceCommandInput.setTooltip(feedback);
+        juce::Logger::writeToLog("IDW command: "+command+" -> "+feedback);
+        voiceCommandInput.selectAll();
     }
     void selectTrack(int direction){
         if(playing.load() || session.tracks.empty())return;
@@ -1598,6 +1646,8 @@ private:
     juce::ToggleButton muteControl,soloControl,armControl,monitorControl,overdubControl;
     juce::ComboBox inputChannel;
     std::array<bool,128> armedTracks{}; // Temporary UI state, not persisted in projects.
+    juce::TextEditor voiceCommandInput;
+    juce::TextButton runVoiceCommand;
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration,liveCalibration;
