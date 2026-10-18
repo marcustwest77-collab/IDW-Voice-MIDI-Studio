@@ -890,7 +890,7 @@ private:
                 "Click the command field, press Win+H, dictate a phrase, then press Enter.\n"
                 "Transport: play, stop, record vocals, stop recording.\n"
                 "Recording: arm track, disarm track, input status, overdub on/off.\n"
-                "Tracks: next track, previous track, add audio track.\n"
+                "Tracks: next track, previous track, select track 3, add audio track.\n"
                 "Mixing: mute/unmute, solo/unsolo, expand/collapse mixer.\n"
                 "Projects: save project.\n"
                 "Voice recognition uses Windows dictation; the DAW is not always listening.");
@@ -956,6 +956,22 @@ private:
             if(!busy && !playing.load()){
                 saveProjectFile();feedback="Project save dialog requested";
             }else feedback="Stop playback or recording before saving the project";
+        }else if(command.startsWith("select track ") || command.startsWith("go to track ")){
+            const auto numberText=command.fromLastOccurrenceOf("track ",false,false).trim();
+            const int number=numberText.getIntValue();
+            if(numberText.isEmpty() || !numberText.containsOnly("0123456789") ||
+               number<1 || (size_t)number>session.tracks.size()){
+                feedback="Invalid track number. Choose 1 to "+
+                    juce::String((int)session.tracks.size());
+            }else if(busy || playing.load()){
+                feedback="Stop playback or recording before selecting a track";
+            }else{
+                selectedTrack=(size_t)(number-1);
+                ensureSelectedTrackVisible();
+                refreshMixer();repaint();
+                feedback="Selected track "+juce::String(number)+": "+
+                    juce::String(session.tracks[selectedTrack].name);
+            }
         }else if(command=="next track" || command=="track next" || command=="go to next track"){
             if(!busy){selectTrack(1);feedback="Selected next track";}
             else feedback="Track selection unavailable while busy";
