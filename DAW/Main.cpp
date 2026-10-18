@@ -900,6 +900,11 @@ private:
         if(command.startsWith("hey idw "))command=command.substring(8).trim();
         if(command.startsWith("please "))command=command.substring(7).trim();
         if(command.isEmpty())return;
+        if(command!="confirm recording" && command!="confirm record" &&
+           command!="start recording" && command!="record vocal" &&
+           command!="record vocals" && command!="start vocal recording" &&
+           command!="cancel recording command" && command!="cancel record")
+            pendingVoiceRecord=false;
         const bool busy=recorder.isRecording() || multiRecorder.isRecording() ||
             exportRunning.load() || loopbackCapture.isActive();
         juce::String feedback="Unknown command: "+command;
@@ -963,8 +968,26 @@ private:
                 feedback=armedTracks[selectedTrack] ? "Audio track armed" : "Audio track disarmed";
             }else feedback="Select an audio track and stop playback before changing arm state";
         }else if(command=="start recording" || command=="record vocal" || command=="record vocals" || command=="start vocal recording"){
-            if(!busy && !playing.load()){toggleRecording();feedback="Recording start requested";}
-            else feedback="Recording cannot start while transport or export is busy";
+            if(!busy && !playing.load()){
+                pendingVoiceRecord=true;
+                feedback="Confirm recording: say CONFIRM RECORDING or type it and press Enter";
+            }else{
+                pendingVoiceRecord=false;
+                feedback="Recording cannot start while transport or export is busy";
+            }
+        }else if(command=="confirm recording" || command=="confirm record"){
+            if(pendingVoiceRecord && !busy && !playing.load()){
+                pendingVoiceRecord=false;
+                toggleRecording();
+                feedback=(recorder.isRecording() || multiRecorder.isRecording())
+                    ? "Recording started" : "Recording not started - review input and track warnings";
+            }else{
+                pendingVoiceRecord=false;
+                feedback="No pending recording request, or transport is busy";
+            }
+        }else if(command=="cancel recording command" || command=="cancel record"){
+            pendingVoiceRecord=false;
+            feedback="Voice recording request cancelled";
         }else if(command=="stop recording" || command=="stop record"){
             if(recorder.isRecording() || multiRecorder.isRecording()){toggleRecording();feedback="Recording stop requested";}
             else feedback="No recording is active";
@@ -1777,6 +1800,7 @@ private:
     juce::TextButton runVoiceCommand,voiceHistoryButton,pushToTalkButton;
     juce::Label commandStatus;
     juce::StringArray commandHistory; // Session-only; not written into project files.
+    bool pendingVoiceRecord=false; // Spoken record requires a second explicit command.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration,liveCalibration;
