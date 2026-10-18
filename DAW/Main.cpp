@@ -20,6 +20,7 @@
 #include <thread>
 #if JUCE_WINDOWS
 #include <windows.h>
+#include <sapi.h>
 #endif
 // Neo Studio: visual-only styling; recording and audio callbacks remain unchanged.
 class IDWNeoLookAndFeel final : public juce::LookAndFeel_V4 {
@@ -83,7 +84,7 @@ public:
         addAndMakeVisible(pushToTalkButton);
         addAndMakeVisible(commandStatus);
         pushToTalkButton.setButtonText("TALK");
-        pushToTalkButton.setTooltip("Windows: open system dictation on click. Enter submits. F9 focuses field.");
+        pushToTalkButton.setTooltip("Windows native speech recognition: TALK listens for one command; click again to cancel.");
         pushToTalkButton.onClick=[this]{startDictation();};
         voiceHistoryButton.setButtonText("HISTORY");
         voiceHistoryButton.setTooltip("Show recent voice and typed commands with their results.");
@@ -400,25 +401,75 @@ public:
         pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
     }
     void startDictation(){
-        voiceCommandInput.grabKeyboardFocus();
-        commandStatus.setText("DICTATION: Windows speech input; Enter runs command",juce::dontSendNotification);
 #if JUCE_WINDOWS
-        // Explicit user gesture only. Windows owns microphone access and speech recognition.
-        // Schedule after focus settles so dictated text goes to the command field.
+        if(voiceListening.exchange(false)){
+            commandStatus.setText("VOICE: stopping listening",juce::dontSendNotification);
+            return;
+        }
+        if(voiceListenThread.joinable())voiceListenThread.join();
+        voiceListening.store(true);
+        pushToTalkButton.setButtonText("STOP TALK");
+        commandStatus.setText("LISTENING: say one command (8 seconds max)",juce::dontSendNotification);
         juce::Component::SafePointer<Workstation> safeThis(this);
-        juce::Timer::callAfterDelay(180,[safeThis]{
-            if(safeThis==nullptr)return;
-            INPUT events[4]{};
-            events[0].type=INPUT_KEYBOARD;events[0].ki.wVk=VK_LWIN;
-            events[1].type=INPUT_KEYBOARD;events[1].ki.wVk='H';
-            events[2].type=INPUT_KEYBOARD;events[2].ki.wVk='H';events[2].ki.dwFlags=KEYEVENTF_KEYUP;
-            events[3].type=INPUT_KEYBOARD;events[3].ki.wVk=VK_LWIN;events[3].ki.dwFlags=KEYEVENTF_KEYUP;
-            if(SendInput(4,events,sizeof(INPUT))!=4)
-                safeThis->commandStatus.setText("Windows dictation shortcut blocked: press Win+H",
-                                                juce::dontSendNotification);
+        voiceListenThread=std::thread([this,safeThis]{
+            const HRESULT initialized=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+            ISpRecognizer* recognizer=nullptr;
+            ISpRecoContext* context=nullptr;
+            ISpRecoGrammar* grammar=nullptr;
+            bool recognized=false;
+            juce::String transcript;
+            if(SUCCEEDED(initialized) &&
+               SUCCEEDED(CoCreateInstance(CLSID_SpSharedRecognizer,nullptr,CLSCTX_ALL,
+                                         IID_ISpRecognizer,(void**)&recognizer)) &&
+               SUCCEEDED(recognizer->CreateRecoContext(&context)) &&
+               SUCCEEDED(context->SetNotifyWin32Event()) &&
+               SUCCEEDED(context->SetInterest(SPFEI(SPEI_RECOGNITION),SPFEI(SPEI_RECOGNITION))) &&
+               SUCCEEDED(context->CreateGrammar(1,&grammar)) &&
+               SUCCEEDED(grammar->LoadDictation(nullptr,SPLO_STATIC)) &&
+               SUCCEEDED(grammar->SetDictationState(SPRS_ACTIVE))){
+                const auto endAt=juce::Time::getMillisecondCounter()+8000u;
+                while(voiceListening.load() &&
+                      static_cast<juce::int32>(endAt-juce::Time::getMillisecondCounter())>0){
+                    if(WaitForSingleObject(context->GetNotifyEventHandle(),150)!=WAIT_OBJECT_0)continue;
+                    SPEVENT event{};
+                    ULONG fetched=0;
+                    while(SUCCEEDED(context->GetEvents(1,&event,&fetched)) && fetched){
+                        if(event.eEventId==SPEI_RECOGNITION && event.lParam){
+                            auto* result=reinterpret_cast<ISpRecoResult*>(event.lParam);
+                            WCHAR* words=nullptr;
+                            if(SUCCEEDED(result->GetText(SP_GETWHOLEPHRASE,SP_GETWHOLEPHRASE,
+                                                         FALSE,&words,nullptr)) && words){
+                                transcript=juce::String(words).trim();
+                                CoTaskMemFree(words);
+                                recognized=transcript.isNotEmpty();
+                            }
+                        }
+                        SpClearEvent(&event);
+                        if(recognized)break;
+                    }
+                    if(recognized)break;
+                }
+            }
+            if(grammar){grammar->SetDictationState(SPRS_INACTIVE);grammar->Release();}
+            if(context)context->Release();
+            if(recognizer)recognizer->Release();
+            if(SUCCEEDED(initialized))CoUninitialize();
+            const bool active=voiceListening.exchange(false);
+            juce::MessageManager::callAsync([safeThis,transcript,recognized,active]{
+                if(safeThis==nullptr)return;
+                safeThis->pushToTalkButton.setButtonText("TALK");
+                if(!active)return; // User cancelled: discard any buffered words.
+                if(recognized){
+                    safeThis->voiceCommandInput.setText(transcript,juce::dontSendNotification);
+                    safeThis->executeStudioCommand(transcript);
+                }else
+                    safeThis->commandStatus.setText("VOICE: no speech recognized; try TALK again",
+                                                    juce::dontSendNotification);
+            });
         });
 #else
-        commandStatus.setText("Use your operating system's dictation shortcut; Enter runs command",
+        voiceCommandInput.grabKeyboardFocus();
+        commandStatus.setText("Speech recognition currently available on Windows only",
                               juce::dontSendNotification);
 #endif
     }
@@ -1789,7 +1840,7 @@ private:
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
@@ -1823,6 +1874,8 @@ private:
     juce::TextButton runVoiceCommand,voiceHistoryButton,pushToTalkButton;
     juce::Label commandStatus;
     juce::StringArray commandHistory; // Session-only; not written into project files.
+    std::atomic<bool> voiceListening{false};
+    std::thread voiceListenThread;
     bool pendingVoiceRecord=false; // Spoken record requires a second explicit command.
     juce::uint32 voiceRecordRequestedAt=0; // Confirmation expires after 15 seconds.
     juce::TextButton previousTrack,nextTrack;
