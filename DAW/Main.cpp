@@ -19,6 +19,9 @@
 #include <memory>
 #include <thread>
 #if JUCE_WINDOWS
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <sapi.h>
 #include <sphelper.h>
