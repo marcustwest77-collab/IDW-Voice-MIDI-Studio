@@ -86,6 +86,27 @@ public:
         addAndMakeVisible(title);
         addAndMakeVisible(skinSelector);
         addAndMakeVisible(customAccentButton);
+        addAndMakeVisible(customBackgroundButton);
+        customBackgroundButton.setButtonText("BG COLOR");
+        customBackgroundButton.onClick=[this]{
+            auto* dialog=new juce::AlertWindow("Custom Background","Enter 6-digit RGB hex (example 101820)",juce::MessageBoxIconType::InfoIcon);
+            dialog->addTextEditor("rgb",customBackground.toDisplayString(false),"RGB hex");
+            dialog->addButton("Apply",1);dialog->addButton("Cancel",0);
+            dialog->enterModalState(true,juce::ModalCallbackFunction::create([this,dialog](int result){
+                if(result==1){
+                    const auto rgb=dialog->getTextEditorContents("rgb").trim().trimCharactersAtStart("#");
+                    if(rgb.length()==6 && rgb.containsOnly("0123456789abcdefABCDEF")){
+                        customBackground=juce::Colour::fromString("ff"+rgb);
+                        useCustomBackground=true;
+                        const auto file=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                            .getChildFile("IDW Neo Studio").getChildFile("background.txt");
+                        if(file.getParentDirectory().createDirectory().wasOk())file.replaceWithText(rgb.toUpperCase());
+                        repaint();
+                    }
+                }
+                delete dialog;
+            }));
+        };
         customAccentButton.setButtonText("ACCENT");
         customAccentButton.onClick=[this]{
             auto* dialog=new juce::AlertWindow("Custom Accent",
@@ -124,6 +145,14 @@ public:
         activeSkin=juce::jlimit(0,3,storedSkin);
         skinSelector.setSelectedId(activeSkin+1,juce::dontSendNotification);
         neoTheme.applySkin(activeSkin);
+        const auto backgroundFile=preferences.getSiblingFile("background.txt");
+        if(backgroundFile.existsAsFile()){
+            const auto rgb=backgroundFile.loadFileAsString().trim();
+            if(rgb.length()==6 && rgb.containsOnly("0123456789abcdefABCDEF")){
+                customBackground=juce::Colour::fromString("ff"+rgb);
+                useCustomBackground=true;
+            }
+        }
         const auto customFile=preferences.getSiblingFile("accent.txt");
         if(customFile.existsAsFile()){
             const auto rgb=customFile.loadFileAsString().trim();
@@ -408,6 +437,7 @@ public:
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
+        customBackgroundButton.setBounds(header.removeFromRight(95).reduced(3));
         customAccentButton.setBounds(header.removeFromRight(85).reduced(3));
         skinSelector.setBounds(header.removeFromRight(180).reduced(3));
         title.setBounds(header);
@@ -685,7 +715,7 @@ public:
     }
     void mouseUp(const juce::MouseEvent&) override { draggingClip=false; draggingMixerFader=false; draggingMixerPan=false; }
     void paint(juce::Graphics& g) override {
-        g.fillAll(juce::Colour(activeSkin==1?0xff17100b:activeSkin==2?0xff091c18:activeSkin==3?0xff160d22:0xff080f1c));
+        g.fillAll(useCustomBackground?customBackground:juce::Colour(activeSkin==1?0xff17100b:activeSkin==2?0xff091c18:activeSkin==3?0xff160d22:0xff080f1c));
         // Neo Studio control decks: visual grouping stays outside the audio callback.
         const auto deck=[&g,this](juce::Rectangle<float> bounds,const juce::String& label){
             g.setColour(juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
@@ -1926,7 +1956,9 @@ private:
     ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
-    juce::TextButton customAccentButton;
+    juce::TextButton customAccentButton,customBackgroundButton;
+    juce::Colour customBackground{0xff080f1c};
+    bool useCustomBackground=false;
     juce::Colour customAccent{0xff15d4ff};
     int activeSkin=0;
     std::thread exportThread;
