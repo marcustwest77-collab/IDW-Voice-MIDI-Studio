@@ -2203,10 +2203,26 @@ private:
         }else{
             monitorControl.setEnabled(false);
             auto* device=deviceManager.getCurrentAudioDevice();
-            const int physicalInput=session.tracks[recordTargetTrack].inputChannel;
-            const int callbackInput=device
+            int physicalInput=session.tracks[recordTargetTrack].inputChannel;
+            int callbackInput=device
                 ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physicalInput)
                 : -1;
+            // If the previously configured input is no longer enabled (USB
+            // interface unplugged/repaired), use the only enabled input when
+            // unambiguous. Never silently redirect between multiple inputs.
+            if(device && callbackInput<0){
+                const auto active=device->getActiveInputChannels();
+                const int first=active.findNextSetBit(0);
+                const int second=first>=0 ? active.findNextSetBit(first+1) : -1;
+                if(first>=0 && second<0 && first<device->getInputChannelNames().size()){
+                    physicalInput=first;
+                    callbackInput=0;
+                    session.tracks[recordTargetTrack].inputChannel=first;
+                    inputChannel.setSelectedId(first+1,juce::dontSendNotification);
+                    juce::Logger::writeToLog("IDW RECORD VOCAL: recovered sole active input "+
+                        juce::String(first+1)+" on "+device->getName());
+                }
+            }
             if(!device || physicalInput<0 ||
                physicalInput>=device->getInputChannelNames().size() || callbackInput<0 ||
                !std::isfinite(deviceRate) || deviceRate<=0.0){
