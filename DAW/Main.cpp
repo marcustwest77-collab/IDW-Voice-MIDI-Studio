@@ -650,7 +650,7 @@ public:
         const auto deck=[&g,this](juce::Rectangle<float> bounds,const juce::String& label){
             g.setColour(juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
             g.fillRoundedRectangle(bounds,10.0f);
-            g.setColour(juce::Colour(0xff224560));
+            g.setColour(neoTheme.accentColour().withAlpha(0.32f));
             g.drawRoundedRectangle(bounds,10.0f,1.0f);
             g.setColour(neoTheme.accentColour());
             g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
@@ -662,7 +662,7 @@ public:
         deck({20.0f,251.0f,fullWidth,74.0f},"MASTER  /  SYNTH  /  PROCESSING");
         const auto rect=getLocalBounds().reduced(20);
         const int top=330, trackHeight=70, left=205;
-        g.setColour(juce::Colour(0xff122338));g.fillRect(20,top,getWidth()-40,36);
+        g.setColour(juce::Colour(activeSkin==1?0xff352a1e:activeSkin==2?0xff173e32:activeSkin==3?0xff302340:0xff122338));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
             const int x=left+bar*48;
@@ -681,7 +681,7 @@ public:
         size_t renderedTrackIndex=0;
         for(const auto& track:session.tracks){
             if(renderedTrackIndex<arrangementScrollTrack){++renderedTrackIndex;continue;}
-            g.setColour(juce::Colour((y/trackHeight)%2 ? 0xff16283d : 0xff102033));
+            g.setColour(juce::Colour(activeSkin==1?((y/trackHeight)%2?0xff33291e:0xff282016):activeSkin==2?((y/trackHeight)%2?0xff173b2f:0xff112c24):activeSkin==3?((y/trackHeight)%2?0xff302342:0xff261d36):((y/trackHeight)%2?0xff16283d:0xff102033)));
             g.fillRect(20,y,getWidth()-40,trackHeight-2);
             const bool selected=renderedTrackIndex==selectedTrack;
             const bool armed=track.type==idw::daw::TrackType::audio &&
@@ -691,7 +691,7 @@ public:
             g.setColour(laneAccent);
             g.fillRect(20,y,selected?6:4,trackHeight-2);
             if(selected){
-                g.setColour(juce::Colour(0xff1bd5ff).withAlpha(0.75f));
+                g.setColour(neoTheme.accentColour().withAlpha(0.75f));
                 g.drawRect(20,y,getWidth()-40,trackHeight-2,1);
             }
             if(armed){
@@ -716,10 +716,10 @@ public:
                 const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
                 const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*12.0));
                 if(clipX>=getWidth()-25){++renderedClipIndex;continue;}
-                g.setColour(track.type==idw::daw::TrackType::audio ? juce::Colour(0xff164f86) : juce::Colour(0xff513494));
+                g.setColour(track.type==idw::daw::TrackType::audio ? neoTheme.accentColour().darker(0.72f) : neoTheme.accentColour().darker(0.92f));
                 g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
                 if(selectedClipValid && renderedTrackIndex==selectedClipTrack && renderedClipIndex==selectedClipIndex){
-                    g.setColour(juce::Colour(0xff17d9ff));
+                    g.setColour(neoTheme.accentColour());
                     g.drawRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX),(float)trackHeight-18,4.0f,2.0f);
                 }
                 ++renderedClipIndex;
