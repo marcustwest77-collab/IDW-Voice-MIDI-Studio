@@ -1319,7 +1319,15 @@ private:
                 juce::String failures;
                 for(const auto& item:multiTakes){
                     recordTargetTrack=item.first;
-                    if(!importTake(item.second))failures+=item.second.getFileName()+" ";
+                    const auto bytes=item.second.existsAsFile() ? item.second.getSize() : juce::int64{0};
+                    if(bytes<=44){
+                        failures+="Track "+juce::String((int)item.first+1)+
+                            ": empty or missing WAV ("+item.second.getFileName()+")\n";
+                        continue;
+                    }
+                    if(!importTake(item.second))
+                        failures+="Track "+juce::String((int)item.first+1)+
+                            ": WAV could not be imported ("+item.second.getFileName()+")\n";
                 }
                 multiTakes.clear();
                 if(rejected>0)juce::AlertWindow::showMessageBoxAsync(
