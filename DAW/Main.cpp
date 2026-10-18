@@ -74,7 +74,7 @@ public:
         // can feed the same dispatcher later; no always-listening mic is implied.
         addAndMakeVisible(voiceCommandInput);
         voiceCommandInput.setTextToShowWhenEmpty("type command",juce::Colours::grey);
-        voiceCommandInput.setTooltip("Try: play, stop, next track, previous track, mute, unmute, solo, unsolo, expand mixer, collapse mixer.");
+        voiceCommandInput.setTooltip("Try: record status, input status, play, stop, next track, previous track, mute, solo, expand mixer.");
         addAndMakeVisible(runVoiceCommand);
         runVoiceCommand.setButtonText("COMMAND");
         runVoiceCommand.onClick=[this]{executeStudioCommand(voiceCommandInput.getText());};
@@ -871,7 +871,27 @@ private:
         const bool busy=recorder.isRecording() || multiRecorder.isRecording() ||
             exportRunning.load() || loopbackCapture.isActive();
         juce::String feedback="Unknown command: "+command;
-        if(command=="stop" || command=="stop playback"){
+        if(command=="record status" || command=="input status"){
+            auto* device=deviceManager.getCurrentAudioDevice();
+            const bool validTrack=selectedTrack<session.tracks.size();
+            const bool audioTrack=validTrack && session.tracks[selectedTrack].type==idw::daw::TrackType::audio;
+            const int physical=audioTrack ? session.tracks[selectedTrack].inputChannel : -1;
+            const int packed=device && physical>=0
+                ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physical)
+                : -1;
+            const bool armed=audioTrack && selectedTrack<armedTracks.size() && armedTracks[selectedTrack];
+            const auto details="Track: "+(validTrack ? juce::String(session.tracks[selectedTrack].name) : juce::String("none"))+
+                "\\nAudio track: "+(audioTrack ? juce::String("yes") : juce::String("no"))+
+                "\\nArmed: "+(armed ? juce::String("yes") : juce::String("no"))+
+                "\\nDevice: "+(device ? device->getName() : juce::String("none"))+
+                "\\nPhysical input: "+juce::String(physical)+
+                "\\nEnabled callback input: "+juce::String(packed)+
+                "\\nSample rate: "+juce::String(deviceRate,0)+
+                "\\nRecording active: "+((recorder.isRecording() || multiRecorder.isRecording()) ? juce::String("yes") : juce::String("no"));
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                "IDW Recording Status",details);
+            feedback="Displayed current input and recording status";
+        }else if(command=="stop" || command=="stop playback"){
             stop.triggerClick();feedback="STOP requested";
         }else if(command=="play" || command=="start playback"){
             if(!busy){play.triggerClick();feedback="PLAY requested";}
