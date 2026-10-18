@@ -21,6 +21,7 @@
 #if JUCE_WINDOWS
 #include <windows.h>
 #include <sapi.h>
+#include <sphelper.h>
 #endif
 // Neo Studio: visual-only styling; recording and audio callbacks remain unchanged.
 class IDWNeoLookAndFeel final : public juce::LookAndFeel_V4 {
