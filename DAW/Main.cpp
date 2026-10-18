@@ -29,32 +29,36 @@
 // Neo Studio: visual-only styling; recording and audio callbacks remain unchanged.
 class IDWNeoLookAndFeel final : public juce::LookAndFeel_V4 {
 public:
-    IDWNeoLookAndFeel() {
-        setColour(juce::TextButton::buttonColourId,juce::Colour(0xff152638));
+    IDWNeoLookAndFeel() { applySkin(0); }
+    void applySkin(int skin) {
+        const auto accent=juce::Colour(skin==1?0xffffc857:skin==2?0xff73f9ae:skin==3?0xffd4a6ff:0xff15d4ff);
+        const auto base=juce::Colour(skin==1?0xff292014:skin==2?0xff102b25:skin==3?0xff20182f:0xff152638);
+        setColour(juce::TextButton::buttonColourId,base);
         setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff007fa9));
         setColour(juce::TextButton::textColourOffId,juce::Colour(0xffd6ebf8));
         setColour(juce::TextButton::textColourOnId,juce::Colours::white);
         setColour(juce::ComboBox::backgroundColourId,juce::Colour(0xff111e2e));
         setColour(juce::ComboBox::outlineColourId,juce::Colour(0xff28506a));
         setColour(juce::ComboBox::textColourId,juce::Colour(0xffd6ebf8));
-        setColour(juce::Slider::thumbColourId,juce::Colour(0xff15d4ff));
+        setColour(juce::Slider::thumbColourId,accent);
         setColour(juce::Slider::trackColourId,juce::Colour(0xff127a9e));
         setColour(juce::Slider::backgroundColourId,juce::Colour(0xff182739));
         setColour(juce::Label::textColourId,juce::Colour(0xffd6ebf8));
         setColour(juce::ToggleButton::textColourId,juce::Colour(0xffd6ebf8));
-        setColour(juce::ToggleButton::tickColourId,juce::Colour(0xff10d8ff));
+        setColour(juce::ToggleButton::tickColourId,accent);
         setColour(juce::TextEditor::backgroundColourId,juce::Colour(0xff101b2b));
         setColour(juce::TextEditor::textColourId,juce::Colours::white);
         setColour(juce::PopupMenu::backgroundColourId,juce::Colour(0xff101b2b));
         setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(0xff176b94));
     }
+    juce::Colour accentColour() const {return findColour(juce::Slider::thumbColourId);}
     void drawButtonBackground(juce::Graphics& g,juce::Button& button,
                               const juce::Colour& background,
                               bool highlighted,bool down) override {
         const auto area=button.getLocalBounds().toFloat().reduced(1.5f);
         const bool recording=button.getButtonText().containsIgnoreCase("RECORD") ||
             button.getButtonText().containsIgnoreCase("STOP RECORD");
-        const auto accent=recording ? juce::Colour(0xffe94565) : juce::Colour(0xff12c9ff);
+        const auto accent=recording ? juce::Colour(0xffe94565) : accentColour();
         const auto fill=down ? accent.withAlpha(0.36f) :
             (highlighted ? juce::Colour(0xff214463) : background);
         g.setColour(fill);g.fillRoundedRectangle(area,7.0f);
@@ -76,6 +80,19 @@ public:
         title.setColour(juce::Label::textColourId,juce::Colour(0xff4adfff));
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
+        addAndMakeVisible(skinSelector);
+        skinSelector.addItem("Neo Cyan",1);
+        skinSelector.addItem("Royal Gold",2);
+        skinSelector.addItem("Emerald Circuit",3);
+        skinSelector.addItem("Purple Night",4);
+        skinSelector.setSelectedId(1,juce::dontSendNotification);
+        skinSelector.setTooltip("Change the visual skin without affecting audio or session content.");
+        skinSelector.onChange=[this]{
+            activeSkin=juce::jlimit(0,3,skinSelector.getSelectedId()-1);
+            neoTheme.applySkin(activeSkin);
+            title.setColour(juce::Label::textColourId,neoTheme.accentColour());
+            repaint();repaintAllChildren();
+        };
         for(auto* b:{&play,&stop,&audio,&midi,&open,&record,&saveProject,&openProject,&exportProject,&bounce,&cancelBounce,&connectButton,&aiButton}) addAndMakeVisible(*b);
         play.setButtonText("PLAY"); stop.setButtonText("STOP"); open.setButtonText("OPEN WAV/AIFF");
         // Text command console is a microphone-free test harness. Speech recognition
@@ -337,7 +354,9 @@ public:
     void resized() override {
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
-        title.setBounds(area.removeFromTop(42));
+        auto header=area.removeFromTop(42);
+        skinSelector.setBounds(header.removeFromRight(180).reduced(3));
+        title.setBounds(header);
         auto controls=area.removeFromTop(44);
         play.setBounds(controls.removeFromLeft(110).reduced(4));
         stop.setBounds(controls.removeFromLeft(100).reduced(4));
@@ -612,14 +631,14 @@ public:
     }
     void mouseUp(const juce::MouseEvent&) override { draggingClip=false; draggingMixerFader=false; draggingMixerPan=false; }
     void paint(juce::Graphics& g) override {
-        g.fillAll(juce::Colour(0xff080f1c));
+        g.fillAll(juce::Colour(activeSkin==1?0xff17100b:activeSkin==2?0xff091c18:activeSkin==3?0xff160d22:0xff080f1c));
         // Neo Studio control decks: visual grouping stays outside the audio callback.
-        const auto deck=[&g](juce::Rectangle<float> bounds,const juce::String& label){
-            g.setColour(juce::Colour(0xff101f32));
+        const auto deck=[&g,this](juce::Rectangle<float> bounds,const juce::String& label){
+            g.setColour(juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
             g.fillRoundedRectangle(bounds,10.0f);
             g.setColour(juce::Colour(0xff224560));
             g.drawRoundedRectangle(bounds,10.0f,1.0f);
-            g.setColour(juce::Colour(0xff47cffa));
+            g.setColour(neoTheme.accentColour());
             g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
             g.drawText(label,bounds.removeFromTop(16.0f).reduced(10.0f,0.0f),juce::Justification::centredLeft);
         };
@@ -1852,6 +1871,8 @@ private:
     }
     ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
+    juce::ComboBox skinSelector;
+    int activeSkin=0;
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
     std::atomic<bool> exportCancel{false};
