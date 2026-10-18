@@ -880,12 +880,18 @@ private:
                 ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physical)
                 : -1;
             const bool armed=audioTrack && selectedTrack<armedTracks.size() && armedTracks[selectedTrack];
+            const auto inputNames=device ? device->getInputChannelNames() : juce::StringArray{};
+            const auto inputName=physical>=0 && physical<inputNames.size()
+                ? inputNames[physical] : juce::String("unavailable");
+            const bool inputReady=device && packed>=0 && deviceRate>0.0 && std::isfinite(deviceRate);
             const auto details="Track: "+(validTrack ? juce::String(session.tracks[selectedTrack].name) : juce::String("none"))+
                 "\nAudio track: "+(audioTrack ? juce::String("yes") : juce::String("no"))+
                 "\nArmed: "+(armed ? juce::String("yes") : juce::String("no"))+
                 "\nDevice: "+(device ? device->getName() : juce::String("none"))+
                 "\nPhysical input: "+juce::String(physical)+
                 "\nEnabled callback input: "+juce::String(packed)+
+                "\nInput channel name: "+inputName+
+                "\nInput ready: "+(inputReady ? juce::String("yes") : juce::String("NO - check AUDIO DEVICES"))+
                 "\nSample rate: "+juce::String(deviceRate,0)+
                 "\nRecording active: "+((recorder.isRecording() || multiRecorder.isRecording()) ? juce::String("yes") : juce::String("no"));
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
