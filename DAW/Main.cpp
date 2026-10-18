@@ -88,9 +88,24 @@ public:
         addAndMakeVisible(customAccentButton);
         customAccentButton.setButtonText("ACCENT");
         customAccentButton.onClick=[this]{
-            juce::ColourSelector selector;
-            selector.setCurrentColour(neoTheme.accentColour());
-            juce::CallOutBox::launchAsynchronously(std::make_unique<juce::ColourSelector>(selector),customAccentButton.getScreenBounds(),nullptr);
+            auto* dialog=new juce::AlertWindow("Custom Accent",
+                "Enter 6-digit RGB hex (example FF6600)",juce::MessageBoxIconType::InfoIcon);
+            dialog->addTextEditor("rgb","15D4FF","RGB hex");
+            dialog->addButton("Apply",1);
+            dialog->addButton("Cancel",0);
+            dialog->enterModalState(true,juce::ModalCallbackFunction::create([this,dialog](int result){
+                if(result==1){
+                    const auto rgb=dialog->getTextEditorContents("rgb").trim().trimCharactersAtStart("#");
+                    if(rgb.length()==6 && rgb.containsOnly("0123456789abcdefABCDEF")){
+                        customAccent=juce::Colour::fromString("ff"+rgb);
+                        neoTheme.setCustomAccent(customAccent);
+                        title.setColour(juce::Label::textColourId,customAccent);
+                        repaint();
+                        for(auto* child:getChildren())child->repaint();
+                    }
+                }
+                delete dialog;
+            }));
         };
         skinSelector.addItem("Neo Cyan",1);
         skinSelector.addItem("Royal Gold",2);
@@ -1899,6 +1914,7 @@ private:
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
     juce::TextButton customAccentButton;
+    juce::Colour customAccent{0xff15d4ff};
     int activeSkin=0;
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
