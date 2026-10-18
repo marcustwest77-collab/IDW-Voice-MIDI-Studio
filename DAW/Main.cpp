@@ -70,13 +70,14 @@ public:
         g.drawRoundedRectangle(area,7.0f,highlighted ? 1.6f : 1.0f);
     }
 };
-class Workstation final : public juce::AudioAppComponent, private juce::Timer {
+class Workstation final : public juce::AudioAppComponent, private juce::Timer, private juce::ChangeListener {
 public:
     Workstation() {
         setSize(1450,850);
         setLookAndFeel(&neoTheme);
         formats.registerBasicFormats();
         setAudioChannels(8,2); // Request up to eight available hardware inputs.
+        deviceManager.addChangeListener(this);
         deviceManager.addAudioCallback(&recorder);
         deviceManager.addAudioCallback(&multiRecorder);
         deviceManager.addAudioCallback(&loopbackCapture);
@@ -1305,6 +1306,16 @@ private:
         playing.store(false,std::memory_order_release);
         for(auto& slot:sources)slot->transport.releaseResources();
     }
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override {
+        if(source==&deviceManager){
+            // Device selector changes are delivered on the message thread.
+            // Do not rewrite routes while audio recording is in progress.
+            if(!recorder.isRecording() && !multiRecorder.isRecording()){
+                refreshMixer();
+                repaint();
+            }
+        }
+    }
     void refreshMixer(){
         if(session.tracks.empty())return;
         if(selectedTrack>=session.tracks.size())selectedTrack=0;
@@ -2300,7 +2311,7 @@ private:
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
     juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton,skinToolsButton;
