@@ -85,6 +85,9 @@ public:
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
         addAndMakeVisible(skinSelector);
+        addAndMakeVisible(recordReadiness);
+        recordReadiness.setJustificationType(juce::Justification::centredLeft);
+        recordReadiness.setFont(juce::Font(juce::FontOptions(12.0f,juce::Font::bold)));
         addAndMakeVisible(customAccentButton);
         addAndMakeVisible(customBackgroundButton);
         addAndMakeVisible(customPanelButton);
@@ -717,6 +720,7 @@ public:
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
+        recordReadiness.setBounds(26,249,juce::jmax(100,getWidth()-52),18);
         skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
         skinSelector.setBounds(header.removeFromRight(165).reduced(3));
         title.setBounds(header);
@@ -1346,7 +1350,7 @@ private:
         }
         inputChannel.setSelectedId(track.inputChannel+1,juce::dontSendNotification);
         // Keep a route-specific diagnosis accessible before pressing RECORD.
-        const auto* device=deviceManager.getCurrentAudioDevice();
+        auto* device=deviceManager.getCurrentAudioDevice();
         const int physical=track.inputChannel;
         const bool audioTrack=track.type==idw::daw::TrackType::audio;
         const auto names=device ? device->getInputChannelNames() : juce::StringArray{};
@@ -1361,6 +1365,17 @@ private:
                 juce::String("Open AUDIO DEVICES, enable an input, and select it on an audio track."));
         record.setTooltip(route);
         inputChannel.setTooltip(route);
+        const auto ready=audioTrack && trackArmed && validInput;
+        recordReadiness.setText(ready ?
+            ("READY  |  "+device->getName()+"  |  "+juce::String(track.name)+
+             "  |  "+names[physical]) :
+            ("NOT READY  |  "+(device ? device->getName() : juce::String("No device"))+
+             "  |  "+juce::String(track.name)+
+             (trackArmed ? "  |  Armed" : "  |  Disarmed")+
+             (validInput ? "  |  Input ON" : "  |  Input unavailable")),
+            juce::dontSendNotification);
+        recordReadiness.setColour(juce::Label::textColourId,
+            ready ? juce::Colour(0xff73f9ae) : juce::Colour(0xffffc857));
     }
     void ensureSelectedTrackVisible(){
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
@@ -2307,7 +2322,7 @@ private:
     size_t recordTargetTrack=0;
     double takeInputLatencySeconds=0.0;
     double takeManualTrimSeconds=0.0;
-    juce::Label title,tempoLabel,gainLabel,panLabel,inputLevel,latencyLabel;
+    juce::Label title,tempoLabel,gainLabel,panLabel,inputLevel,latencyLabel,recordReadiness;
     juce::Slider gainControl,panControl,masterGain,latencyAdjust;
     juce::Label masterLabel,eqLabel,limitLabel;
     juce::Slider ceilingControl;
