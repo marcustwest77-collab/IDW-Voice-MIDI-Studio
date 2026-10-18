@@ -404,7 +404,8 @@ public:
     void startDictation(){
 #if JUCE_WINDOWS
         if(voiceListening.exchange(false)){
-            commandStatus.setText("VOICE: stopping listening",juce::dontSendNotification);
+            pushToTalkButton.setButtonText("TALK");
+            commandStatus.setText("VOICE: listening cancelled",juce::dontSendNotification);
             return;
         }
         if(voiceListenThread.joinable())voiceListenThread.join();
