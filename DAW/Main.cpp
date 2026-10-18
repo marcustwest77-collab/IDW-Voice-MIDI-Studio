@@ -2012,6 +2012,7 @@ private:
             multiRecorder.setHeadphoneMonitor(false);
             monitorControl.setToggleState(false,juce::dontSendNotification);
             recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
+            refreshMixer(); // Restore READY / NOT READY immediately after capture stops.
             monitorControl.setEnabled(false);
             inputLevel.setText("INPUT LEVEL: idle",juce::dontSendNotification);
             const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : recorder.getDroppedBlocks();
