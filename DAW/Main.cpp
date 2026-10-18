@@ -18,6 +18,9 @@
 #include <atomic>
 #include <memory>
 #include <thread>
+#if JUCE_WINDOWS
+#include <windows.h>
+#endif
 // Neo Studio: visual-only styling; recording and audio callbacks remain unchanged.
 class IDWNeoLookAndFeel final : public juce::LookAndFeel_V4 {
 public:
@@ -80,11 +83,8 @@ public:
         addAndMakeVisible(pushToTalkButton);
         addAndMakeVisible(commandStatus);
         pushToTalkButton.setButtonText("TALK");
-        pushToTalkButton.setTooltip("Focus dictation field. Press Windows+H to speak; Enter submits. Shortcut: F9.");
-        pushToTalkButton.onClick=[this]{
-            voiceCommandInput.grabKeyboardFocus();
-            commandStatus.setText("TALK READY: Win+H, speak, Enter",juce::dontSendNotification);
-        };
+        pushToTalkButton.setTooltip("Windows: open system dictation on click. Enter submits. F9 focuses field.");
+        pushToTalkButton.onClick=[this]{startDictation();};
         voiceHistoryButton.setButtonText("HISTORY");
         voiceHistoryButton.setTooltip("Show recent voice and typed commands with their results.");
         voiceHistoryButton.onClick=[this]{executeStudioCommand("command history");};
@@ -399,11 +399,33 @@ public:
         aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
         pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
     }
+    void startDictation(){
+        voiceCommandInput.grabKeyboardFocus();
+        commandStatus.setText("DICTATION: Windows speech input; Enter runs command",juce::dontSendNotification);
+#if JUCE_WINDOWS
+        // Explicit user gesture only. Windows owns microphone access and speech recognition.
+        // Schedule after focus settles so dictated text goes to the command field.
+        juce::Component::SafePointer<Workstation> safeThis(this);
+        juce::Timer::callAfterDelay(180,[safeThis]{
+            if(safeThis==nullptr)return;
+            INPUT events[4]{};
+            events[0].type=INPUT_KEYBOARD;events[0].ki.wVk=VK_LWIN;
+            events[1].type=INPUT_KEYBOARD;events[1].ki.wVk='H';
+            events[2].type=INPUT_KEYBOARD;events[2].ki.wVk='H';events[2].ki.dwFlags=KEYEVENTF_KEYUP;
+            events[3].type=INPUT_KEYBOARD;events[3].ki.wVk=VK_LWIN;events[3].ki.dwFlags=KEYEVENTF_KEYUP;
+            if(SendInput(4,events,sizeof(INPUT))!=4)
+                safeThis->commandStatus.setText("Windows dictation shortcut blocked: press Win+H",
+                                                juce::dontSendNotification);
+        });
+#else
+        commandStatus.setText("Use your operating system's dictation shortcut; Enter runs command",
+                              juce::dontSendNotification);
+#endif
+    }
     bool keyPressed(const juce::KeyPress& key) override {
         if(key.getKeyCode()==juce::KeyPress::F9Key && !key.getModifiers().isAltDown() &&
            !key.getModifiers().isCommandDown()){
-            voiceCommandInput.grabKeyboardFocus();
-            commandStatus.setText("TALK READY: Win+H, speak, Enter",juce::dontSendNotification);
+            startDictation();
             return true;
         }
         if(!selectedClipValid || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) ||
