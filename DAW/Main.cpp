@@ -435,13 +435,22 @@ public:
         title.setColour(juce::Label::textColourId,neoTheme.accentColour());
         skinSelector.setTooltip("Change the visual skin without affecting audio or session content.");
         skinSelector.onChange=[this]{
+            // Choosing a factory skin must clear overrides from a previously
+            // loaded custom preset, otherwise the visible palette never changes.
             activeSkin=juce::jlimit(0,3,skinSelector.getSelectedId()-1);
+            useCustomBackground=false;
+            useCustomPanel=false;
             neoTheme.applySkin(activeSkin);
+            customAccent=neoTheme.accentColour();
             const auto preferences=juce::File::getSpecialLocation(
                 juce::File::userApplicationDataDirectory)
                 .getChildFile("IDW Neo Studio").getChildFile("preferences.txt");
-            if(preferences.getParentDirectory().createDirectory().wasOk())
+            if(preferences.getParentDirectory().createDirectory().wasOk()){
                 preferences.replaceWithText(juce::String(activeSkin));
+                preferences.getSiblingFile("background.txt").deleteFile();
+                preferences.getSiblingFile("panel.txt").deleteFile();
+                preferences.getSiblingFile("accent.txt").deleteFile();
+            }
             title.setColour(juce::Label::textColourId,neoTheme.accentColour());
             repaint();
             for(auto* child:getChildren())child->repaint();
