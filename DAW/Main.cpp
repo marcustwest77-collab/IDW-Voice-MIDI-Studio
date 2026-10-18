@@ -764,15 +764,15 @@ public:
         if(mixTop>420){
             const int count=juce::jmin(10,(int)session.tracks.size());
             const int stripWidth=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
-            g.setColour(juce::Colour(0xff101f32));
+            g.setColour(juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
             g.fillRoundedRectangle(20.0f,(float)mixTop,(float)getWidth()-40.0f,(float)mixHeight,8.0f);
-            g.setColour(juce::Colour(0xff47cffa));
+            g.setColour(neoTheme.accentColour());
             g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
             g.drawText(neoMixerExpanded ? "NEO MIXER  /  EXPANDED  (CLICK TO COLLAPSE)" : "NEO MIXER  /  CLICK TO EXPAND",30,mixTop+4,320,18,juce::Justification::centredLeft);
             for(int i=0;i<count;++i){
                 const auto& track=session.tracks[(size_t)i];
                 if((size_t)i==selectedTrack){
-                    g.setColour(juce::Colour(0xff16cefa).withAlpha(0.16f));
+                    g.setColour(neoTheme.accentColour().withAlpha(0.16f));
                     g.fillRoundedRectangle((float)(30+i*stripWidth), (float)mixTop+23,
                         (float)stripWidth-5, (float)mixHeight-29,5.0f);
                 }
@@ -781,20 +781,20 @@ public:
                 const float channelPeak=channelPeaks[(size_t)i].load(std::memory_order_relaxed);
                 g.setColour(juce::Colour(0xff203647));
                 g.fillRect(faderX-13,mixTop+56,3,mixHeight-76);
-                g.setColour(juce::Colour(0xff1be9ad));
+                g.setColour(neoTheme.accentColour());
                 const int peakHeight=juce::roundToInt((float)(mixHeight-76)*juce::jlimit(0.0f,1.0f,channelPeak));
                 g.fillRect(faderX-13,mixTop+mixHeight-20-peakHeight,3,peakHeight);
                 g.setColour(juce::Colour(0xff38546c));
                 g.drawHorizontalLine(mixTop+49,(float)x+8,(float)faderX-13);
                 const float panPosition=juce::jlimit(0.0f,1.0f,(track.pan+1.0f)/2.0f);
                 const float panX=(float)x+8+panPosition*(float)juce::jmax(1,stripWidth-47);
-                g.setColour(juce::Colour(0xffa782ff));
+                g.setColour(neoTheme.accentColour().brighter(0.15f));
                 g.fillEllipse(panX-4.0f,(float)mixTop+45,8.0f,8.0f);
                 g.setColour(juce::Colour(0xff36576b));
                 g.fillRoundedRectangle((float)faderX-2,(float)mixTop+49,4.0f,(float)mixHeight-68,2.0f);
                 const float normalized=juce::jlimit(0.0f,1.0f,track.gain/1.5f);
                 const float thumbY=(float)mixTop+mixHeight-20.0f-normalized*(float)(mixHeight-70);
-                g.setColour(juce::Colour(0xff21d6f7));
+                g.setColour(neoTheme.accentColour());
                 g.fillRoundedRectangle((float)faderX-9,thumbY-4,18.0f,8.0f,3.0f);
                 // Numeric mix readouts are gain/pan settings, not live audio meters.
                 g.setColour(juce::Colour(0xffa9cadb));
@@ -812,7 +812,7 @@ public:
                 g.drawFittedText(juce::String(track.name),x+3,mixTop+27,stripWidth-14,17,juce::Justification::centredLeft,1);
                 g.setColour(juce::Colour(0xff203447));
                 g.fillRoundedRectangle((float)x+8,(float)mixTop+57,(float)stripWidth-26,7.0f,3.0f);
-                g.setColour(armed ? juce::Colour(0xffef486d) : juce::Colour(0xff18bde8));
+                g.setColour(armed ? juce::Colour(0xffef486d) : neoTheme.accentColour());
                 g.fillRoundedRectangle((float)x+8,(float)mixTop+57,
                     (float)(stripWidth-26)*juce::jlimit(0.0f,1.0f,track.gain/2.0f),7.0f,3.0f);
                 g.setColour(juce::Colour(0xff8cb6cb));
