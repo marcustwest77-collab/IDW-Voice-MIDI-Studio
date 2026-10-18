@@ -88,6 +88,36 @@ public:
         addAndMakeVisible(customAccentButton);
         addAndMakeVisible(customBackgroundButton);
         addAndMakeVisible(customPanelButton);
+        addAndMakeVisible(saveSkinButton);
+        saveSkinButton.setButtonText("SAVE SKIN");
+        saveSkinButton.onClick=[this]{
+            auto* dialog=new juce::AlertWindow("Save Custom Skin","Enter a preset name (letters, numbers, spaces)",juce::MessageBoxIconType::InfoIcon);
+            dialog->addTextEditor("name","My Skin","Name");
+            dialog->addButton("Save",1);dialog->addButton("Cancel",0);
+            juce::Component::SafePointer<Workstation> safeThis(this);
+            dialog->enterModalState(true,juce::ModalCallbackFunction::create([safeThis,dialog](int result){
+                if(result==1 && safeThis!=nullptr){
+                    const auto name=dialog->getTextEditorContents("name").trim();
+                    if(name.isNotEmpty() && name.length()<=40 &&
+                       name.containsOnly("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-")){
+                        auto root=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                            .getChildFile("IDW Neo Studio").getChildFile("skins");
+                        if(root.createDirectory().wasOk()){
+                            auto payload=new juce::DynamicObject();
+                            payload->setProperty("name",name);
+                            payload->setProperty("skin",safeThis->activeSkin);
+                            payload->setProperty("background",(safeThis->useCustomBackground ? safeThis->customBackground :
+                                juce::Colour(safeThis->activeSkin==1?0xff17100b:safeThis->activeSkin==2?0xff091c18:safeThis->activeSkin==3?0xff160d22:0xff080f1c)).toDisplayString(false));
+                            payload->setProperty("panel",(safeThis->useCustomPanel ? safeThis->customPanel :
+                                juce::Colour(safeThis->activeSkin==1?0xff2b2118:safeThis->activeSkin==2?0xff112d26:safeThis->activeSkin==3?0xff261d39:0xff101f32)).toDisplayString(false));
+                            payload->setProperty("accent",safeThis->neoTheme.accentColour().toDisplayString(false));
+                            root.getChildFile(name+".json").replaceWithText(juce::JSON::toString(juce::var(payload)));
+                        }
+                    }
+                }
+                delete dialog;
+            }));
+        };
         customPanelButton.setButtonText("PANEL");
         customPanelButton.onClick=[this]{
             auto* dialog=new juce::AlertWindow("Custom Panel Color",
@@ -469,6 +499,7 @@ public:
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
+        saveSkinButton.setBounds(header.removeFromRight(100).reduced(3));
         customPanelButton.setBounds(header.removeFromRight(80).reduced(3));
         customBackgroundButton.setBounds(header.removeFromRight(95).reduced(3));
         customAccentButton.setBounds(header.removeFromRight(85).reduced(3));
@@ -1989,7 +2020,7 @@ private:
     ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
-    juce::TextButton customAccentButton,customBackgroundButton,customPanelButton;
+    juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton;
     juce::Colour customPanel{0xff101f32};
     bool useCustomPanel=false;
     juce::Colour customBackground{0xff080f1c};
