@@ -19,7 +19,10 @@ inline juce::var sessionToJson(const Session& s) {
         if(t.type==TrackType::audio)track->setProperty("inputChannel",t.inputChannel);
         track->setProperty("gain",t.gain);
         track->setProperty("pan",t.pan);
-        if(t.type==TrackType::audio)track->setProperty("vocalFxPreset",t.vocalFxPreset);
+        if(t.type==TrackType::audio){
+            track->setProperty("vocalFxPreset",t.vocalFxPreset);
+            track->setProperty("vocalFxMix",t.vocalFxMix);
+        }
         if(t.type==TrackType::midi){track->setProperty("synthPreset",t.synthPreset);track->setProperty("synthAttackMs",t.synthAttackMs);track->setProperty("synthReleaseMs",t.synthReleaseMs);}
         juce::Array<juce::var> clips;
         for(const auto& c:t.clips){
@@ -74,6 +77,9 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
             target.inputChannel=(int)input;
         }
         if(!next.setTrackMix(next.tracks.size()-1,(float)(double)obj->getProperty("gain"),(float)(double)obj->getProperty("pan")))return false;
+        const auto vocalMix=obj->getProperty("vocalFxMix");
+        if(!vocalMix.isVoid() && ((!vocalMix.isDouble() && !vocalMix.isInt() && !vocalMix.isInt64()) ||
+           !next.setTrackVocalFxMix(next.tracks.size()-1,(float)(double)vocalMix)))return false;
         const auto vocalFx=obj->getProperty("vocalFxPreset");
         if(!vocalFx.isVoid() && (!vocalFx.isInt() ||
            !next.setTrackVocalFxPreset(next.tracks.size()-1,(int)vocalFx)))return false;

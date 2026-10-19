@@ -2,12 +2,30 @@
 #include "SessionModel.h"
 #include <stdexcept>
 #include <iostream>
+#include <limits>
 int main() {
     using namespace idw::daw;
     Session s;s.addTrack(TrackType::audio);s.addTrack(TrackType::midi);
     if(s.tracks[0].vocalFxPreset!=0 || s.setTrackVocalFxPreset(0,4) ||
        s.setTrackVocalFxPreset(1,1) || s.setTrackVocalFxPreset(99,1))
         throw std::runtime_error("preset validation");
+    if(s.setTrackVocalFxMix(0,-0.1f) || s.setTrackVocalFxMix(0,1.1f) ||
+       s.setTrackVocalFxMix(0,std::numeric_limits<float>::quiet_NaN()) ||
+       s.setTrackVocalFxMix(1,0.5f) || !s.setTrackVocalFxMix(0,0.5f))
+        throw std::runtime_error("mix validation");
+    for(int preset=1;preset<=3;++preset){
+        TrackVocalEffects full,blend,dry;
+        for(int i=0;i<5000;++i){
+            const float l=0.3f*std::sin(i*0.11f),r=0.2f*std::cos(i*0.07f);
+            const auto wet=full.process(l,r,preset);
+            const auto partial=blend.process(l,r,preset,0.4f);
+            const auto original=dry.process(l,r,preset,0.0f);
+            if(original.left!=l || original.right!=r ||
+               std::abs(partial.left-(l+(wet.left-l)*0.4f))>1e-6f ||
+               std::abs(partial.right-(r+(wet.right-r)*0.4f))>1e-6f)
+                throw std::runtime_error("dry/wet blend");
+        }
+    }
     TrackVocalEffects fx;
     const auto bypass=fx.process(0.325f,-0.23f,0);
     if(bypass.left!=0.325f || bypass.right!=-0.23f)

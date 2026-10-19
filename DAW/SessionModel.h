@@ -21,6 +21,7 @@ struct Track {
     int inputChannel=0; // Saved audio input preference, zero-based (0..7).
     float gain=1.0f;
     float pan=0.0f;
+    float vocalFxMix=1.0f; // Dry/wet blend, 0..1.
     int vocalFxPreset=0; // Audio insert: Off, Gentle, Warm, Forward.
     int synthPreset=0; // Keys=0, Bass=1, Lead=2, Organ=3, Pad=4
     float synthAttackMs=5.0f,synthReleaseMs=5.0f;
@@ -36,6 +37,11 @@ public:
         if (tracks.size() >= 128) return false;
         tracks.push_back({(type == TrackType::audio ? "Audio " : "MIDI ") + std::to_string(tracks.size()+1),type});
         return true;
+    }
+    bool setTrackVocalFxMix(size_t index,float mix) {
+        if(index>=tracks.size() || tracks[index].type!=TrackType::audio ||
+           !std::isfinite(mix) || mix<0 || mix>1)return false;
+        tracks[index].vocalFxMix=mix;return true;
     }
     bool setTrackVocalFxPreset(size_t index,int preset) {
         if(index>=tracks.size() || tracks[index].type!=TrackType::audio || preset<0 || preset>3)return false;

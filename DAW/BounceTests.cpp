@@ -84,9 +84,10 @@ int main(){
     throw std::runtime_error("stereo channel mismatch");
  stereoReader.reset();
  // Export must use the same insert as playback, preserve stereo and reset per bounce.
- for(int preset=1;preset<=3;++preset){
+ for(int preset=1;preset<=3;++preset)for(float amount:{0.0f,0.4f,1.0f}){
     stereoSession.setTrackVocalFxPreset(0,preset);
-    const auto fxOutput=root.getChildFile("fx-"+juce::String(preset)+".wav");
+    stereoSession.setTrackVocalFxMix(0,amount);
+    const auto fxOutput=root.getChildFile("fx-"+juce::String(preset)+"-"+juce::String(amount)+".wav");
     if(!renderSessionWav(stereoSession,fxOutput,error))throw std::runtime_error("FX bounce");
     auto fxReader=std::unique_ptr<juce::AudioFormatReader>(wav.createReaderFor(fxOutput.createInputStream().release(),true));
     juce::AudioBuffer<float> wet(2,4410);
@@ -96,13 +97,13 @@ int main(){
     TrackVocalEffects realtime;
     bool changed=false;
     for(int i=0;i<4410;++i){
-        const auto expected=realtime.process(dry.getSample(0,i),dry.getSample(1,i),preset);
+        const auto expected=realtime.process(dry.getSample(0,i),dry.getSample(1,i),preset,amount);
         if(std::abs(expected.left-wet.getSample(0,i))>0.00001f ||
            std::abs(expected.right-wet.getSample(1,i))>0.00001f)
             throw std::runtime_error("FX playback/export mismatch");
         changed |= std::abs(wet.getSample(0,i)-dry.getSample(0,i))>0.001f;
     }
-    if(!changed)throw std::runtime_error("FX export bypassed");
+    if(changed!=(amount>0.0f))throw std::runtime_error("FX export amount incorrect");
  }
 
  // Check the last sample before a clip and the first sample of the clip,

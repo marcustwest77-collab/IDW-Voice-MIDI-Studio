@@ -53,6 +53,7 @@ jobs:
           Copy-Item 'build-v14/IDWVoiceMIDIStudio_artefacts/Release/Standalone/IDW Voice MIDI Studio.exe' beta-windows/VoiceStudio/
           Copy-Item 'build-v14/IDWVoiceMIDIStudio_artefacts/Release/VST3/IDW Voice MIDI Studio.vst3' beta-windows/VST3/ -Recurse
           Copy-Item docs/COMBINED-BETA.md beta-windows/Documentation/
+          Copy-Item docs/UNIFIED-DAW-PROGRESS.md beta-windows/Documentation/
           Copy-Item docs/USER_MANUAL.md beta-windows/Documentation/
           New-Item -ItemType Directory -Force -Path beta-windows/ThirdPartyNotices | Out-Null
           Copy-Item build-v14/_deps/juce-src/LICENSE.md beta-windows/ThirdPartyNotices/JUCE-LICENSE.md

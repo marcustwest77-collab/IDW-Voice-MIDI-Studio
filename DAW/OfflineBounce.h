@@ -44,6 +44,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
         double sourceRate=44100.0;
         float left=1,right=1;
         int vocalFxPreset=0;
+        float vocalFxMix=1.0f;
         TrackVocalEffects vocalFx;
     };
     std::vector<ActiveClip> clips;
@@ -60,7 +61,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             const double sourceRate=reader->sampleRate;
             clips.push_back({std::move(reader),start,start+length,
                 (int64_t)std::llround(clip.sourceOffsetSeconds*sourceRate),sourceRate,
-                gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1),track.vocalFxPreset,{}});
+                gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1),track.vocalFxPreset,track.vocalFxMix,{}});
         }
     }
     const float outputCeiling=std::pow(10.0f,std::clamp(ceilingDb,-12.0f,-0.1f)/20.0f);
@@ -147,7 +148,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                         r=(float)(rightValue/weight);
                     }
                 }
-                const auto wet=clip.vocalFx.process(l,r,clip.vocalFxPreset);
+                const auto wet=clip.vocalFx.process(l,r,clip.vocalFxPreset,clip.vocalFxMix);
                 l=wet.left;r=wet.right;
                 mix.addSample(0,offset+i,l*clip.left);
                 mix.addSample(1,offset+i,r*clip.right);

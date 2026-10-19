@@ -18,13 +18,19 @@ int main(){
  using namespace idw::daw;
  for(int fx=0;fx<=3;++fx){
     Session source;source.addTrack(TrackType::audio);source.setTrackVocalFxPreset(0,fx);
+    source.setTrackVocalFxMix(0,0.4f);
     Session restored;
     auto json=sessionToJson(source);
-    if(!sessionFromJson(json,restored) || restored.tracks[0].vocalFxPreset!=fx)
+    if(!sessionFromJson(json,restored) || restored.tracks[0].vocalFxPreset!=fx || restored.tracks[0].vocalFxMix!=0.4f)
         throw std::runtime_error("vocal FX round trip");
     auto* track=json.getDynamicObject()->getProperty("tracks").getArray()->getReference(0).getDynamicObject();
+    for(const juce::var invalid:{juce::var(-0.1),juce::var(1.1),juce::var("0.5"),juce::var(true)}){
+        track->setProperty("vocalFxMix",invalid);
+        if(sessionFromJson(json,restored))throw std::runtime_error("invalid vocal mix accepted");
+    }
+    track->removeProperty("vocalFxMix");
     track->removeProperty("vocalFxPreset");
-    if(!sessionFromJson(json,restored) || restored.tracks[0].vocalFxPreset!=0)
+    if(!sessionFromJson(json,restored) || restored.tracks[0].vocalFxPreset!=0 || restored.tracks[0].vocalFxMix!=1.0f)
         throw std::runtime_error("old project must default FX off");
     for(const juce::var invalid:{juce::var(-1),juce::var(4),juce::var("1"),juce::var(1.5)}){
         track->setProperty("vocalFxPreset",invalid);

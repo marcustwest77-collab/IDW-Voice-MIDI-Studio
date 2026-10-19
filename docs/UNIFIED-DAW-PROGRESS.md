@@ -6,6 +6,8 @@ and saturation to audio tracks inside the V14 timeline.
 Select an audio track, stop playback, and choose **VOCAL FX** beside the master
 volume controls. Off is the default; Gentle uses light compression and de-essing,
 Warm adds saturation, and Forward uses stronger compression and de-essing.
+Use the adjacent **% FX** slider to blend the original take (0%) with the full
+preset (100%). The amount is saved per track; switching Off retains it.
 The insert runs before track volume/pan in playback and WAV export. Settings
 save in `.idwproj` files and portable project copies. Original recordings and
 live input monitoring remain dry. MIDI tracks do not use this insert.

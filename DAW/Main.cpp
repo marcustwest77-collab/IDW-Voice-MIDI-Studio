@@ -636,6 +636,18 @@ public:
             session.setTrackVocalFxPreset(selectedTrack,vocalFxPreset.getSelectedId()-1);
             refreshMixer();
         };
+        vocalFxMix.setRange(0.0,100.0,1.0);
+        vocalFxMix.setTextValueSuffix("% FX");
+        vocalFxMix.setTextBoxStyle(juce::Slider::TextBoxRight,false,75,26);
+        vocalFxMix.setTooltip("Vocal effect amount: 0% original take, 100% full preset. Stop transport to change.");
+        addAndMakeVisible(vocalFxMix);
+        vocalFxMix.onValueChange=[this]{
+            if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load()){
+                refreshMixer();return;
+            }
+            session.setTrackVocalFxMix(selectedTrack,(float)(vocalFxMix.getValue()/100.0));
+            refreshMixer();
+        };
         previousTrack.setButtonText("< TRACK");
         nextTrack.setButtonText("TRACK >");
         addAndMakeVisible(previousTrack);addAndMakeVisible(nextTrack);
@@ -787,6 +799,7 @@ public:
         masterGain.setBounds(masterRow.removeFromLeft(260));
         clearClips.setBounds(masterRow.removeFromLeft(120).reduced(3));
         vocalFxPreset.setBounds(masterRow.removeFromLeft(220).reduced(3));
+        vocalFxMix.setBounds(masterRow.removeFromLeft(190).reduced(3));
         auto synthRow=area.removeFromTop(35);
         attackLabel.setBounds(synthRow.removeFromLeft(100));
         attackControl.setBounds(synthRow.removeFromLeft(175));
@@ -1258,7 +1271,7 @@ private:
             auto* left=slot->scratch.getWritePointer(0);
             auto* right=slot->scratch.getWritePointer(1);
             for(int i=0;i<window.frames;++i){
-                const auto wet=slot->vocalFx.process(left[i],right[i],track.vocalFxPreset);
+                const auto wet=slot->vocalFx.process(left[i],right[i],track.vocalFxPreset,track.vocalFxMix);
                 left[i]=wet.left;right[i]=wet.right;
             }
             const float gain=juce::jlimit(0.0f,2.0f,track.gain);
@@ -1342,6 +1355,8 @@ private:
         vocalFxPreset.setEnabled(track.type==idw::daw::TrackType::audio &&
             !playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() && !exportRunning.load());
         vocalFxPreset.setSelectedId(track.vocalFxPreset+1,juce::dontSendNotification);
+        vocalFxMix.setEnabled(vocalFxPreset.isEnabled() && track.vocalFxPreset!=0);
+        vocalFxMix.setValue(track.vocalFxMix*100.0f,juce::dontSendNotification);
         synthPreset.setEnabled(track.type==idw::daw::TrackType::midi &&
             !playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load());
         synthPreset.setSelectedId(track.synthPreset+1,juce::dontSendNotification);
@@ -2423,6 +2438,7 @@ private:
     double takeManualTrimSeconds=0.0;
     juce::Label title,tempoLabel,gainLabel,panLabel,inputLevel,latencyLabel,recordReadiness;
     juce::ComboBox vocalFxPreset;
+    juce::Slider vocalFxMix;
     juce::Slider gainControl,panControl,masterGain,latencyAdjust;
     juce::Label masterLabel,eqLabel,limitLabel;
     juce::Slider ceilingControl;

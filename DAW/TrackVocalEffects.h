@@ -8,10 +8,11 @@ class TrackVocalEffects {
 public:
     static bool validPreset(int preset) { return preset >= 0 && preset <= 3; }
     void reset() { left.reset(); right.reset(); }
-    StereoSample process(float l, float r, int preset) {
+    StereoSample process(float l, float r, int preset, float mix=1.0f) {
         if (preset == 0 || !validPreset(preset)) return {l, r};
         VocalEffectsSettings settings;
         settings.enabled = true;
+        settings.mix = std::isfinite(mix) ? std::clamp(mix,0.0f,1.0f) : 0.0f;
         settings.deEsserEnabled = true;
         settings.compressorEnabled = true;
         settings.deEsser = preset == 3 ? 0.60f : 0.35f;
