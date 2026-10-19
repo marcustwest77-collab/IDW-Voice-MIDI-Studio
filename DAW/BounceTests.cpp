@@ -85,10 +85,11 @@ int main(){
  stereoReader.reset();
  // Export must use the same insert as playback, preserve stereo and reset per bounce.
  for(int preset=1;preset<=3;++preset)for(float amount:{0.0f,0.4f,1.0f}){
-    stereoSession.setTrackVocalFxPreset(0,preset);
-    stereoSession.setTrackVocalFxMix(0,amount);
+    auto fxSession=stereoSession; // Keep the dry fixture unchanged for master/EQ checks.
+    fxSession.setTrackVocalFxPreset(0,preset);
+    fxSession.setTrackVocalFxMix(0,amount);
     const auto fxOutput=root.getChildFile("fx-"+juce::String(preset)+"-"+juce::String(amount)+".wav");
-    if(!renderSessionWav(stereoSession,fxOutput,error))throw std::runtime_error("FX bounce");
+    if(!renderSessionWav(fxSession,fxOutput,error))throw std::runtime_error("FX bounce");
     auto fxReader=std::unique_ptr<juce::AudioFormatReader>(wav.createReaderFor(fxOutput.createInputStream().release(),true));
     juce::AudioBuffer<float> wet(2,4410);
     if(!fxReader || !fxReader->read(&wet,0,4410,0,true,true))throw std::runtime_error("FX read");
