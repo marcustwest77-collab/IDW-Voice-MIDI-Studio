@@ -41,6 +41,7 @@ public:
         rejectedWrites.store(0,std::memory_order_relaxed);
         capturedFrames.store(0,std::memory_order_relaxed);
         queuedFrames.store(0,std::memory_order_relaxed);
+        inputPeak.store(0.0f,std::memory_order_relaxed);
         inputChannels=channelsToRecord;
         inputStartChannel=firstInputChannel;
         currentFile=destination;
@@ -61,6 +62,7 @@ public:
     // does not by itself establish synchronization with the playback clock.
     std::uint64_t getCapturedFrames() const noexcept {return capturedFrames.load(std::memory_order_relaxed);}
     std::uint64_t getQueuedFrames() const noexcept {return queuedFrames.load(std::memory_order_relaxed);}
+    float consumeInputPeak() noexcept {return inputPeak.exchange(0.0f,std::memory_order_relaxed);}
     void audioDeviceIOCallbackWithContext(const float* const* inputs,int inputsCount,
                                           float* const*,int,int samples,
                                           const juce::AudioIODeviceCallbackContext&) override {
@@ -81,6 +83,11 @@ public:
             selected[1]=inputs[inputStartChannel+1];
             if(selected[1]==nullptr){droppedBlocks.fetch_add(1,std::memory_order_relaxed);return;}
         }
+        float peak=0.0f;
+        for(int channel=0;channel<inputChannels;++channel)
+            for(int frame=0;frame<samples;++frame)
+                peak=std::max(peak,std::abs(selected[channel][frame]));
+        inputPeak.store(std::max(inputPeak.load(std::memory_order_relaxed),peak),std::memory_order_relaxed);
         // Count received audio separately from frames accepted by the WAV queue.
         capturedFrames.fetch_add(static_cast<std::uint64_t>(samples),std::memory_order_relaxed);
         if(!activeWriter->write(selected,samples))
@@ -98,4 +105,5 @@ private:
     int inputChannels=1;
     int inputStartChannel=0;
     std::atomic<std::uint64_t> droppedBlocks{0},rejectedWrites{0},capturedFrames{0},queuedFrames{0};
+    std::atomic<float> inputPeak{0.0f};
 };
