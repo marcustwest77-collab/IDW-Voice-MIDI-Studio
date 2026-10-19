@@ -2104,10 +2104,17 @@ private:
                 const auto savedFrames=savedReader ? savedReader->lengthInSamples : juce::int64{0};
                 const double savedRate=savedReader ? savedReader->sampleRate : 0.0;
                 savedReader.reset();
+                // Flag substantial loss between frames accepted by the recorder
+                // and frames actually readable from the resulting WAV.
+                const auto missingSavedFrames=queuedFrames>(std::uint64_t)juce::jmax(juce::int64{0},savedFrames)
+                    ? queuedFrames-(std::uint64_t)juce::jmax(juce::int64{0},savedFrames) : std::uint64_t{0};
+                const bool truncatedWav=savedRate>0.0 &&
+                    missingSavedFrames>(std::uint64_t)(savedRate*0.1);
                 const juce::String inputAdvice=interrupted
                     ? "Microphone/audio device disconnected, stopped, or changed. Reconnect it and reselect the input in AUDIO DEVICES."
                     : missing ? "Selected microphone input was unavailable. Check its connection and input routing."
                     : silent ? "Audio frames were received, but the entire take stayed below -60 dBFS. Check microphone mute and input gain."
+                    : truncatedWav ? "WAV contains fewer frames than were queued. Check disk performance and available space."
                     : "";
                 juce::Logger::writeToLog(
                     "IDW vocal capture summary: received="+
