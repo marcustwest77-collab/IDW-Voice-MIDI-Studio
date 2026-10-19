@@ -1609,6 +1609,15 @@ private:
             if(!playing.load() && !recorder.isRecording() && !multiRecorder.isRecording())stopTimer();
             return;
         }
+        if(recorder.isRecording()){
+            const float peak=recorder.consumeInputPeak();
+            const double db=20.0*std::log10(std::max(1.0e-6f,peak));
+            inputLevel.setText("VOCAL INPUT  "+juce::String(db,0)+" dBFS"+
+                (peak>=0.98f ? "  |  CLIPPING" : peak<0.001f ? "  |  Check mic signal" : ""),
+                juce::dontSendNotification);
+            inputLevel.setColour(juce::Label::textColourId,
+                peak>=0.98f ? juce::Colour(0xfff44368) : juce::Colour(0xff73f9ae));
+        }
         if(multiRecorder.isRecording()){
             juce::String levels("RECORDING INPUTS  ");
             float maximum=0.0f;
