@@ -3,6 +3,10 @@
 #include "PluginProcessor.h"
 #include "InstrumentPanel.h"
 #include "ConnectionPanel.h"
+#include "VocalFXPanel.h"
+#include "SkinTheme.h"
+#include "SkinDesigner.h"
+#include "SongStudioPanel.h"
 class IDWVoiceMIDIStudioAudioProcessorEditor : public juce::AudioProcessorEditor,private juce::Timer {
 public:
     explicit IDWVoiceMIDIStudioAudioProcessorEditor(IDWVoiceMIDIStudioAudioProcessor&);
@@ -17,6 +21,7 @@ private:
     juce::String diagnosticReport() const;
     bool audioRunning() const;
     void configureSlider(juce::Slider&,juce::Label&,const juce::String&,const juce::String&);
+    void applySkin(int);
     void setupV5();void layoutV5();void refreshProfiles();void recoverTake();
     void setValue(const char*,float);
     void refreshPresets();void loadPreset();void syncScale();void showHelp(bool);
@@ -25,6 +30,7 @@ private:
     static juce::String manualText();
     IDWVoiceMIDIStudioAudioProcessor& p;
     juce::LookAndFeel_V4 theme;
+    juce::Image brandLogo;
     juce::Label title,readout,status,diagnostics,traceLabel,drumLabel,captureLabel,setupStatus;
     juce::TextButton copyDiagnostics{"Copy diagnostics"};
     unsigned int lastCallbacks=0;
@@ -33,7 +39,7 @@ private:
     float meterSmoothed=0.f;
     juce::Slider gateSlider,confidenceSlider,bendSlider,tuneSlider,beatSlider,bpmSlider;
     juce::Label gateLabel,confidenceLabel,bendLabel,tuneLabel,beatLabel,bpmLabel;
-    juce::ComboBox rootSelector,expressionSelector,inputSelector,presetSelector,learnTarget,trainTarget;
+    juce::ComboBox rootSelector,expressionSelector,inputSelector,presetSelector,learnTarget,trainTarget,skinSelector;
     juce::ToggleButton scaleLock{"Scale lock"},beatbox{"Beatbox"},melody{"Melody"},preview{"Preview sound"},monitor{"Hear microphone"},mpeToggle{"MPE"};
     juce::TextButton scaleButtons[12];
     juce::TextButton calibrate{"Calibrate noise"},panic{"PANIC"},test{"Test note"},help{"Setup / Help"},closeHelp{"Close"};
@@ -70,11 +76,24 @@ private:
     juce::TextButton instrumentButton{"Studio instrument"};
     std::unique_ptr<InstrumentPanel> instrumentPanel;
     bool instrumentVisible=false;
+    juce::TextButton vocalFxButton{"Vocal FX"};
+    std::unique_ptr<VocalFXPanel> vocalFxPanel;
+    bool vocalFxVisible=false;
     bool performanceView=true,helpVisible=false,learningRange=false;
     double rangeStarted=0;int learnedLow=127,learnedHigh=0,rangeSamples=0;
     juce::TextButton viewButton{"Studio controls"},saveProfile{"Save voice"},learnRange{"Learn range"},recover{"Recover take"};
     juce::Label arrangementTitle,arrangementStatus,profileTitle,lowLabel,highLabel;
     juce::StringArray profileNames;
     juce::TooltipWindow tooltips{this,500};
+    const idw::SkinPalette* skin=&idw::skins.front();
+    juce::TextButton songButton{"Song Studio"};
+    std::unique_ptr<SongStudioPanel> songPanel;
+    bool songVisible=false;
+    int activeSkin=-1;
+    idw::SkinPalette displayedSkin=idw::skins.front();
+    std::array<std::uint32_t,5> activeColours{};
+    bool activeCustom=false,designerVisible=false;
+    juce::TextButton designSkin{"Design skin"};
+    std::unique_ptr<SkinDesigner> skinDesigner;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IDWVoiceMIDIStudioAudioProcessorEditor)
 };

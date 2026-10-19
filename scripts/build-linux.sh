@@ -1,13 +1,13 @@
 #!/bin/bash
-set -e
-JUCE_PATH="${1:-}"
-if [ -n "$JUCE_PATH" ]; then
-  CMAKE_JUCE_ARG="-DIDW_JUCE_PATH=$JUCE_PATH"
-elif [ -f ThirdParty/JUCE/CMakeLists.txt ]; then
-  CMAKE_JUCE_ARG=""
-else
-  echo "No local ThirdParty/JUCE checkout found; CMake will fetch JUCE 9.0.2 automatically (requires internet access)."
-  CMAKE_JUCE_ARG=""
+set -euo pipefail
+cd "$(dirname "$0")/.."
+command -v cmake >/dev/null || { echo "Install CMake 3.22 or newer." >&2; exit 1; }
+command -v ctest >/dev/null || { echo "Install the complete CMake tools, including CTest." >&2; exit 1; }
+configure=(-S . -B build-linux -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON)
+if [[ -n "${1:-}" ]]; then
+  configure+=("-DIDW_JUCE_PATH=$1")
 fi
-cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release $CMAKE_JUCE_ARG
-cmake --build build-linux --config Release --target IDWVoiceMIDIStudio_VST3 IDWVoiceMIDIStudio_Standalone -j2
+cmake "${configure[@]}"
+cmake --build build-linux --config Release --parallel 2
+ctest --test-dir build-linux -C Release --output-on-failure --no-tests=error
+echo "Native build and registered tests passed. Host, installer and hardware validation remain required."

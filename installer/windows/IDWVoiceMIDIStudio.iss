@@ -4,9 +4,12 @@
 #ifndef OutputDir
   #define OutputDir "release\\Installer"
 #endif
+#ifndef AudioLabRoot
+  #error AudioLabRoot must be supplied by ISCC using /DAudioLabRoot=...
+#endif
 
 #define AppName "IDW Voice MIDI Studio"
-#define AppVersion "6.1.0"
+#define AppVersion "13.0.0"
 #define Publisher "In Da Wind Entertainment"
 #define AppExeName "IDW Voice MIDI Studio.exe"
 
@@ -26,11 +29,16 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 WizardStyle=modern
+SetupIconFile=..\..\Resources\Brand\IDWVoiceMIDIStudio.ico
+WizardImageFile=..\..\Resources\Brand\InstallerSidebar.bmp
+WizardSmallImageFile=..\..\Resources\Brand\InstallerSmall.bmp
 UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\{#AppExeName}
 
 [Files]
 Source: "{#BuildRoot}\Standalone\IDW Voice MIDI Studio.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildRoot}\VST3\IDW Voice MIDI Studio.vst3\*"; DestDir: "{commoncf64}\VST3\IDW Voice MIDI Studio.vst3"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#AudioLabRoot}\*"; DestDir: "{app}\Audio-Lab"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\docs\USER_MANUAL.md"; DestDir: "{app}\Documentation"; Flags: ignoreversion
 
 Source: "..\..\START-HERE.html"; DestDir: "{app}"; Flags: ignoreversion
@@ -39,6 +47,7 @@ Source: "..\..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdi
 [Icons]
 Name: "{group}\IDW Voice MIDI Studio"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\IDW Voice MIDI Studio Manual"; Filename: "{app}\START-HERE.html"
+Name: "{group}\IDW Audio Lab"; Filename: "{app}\Audio-Lab\IDW-Audio-Lab.exe"
 Name: "{autodesktop}\IDW Voice MIDI Studio"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Tasks]

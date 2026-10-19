@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "SongScenes.h"
+#include "SkinTheme.h"
 class InstrumentPanel : public juce::Component {
 public:
     explicit InstrumentPanel(juce::AudioProcessorValueTreeState& state,std::function<void()> close,std::function<void()> sceneChanged={}):onClose(std::move(close)){
@@ -21,7 +22,14 @@ public:
         addAndMakeVisible(info);info.setText("32 voices | Lead 1 / Chords 2 / Bass 3 / Drums 10\nMPE uses the lead patch on every member channel.\nKick, snare and hi-hat synthesis is included. Echo: 250 ms.\nEnabled instrument replaces the simple preview. Turn it off for external synths.\nIncoming MIDI can play this instrument. Disable Melody for keyboard-only playing.",juce::dontSendNotification);
         info.setJustificationType(juce::Justification::topLeft);
     }
-    void paint(juce::Graphics& g) override {g.fillAll(juce::Colour(0xff141a24));g.setColour(juce::Colour(0xffeac36c));g.drawRect(getLocalBounds(),2);}
+    void applySkin(const idw::SkinPalette& next){
+        skin=&next;title.setColour(juce::Label::textColourId,juce::Colour(skin->accent));
+        for(auto* label:{&sceneStatus,&info})label->setColour(juce::Label::textColourId,juce::Colour(skin->muted));
+        for(auto& label:patchLabels)label.setColour(juce::Label::textColourId,juce::Colour(skin->muted));
+        for(auto& label:labels)label.setColour(juce::Label::textColourId,juce::Colour(skin->muted));
+        repaint();
+    }
+    void paint(juce::Graphics& g) override {g.fillAll(juce::Colour(skin->card));g.setColour(juce::Colour(skin->accent));g.drawRect(getLocalBounds(),2);}
     void resized() override {
         title.setBounds(24,18,getWidth()-240,32);done.setBounds(getWidth()-200,18,175,32);enabled.setBounds(24,65,310,32);
         sceneSelector.setBounds(350,65,getWidth()-520,32);saveScene.setBounds(getWidth()-155,65,130,32);sceneStatus.setBounds(24,665,getWidth()-48,60);
@@ -39,4 +47,5 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>enableAttachment;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>>comboAttachments;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>>sliderAttachments;
+    const idw::SkinPalette* skin=&idw::skins.front();
 };
