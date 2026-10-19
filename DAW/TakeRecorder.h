@@ -42,6 +42,12 @@ public:
         capturedFrames.store(0,std::memory_order_relaxed);
         queuedFrames.store(0,std::memory_order_relaxed);
         inputPeak.store(0.0f,std::memory_order_relaxed);
+        takePeak.store(0.0f,std::memory_order_relaxed);
+        silentFrames.store(0,std::memory_order_relaxed);
+        missingInputBlocks.store(0,std::memory_order_relaxed);
+        inputMissing.store(false,std::memory_order_relaxed);
+        deviceInterrupted.store(false,std::memory_order_relaxed);
+        recordingSampleRate=sampleRate;
         inputChannels=channelsToRecord;
         inputStartChannel=firstInputChannel;
         currentFile=destination;
@@ -63,6 +69,13 @@ public:
     std::uint64_t getCapturedFrames() const noexcept {return capturedFrames.load(std::memory_order_relaxed);}
     std::uint64_t getQueuedFrames() const noexcept {return queuedFrames.load(std::memory_order_relaxed);}
     float consumeInputPeak() noexcept {return inputPeak.exchange(0.0f,std::memory_order_relaxed);}
+    float getTakePeak() const noexcept {return takePeak.load(std::memory_order_relaxed);}
+    bool isInputMissing() const noexcept {return inputMissing.load(std::memory_order_relaxed);}
+    bool wasDeviceInterrupted() const noexcept {return deviceInterrupted.load(std::memory_order_relaxed);}
+    std::uint64_t getMissingInputBlocks() const noexcept {return missingInputBlocks.load(std::memory_order_relaxed);}
+    bool hasSustainedSilence() const noexcept {
+        return silentFrames.load(std::memory_order_relaxed)>=static_cast<std::uint64_t>(recordingSampleRate*3.0);
+    }
     void audioDeviceIOCallbackWithContext(const float* const* inputs,int inputsCount,
                                           float* const*,int,int samples,
                                           const juce::AudioIODeviceCallbackContext&) override {
@@ -71,23 +84,27 @@ public:
             droppedBlocks.fetch_add(1,std::memory_order_relaxed);
             return;
         }
-        if(!activeWriter || samples<=0)return;
+        if(!activeWriter || deviceInterrupted.load(std::memory_order_relaxed) || samples<=0)return;
         if(inputs==nullptr || inputStartChannel<0 || inputStartChannel>=inputsCount ||
            inputChannels>inputsCount-inputStartChannel){
-            droppedBlocks.fetch_add(1,std::memory_order_relaxed);
+            markMissingInput();
             return;
         }
         const float* selected[2] {inputs[inputStartChannel],nullptr};
-        if(selected[0]==nullptr){droppedBlocks.fetch_add(1,std::memory_order_relaxed);return;}
+        if(selected[0]==nullptr){markMissingInput();return;}
         if(inputChannels==2){
             selected[1]=inputs[inputStartChannel+1];
-            if(selected[1]==nullptr){droppedBlocks.fetch_add(1,std::memory_order_relaxed);return;}
+            if(selected[1]==nullptr){markMissingInput();return;}
         }
         float peak=0.0f;
         for(int channel=0;channel<inputChannels;++channel)
             for(int frame=0;frame<samples;++frame)
                 peak=std::max(peak,std::abs(selected[channel][frame]));
         inputPeak.store(std::max(inputPeak.load(std::memory_order_relaxed),peak),std::memory_order_relaxed);
+        inputMissing.store(false,std::memory_order_relaxed);
+        takePeak.store(std::max(takePeak.load(std::memory_order_relaxed),peak),std::memory_order_relaxed);
+        if(peak<0.001f)silentFrames.fetch_add(static_cast<std::uint64_t>(samples),std::memory_order_relaxed);
+        else silentFrames.store(0,std::memory_order_relaxed);
         // Count received audio separately from frames accepted by the WAV queue.
         capturedFrames.fetch_add(static_cast<std::uint64_t>(samples),std::memory_order_relaxed);
         if(!activeWriter->write(selected,samples))
@@ -95,9 +112,21 @@ public:
         else
             queuedFrames.fetch_add(static_cast<std::uint64_t>(samples),std::memory_order_relaxed);
     }
-    void audioDeviceAboutToStart(juce::AudioIODevice*) override {}
-    void audioDeviceStopped() override {stop();}
+    void audioDeviceAboutToStart(juce::AudioIODevice*) override {markDeviceInterrupted();}
+    void audioDeviceStopped() override {markDeviceInterrupted();}
 private:
+    void markMissingInput() noexcept {
+        droppedBlocks.fetch_add(1,std::memory_order_relaxed);
+        missingInputBlocks.fetch_add(1,std::memory_order_relaxed);
+        inputMissing.store(true,std::memory_order_relaxed);
+        silentFrames.store(0,std::memory_order_relaxed);
+    }
+    void markDeviceInterrupted() {
+        const juce::ScopedLock lock(guard);
+        // Keep the take pending until the message thread flushes and imports it.
+        // Never append a restarted device's potentially different route/rate.
+        if(activeWriter)deviceInterrupted.store(true,std::memory_order_relaxed);
+    }
     mutable juce::CriticalSection guard;
     juce::TimeSliceThread diskThread;
     std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> activeWriter;
@@ -106,4 +135,8 @@ private:
     int inputStartChannel=0;
     std::atomic<std::uint64_t> droppedBlocks{0},rejectedWrites{0},capturedFrames{0},queuedFrames{0};
     std::atomic<float> inputPeak{0.0f};
+    std::atomic<float> takePeak{0.0f};
+    std::atomic<std::uint64_t> silentFrames{0},missingInputBlocks{0};
+    std::atomic<bool> inputMissing{false},deviceInterrupted{false};
+    double recordingSampleRate=48000.0;
 };

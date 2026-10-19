@@ -1610,17 +1610,26 @@ private:
             return;
         }
         if(recorder.isRecording()){
+            if(recorder.wasDeviceInterrupted()){
+                toggleRecording(); // Flush and preserve any partial take on the message thread.
+                return;
+            }
             const float peak=recorder.consumeInputPeak();
-            // Avoid warning on normal gaps between words. At the 30 Hz UI
-            // refresh rate, roughly three seconds of silence triggers advice.
-            silentInputTicks=peak<0.001f ? juce::jmin(120,silentInputTicks+1) : 0;
-            const bool sustainedSilence=silentInputTicks>=90;
+            const auto frames=recorder.getCapturedFrames();
+            const auto now=juce::Time::getMillisecondCounterHiRes();
+            if(frames!=lastVocalFrames){lastVocalFrames=frames;lastVocalProgressMs=now;}
+            const bool stalled=now-lastVocalProgressMs>=3000.0;
+            const bool missing=recorder.isInputMissing();
+            const bool sustainedSilence=recorder.hasSustainedSilence();
             const double db=20.0*std::log10(std::max(1.0e-6f,peak));
-            inputLevel.setText("VOCAL INPUT  "+juce::String(db,0)+" dBFS"+
-                (peak>=0.98f ? "  |  CLIPPING" : sustainedSilence ? "  |  NO SIGNAL: check mic/input" : ""),
+            inputLevel.setText(missing ? "INPUT UNAVAILABLE: check microphone connection / input routing" :
+                stalled ? "NO AUDIO FRAMES: check audio device / permissions" :
+                "VOCAL INPUT  "+juce::String(db,0)+" dBFS"+
+                (peak>=0.98f ? "  |  CLIPPING" : sustainedSilence ? "  |  SILENT INPUT: check mute / gain" : ""),
                 juce::dontSendNotification);
             inputLevel.setColour(juce::Label::textColourId,
-                peak>=0.98f ? juce::Colour(0xfff44368) : juce::Colour(0xff73f9ae));
+                missing || stalled || peak>=0.98f ? juce::Colour(0xfff44368) :
+                sustainedSilence ? juce::Colour(0xffffc857) : juce::Colour(0xff73f9ae));
         }
         if(multiRecorder.isRecording()){
             juce::String levels("RECORDING INPUTS  ");
@@ -2027,7 +2036,6 @@ private:
             recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
             refreshMixer(); // Restore READY / NOT READY immediately after capture stops.
             monitorControl.setEnabled(false);
-            silentInputTicks=0;
             inputLevel.setText("INPUT LEVEL: idle",juce::dontSendNotification);
             const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : recorder.getDroppedBlocks();
             const auto rejected=wasMulti ? multiRecorder.getRejectedWrites() : recorder.getRejectedWrites();
@@ -2086,6 +2094,21 @@ private:
                     juce::String(dropped)+" audio input blocks were skipped. Check vocal timing.");
                 const auto take=recorder.file();
                 const auto savedBytes=take.existsAsFile() ? take.getSize() : juce::int64{0};
+                const bool interrupted=recorder.wasDeviceInterrupted();
+                const bool missing=recorder.getMissingInputBlocks()>0;
+                const bool silent=receivedFrames>0 && recorder.getTakePeak()<0.001f;
+                juce::WavAudioFormat wav;
+                auto savedStream=take.createInputStream();
+                auto savedReader=std::unique_ptr<juce::AudioFormatReader>(savedStream
+                    ? wav.createReaderFor(savedStream.release(),true) : nullptr);
+                const auto savedFrames=savedReader ? savedReader->lengthInSamples : juce::int64{0};
+                const double savedRate=savedReader ? savedReader->sampleRate : 0.0;
+                savedReader.reset();
+                const juce::String inputAdvice=interrupted
+                    ? "Microphone/audio device disconnected, stopped, or changed. Reconnect it and reselect the input in AUDIO DEVICES."
+                    : missing ? "Selected microphone input was unavailable. Check its connection and input routing."
+                    : silent ? "Audio frames were received, but the entire take stayed below -60 dBFS. Check microphone mute and input gain."
+                    : "";
                 juce::Logger::writeToLog(
                     "IDW vocal capture summary: received="+
                     juce::String(static_cast<juce::int64>(receivedFrames))+
@@ -2093,12 +2116,17 @@ private:
                     " frames, dropped="+juce::String(static_cast<juce::int64>(dropped))+
                     " blocks, rejected="+juce::String(static_cast<juce::int64>(rejected))+
                     " writes, WAV bytes="+juce::String(savedBytes)+
+                    ", saved frames="+juce::String(savedFrames)+
+                    ", missing input blocks="+juce::String(static_cast<juce::int64>(recorder.getMissingInputBlocks()))+
+                    ", device interrupted="+juce::String(interrupted ? "yes" : "no")+
+                    ", take peak="+juce::String(recorder.getTakePeak(),6)+
                     ", path="+take.getFullPathName());
-                if(receivedFrames==0 || !take.existsAsFile() || savedBytes<=44){
+                if(receivedFrames==0 || queuedFrames==0 || savedFrames<=0){
                     juce::AlertWindow::showMessageBoxAsync(
                         juce::MessageBoxIconType::WarningIcon,"No vocal audio captured",
-                        "Recording stopped, but no audio frames were received or the WAV file is empty. "+
-                        juce::String("Check the enabled microphone input and Windows microphone permissions.\n")+
+                        (inputAdvice.isNotEmpty() ? inputAdvice+"\n" : juce::String())+
+                        (receivedFrames==0 ? "No audio frames were received. Check the audio device and microphone permissions.\n" :
+                         "Audio reached the recorder, but no readable audio was saved. Check the recording folder and disk space.\n")+
                         "Destination: "+take.getFullPathName());
                 }else if(!importTake(take)){
                     juce::AlertWindow::showMessageBoxAsync(
@@ -2110,12 +2138,15 @@ private:
                     // Confirm the full record -> save -> import path during beta QA.
                     // A successful import is not proof that the microphone was audible.
                     juce::AlertWindow::showMessageBoxAsync(
-                        juce::MessageBoxIconType::InfoIcon,"Vocal take imported",
+                        inputAdvice.isNotEmpty() ? juce::MessageBoxIconType::WarningIcon : juce::MessageBoxIconType::InfoIcon,
+                        interrupted || missing ? "Interrupted vocal take preserved" :
+                        silent ? "Silent vocal take imported" : "Vocal take imported",
+                        (inputAdvice.isNotEmpty() ? inputAdvice+"\n\n" : juce::String())+
                         "WAV saved and added to track "+juce::String((int)selectedTrack+1)+
                         ".\nFrames received: "+juce::String(static_cast<juce::int64>(receivedFrames))+
                         "\nFile: "+take.getFullPathName()+
                         "\nApprox. captured duration: "+
-                        juce::String(deviceRate>0.0 ? (double)receivedFrames/deviceRate : 0.0,2)+" seconds"+
+                        juce::String(savedRate>0.0 ? (double)savedFrames/savedRate : 0.0,2)+" seconds"+
                         "\nDropped input blocks: "+juce::String(static_cast<juce::int64>(dropped))+
                         "\nRejected writes: "+juce::String(static_cast<juce::int64>(rejected))+
                         "\nPlay the take to confirm that microphone audio is audible.");
@@ -2298,6 +2329,8 @@ private:
                 return;
             }
             if(recorder.start(destination,deviceRate,1,callbackInput)){
+                lastVocalFrames=0;
+                lastVocalProgressMs=juce::Time::getMillisecondCounterHiRes();
                 // Preserve the precise routing used by the take for Windows QA.
                 juce::Logger::writeToLog(
                     "IDW vocal capture started | track="+
@@ -2309,6 +2342,7 @@ private:
                     " | WAV="+destination.getFullPathName());
                 record.setButtonText("STOP RECORD");
                 if(overdubControl.getToggleState())startOverdubPlayback();
+                startTimerHz(30); // Also meter vocal-only recordings and finalize device interruptions.
             }
             else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                 "Recording unavailable","Check microphone permission, device input and destination directory.");
@@ -2341,7 +2375,8 @@ private:
     juce::Colour customBackground{0xff080f1c};
     bool useCustomBackground=false;
     juce::Colour customAccent{0xff15d4ff};
-    int silentInputTicks=0;
+    std::uint64_t lastVocalFrames=0;
+    double lastVocalProgressMs=0.0;
     int activeSkin=0;
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};

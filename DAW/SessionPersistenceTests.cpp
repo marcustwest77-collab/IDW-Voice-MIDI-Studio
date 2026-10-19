@@ -555,6 +555,65 @@ int main(){
     throw std::runtime_error("valid microphone callback frame accounting");
  captureDiagnostics.stop();
  const auto sourceAudio=root.getChildFile("source.wav");
+ // Silence is received audio, unlike a missing channel or a take with no callbacks.
+ IDWTakeRecorder inputDiagnostics;
+ const auto emptyTake=root.getChildFile("no-callbacks.wav");
+ if(!inputDiagnostics.start(emptyTake,8000.0))throw std::runtime_error("empty take setup");
+ inputDiagnostics.stop();
+ juce::WavAudioFormat diagnosticWav;
+ auto emptyReader=std::unique_ptr<juce::AudioFormatReader>(
+     diagnosticWav.createReaderFor(emptyTake.createInputStream().release(),true));
+ if(!emptyReader || emptyReader->lengthInSamples!=0 || inputDiagnostics.getCapturedFrames()!=0 ||
+    inputDiagnostics.isInputMissing() || inputDiagnostics.wasDeviceInterrupted() || inputDiagnostics.hasSustainedSilence())
+    throw std::runtime_error("no callbacks misclassified as silence or disconnect");
+ emptyReader.reset();
+ if(!inputDiagnostics.start(root.getChildFile("silent-input.wav"),8000.0))
+    throw std::runtime_error("silent take setup");
+ std::vector<float> silence(24000,0.0f);
+ const float* silentChannels[]{silence.data()};
+ inputDiagnostics.audioDeviceIOCallbackWithContext(silentChannels,1,nullptr,0,23999,{});
+ if(inputDiagnostics.hasSustainedSilence())throw std::runtime_error("brief pause flagged as sustained silence");
+ inputDiagnostics.audioDeviceIOCallbackWithContext(silentChannels,1,nullptr,0,1,{});
+ if(!inputDiagnostics.hasSustainedSilence() || inputDiagnostics.isInputMissing() ||
+    inputDiagnostics.getCapturedFrames()!=24000 || inputDiagnostics.getTakePeak()!=0.0f)
+    throw std::runtime_error("three seconds of valid silent input not recognized");
+ const float tone[]{0.25f};
+ const float* toneChannels[]{tone};
+ inputDiagnostics.audioDeviceIOCallbackWithContext(toneChannels,1,nullptr,0,1,{});
+ if(inputDiagnostics.hasSustainedSilence() || inputDiagnostics.getTakePeak()!=0.25f)
+    throw std::runtime_error("signal did not clear silence");
+ inputDiagnostics.consumeInputPeak();
+ if(inputDiagnostics.getTakePeak()!=0.25f)throw std::runtime_error("meter erased whole-take signal evidence");
+ const float* nullChannels[]{nullptr};
+ inputDiagnostics.audioDeviceIOCallbackWithContext(nullChannels,1,nullptr,0,1,{});
+ if(!inputDiagnostics.isInputMissing() || inputDiagnostics.getMissingInputBlocks()!=1 ||
+    inputDiagnostics.getCapturedFrames()!=24001 || inputDiagnostics.hasSustainedSilence())
+    throw std::runtime_error("missing input classified as captured silence");
+ inputDiagnostics.audioDeviceIOCallbackWithContext(toneChannels,1,nullptr,0,1,{});
+ if(inputDiagnostics.isInputMissing() || inputDiagnostics.getMissingInputBlocks()!=1)
+    throw std::runtime_error("input recovery lost historical diagnostic evidence");
+ inputDiagnostics.audioDeviceStopped();
+ inputDiagnostics.audioDeviceAboutToStart(nullptr);
+ inputDiagnostics.audioDeviceIOCallbackWithContext(toneChannels,1,nullptr,0,1,{});
+ if(!inputDiagnostics.isRecording() || !inputDiagnostics.wasDeviceInterrupted() ||
+    inputDiagnostics.getCapturedFrames()!=24002)
+    throw std::runtime_error("device interruption lost pending take or appended restarted input");
+ inputDiagnostics.stop();
+ auto partialReader=std::unique_ptr<juce::AudioFormatReader>(
+     diagnosticWav.createReaderFor(inputDiagnostics.file().createInputStream().release(),true));
+ if(!partialReader || partialReader->lengthInSamples!=static_cast<juce::int64>(inputDiagnostics.getQueuedFrames()))
+    throw std::runtime_error("interrupted take was not flushed");
+ partialReader.reset();
+ if(inputDiagnostics.start(root.getChildFile("bad-restart.wav"),0.0) || !inputDiagnostics.wasDeviceInterrupted())
+    throw std::runtime_error("failed start erased interruption");
+ if(!inputDiagnostics.start(root.getChildFile("new-diagnostics.wav"),48000.0) ||
+    inputDiagnostics.wasDeviceInterrupted() || inputDiagnostics.isInputMissing() ||
+    inputDiagnostics.getMissingInputBlocks()!=0 || inputDiagnostics.hasSustainedSilence() ||
+    inputDiagnostics.getTakePeak()!=0.0f)
+    throw std::runtime_error("new take inherited stale input diagnostics");
+ inputDiagnostics.audioDeviceAboutToStart(nullptr);
+ if(!inputDiagnostics.wasDeviceInterrupted())throw std::runtime_error("restart without stop not detected");
+ inputDiagnostics.stop();
  // Construct a genuine 16-bit PCM WAV fixture rather than copying arbitrary bytes.
  juce::WavAudioFormat wav;
  auto stream=std::unique_ptr<juce::FileOutputStream>(sourceAudio.createOutputStream());
