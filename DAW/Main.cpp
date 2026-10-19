@@ -6,6 +6,7 @@
 #include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
+#include "TrackVocalEffects.h"
 #include "TimelineMath.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
@@ -589,7 +590,7 @@ public:
         play.onClick=[this]{if(playing.load() || loopbackCapture.isActive() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);
             std::atomic_store_explicit(&playbackSession,
                 std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
-            sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
+            sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;refreshMixer();startTimerHz(30);repaint();}};
         stop.onClick=[this]{if(exportRunning.load())return;if(loopbackCapture.isActive() || loopbackCapture.isComplete()){loopbackCapture.cancel();liveCalibration.setEnabled(true);}else if(loopbackCapture.consumeFailed()){loopbackCapture.cancel();liveCalibration.setEnabled(true);}if((recorder.isRecording() || multiRecorder.isRecording()))toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;refreshMixer();repaint();};
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
@@ -624,6 +625,16 @@ public:
         soloControl.onClick=[this]{
             if(playing.load() || session.tracks.empty())return;
             session.tracks[selectedTrack].solo=soloControl.getToggleState();repaint();
+        };
+        vocalFxPreset.addItemList({"VOCAL FX: OFF","VOCAL FX: GENTLE","VOCAL FX: WARM","VOCAL FX: FORWARD"},1);
+        vocalFxPreset.setTooltip("Selected audio track playback and WAV export. Stop transport to change. Original take and live monitoring stay dry.");
+        addAndMakeVisible(vocalFxPreset);
+        vocalFxPreset.onChange=[this]{
+            if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load()){
+                refreshMixer();return;
+            }
+            session.setTrackVocalFxPreset(selectedTrack,vocalFxPreset.getSelectedId()-1);
+            refreshMixer();
         };
         previousTrack.setButtonText("< TRACK");
         nextTrack.setButtonText("TRACK >");
@@ -775,6 +786,7 @@ public:
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
         clearClips.setBounds(masterRow.removeFromLeft(120).reduced(3));
+        vocalFxPreset.setBounds(masterRow.removeFromLeft(220).reduced(3));
         auto synthRow=area.removeFromTop(35);
         attackLabel.setBounds(synthRow.removeFromLeft(100));
         attackControl.setBounds(synthRow.removeFromLeft(175));
@@ -1232,6 +1244,7 @@ private:
         const auto blockStart=sessionFrames.load(std::memory_order_relaxed);
         const bool anySolo=std::any_of(playback.tracks.begin(),playback.tracks.end(),[](const auto& t){return t.solo;});
         for(auto& slot:sources) {
+            if(blockStart==0)slot->vocalFx.reset(); // Audio-thread reset on every playback/overdub start.
             if(!slot->reader || slot->trackIndex>=playback.tracks.size())continue;
             const auto& track=playback.tracks[slot->trackIndex];
             if(track.mute || (anySolo && !track.solo) || track.clips.empty())continue;
@@ -1242,6 +1255,12 @@ private:
             slot->scratch.clear(0,window.frames);
             juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
             slot->transport.getNextAudioBlock(readInfo);
+            auto* left=slot->scratch.getWritePointer(0);
+            auto* right=slot->scratch.getWritePointer(1);
+            for(int i=0;i<window.frames;++i){
+                const auto wet=slot->vocalFx.process(left[i],right[i],track.vocalFxPreset);
+                left[i]=wet.left;right[i]=wet.right;
+            }
             const float gain=juce::jlimit(0.0f,2.0f,track.gain);
             const float pan=juce::jlimit(-1.0f,1.0f,track.pan);
             const float leftGain=gain*(pan>0.0f?1.0f-pan:1.0f);
@@ -1320,6 +1339,9 @@ private:
         if(session.tracks.empty())return;
         if(selectedTrack>=session.tracks.size())selectedTrack=0;
         const auto& track=session.tracks[selectedTrack];
+        vocalFxPreset.setEnabled(track.type==idw::daw::TrackType::audio &&
+            !playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() && !exportRunning.load());
+        vocalFxPreset.setSelectedId(track.vocalFxPreset+1,juce::dontSendNotification);
         synthPreset.setEnabled(track.type==idw::daw::TrackType::midi &&
             !playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load());
         synthPreset.setSelectedId(track.synthPreset+1,juce::dontSendNotification);
@@ -1673,6 +1695,7 @@ private:
         size_t trackIndex=0;
         double sourceOffsetSeconds=0.0;
         juce::AudioBuffer<float> scratch;
+        idw::daw::TrackVocalEffects vocalFx;
     };
     void addAudioTrack(){
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return; // Avoid mutating the audio graph during playback.
@@ -2006,6 +2029,7 @@ private:
             slot->transport.start();
         }
         playing.store(true);
+        refreshMixer();
         startTimerHz(30);
     }
     void toggleRecording(){
@@ -2398,6 +2422,7 @@ private:
     double takeInputLatencySeconds=0.0;
     double takeManualTrimSeconds=0.0;
     juce::Label title,tempoLabel,gainLabel,panLabel,inputLevel,latencyLabel,recordReadiness;
+    juce::ComboBox vocalFxPreset;
     juce::Slider gainControl,panControl,masterGain,latencyAdjust;
     juce::Label masterLabel,eqLabel,limitLabel;
     juce::Slider ceilingControl;

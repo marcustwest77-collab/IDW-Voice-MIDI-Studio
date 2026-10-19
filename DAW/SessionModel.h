@@ -21,6 +21,7 @@ struct Track {
     int inputChannel=0; // Saved audio input preference, zero-based (0..7).
     float gain=1.0f;
     float pan=0.0f;
+    int vocalFxPreset=0; // Audio insert: Off, Gentle, Warm, Forward.
     int synthPreset=0; // Keys=0, Bass=1, Lead=2, Organ=3, Pad=4
     float synthAttackMs=5.0f,synthReleaseMs=5.0f;
     std::vector<Clip> clips;
@@ -35,6 +36,10 @@ public:
         if (tracks.size() >= 128) return false;
         tracks.push_back({(type == TrackType::audio ? "Audio " : "MIDI ") + std::to_string(tracks.size()+1),type});
         return true;
+    }
+    bool setTrackVocalFxPreset(size_t index,int preset) {
+        if(index>=tracks.size() || tracks[index].type!=TrackType::audio || preset<0 || preset>3)return false;
+        tracks[index].vocalFxPreset=preset;return true;
     }
     bool removeTrack(size_t index) {
         if(index>=tracks.size()) return false;

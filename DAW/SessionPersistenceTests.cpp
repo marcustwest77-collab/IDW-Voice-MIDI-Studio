@@ -16,6 +16,21 @@
 #include <iostream>
 int main(){
  using namespace idw::daw;
+ for(int fx=0;fx<=3;++fx){
+    Session source;source.addTrack(TrackType::audio);source.setTrackVocalFxPreset(0,fx);
+    Session restored;
+    auto json=sessionToJson(source);
+    if(!sessionFromJson(json,restored) || restored.tracks[0].vocalFxPreset!=fx)
+        throw std::runtime_error("vocal FX round trip");
+    auto* track=json.getDynamicObject()->getProperty("tracks").getArray()->getReference(0).getDynamicObject();
+    track->removeProperty("vocalFxPreset");
+    if(!sessionFromJson(json,restored) || restored.tracks[0].vocalFxPreset!=0)
+        throw std::runtime_error("old project must default FX off");
+    for(const juce::var invalid:{juce::var(-1),juce::var(4),juce::var("1"),juce::var(1.5)}){
+        track->setProperty("vocalFxPreset",invalid);
+        if(sessionFromJson(json,restored))throw std::runtime_error("invalid vocal FX accepted");
+    }
+ }
  AIProposal action{AIProposal::Kind::tempo};
  if(!parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":145}})"),action)
     || action.kind!=AIProposal::Kind::tempo || action.bpm!=145)
