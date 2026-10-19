@@ -1611,9 +1611,13 @@ private:
         }
         if(recorder.isRecording()){
             const float peak=recorder.consumeInputPeak();
+            // Avoid warning on normal gaps between words. At the 30 Hz UI
+            // refresh rate, roughly three seconds of silence triggers advice.
+            silentInputTicks=peak<0.001f ? juce::jmin(120,silentInputTicks+1) : 0;
+            const bool sustainedSilence=silentInputTicks>=90;
             const double db=20.0*std::log10(std::max(1.0e-6f,peak));
             inputLevel.setText("VOCAL INPUT  "+juce::String(db,0)+" dBFS"+
-                (peak>=0.98f ? "  |  CLIPPING" : peak<0.001f ? "  |  Check mic signal" : ""),
+                (peak>=0.98f ? "  |  CLIPPING" : sustainedSilence ? "  |  NO SIGNAL: check mic/input" : ""),
                 juce::dontSendNotification);
             inputLevel.setColour(juce::Label::textColourId,
                 peak>=0.98f ? juce::Colour(0xfff44368) : juce::Colour(0xff73f9ae));
@@ -2023,6 +2027,7 @@ private:
             recorder.stop();multiRecorder.stop();record.setButtonText("RECORD VOCAL");
             refreshMixer(); // Restore READY / NOT READY immediately after capture stops.
             monitorControl.setEnabled(false);
+            silentInputTicks=0;
             inputLevel.setText("INPUT LEVEL: idle",juce::dontSendNotification);
             const auto dropped=wasMulti ? multiRecorder.getDroppedBlocks() : recorder.getDroppedBlocks();
             const auto rejected=wasMulti ? multiRecorder.getRejectedWrites() : recorder.getRejectedWrites();
@@ -2336,6 +2341,7 @@ private:
     juce::Colour customBackground{0xff080f1c};
     bool useCustomBackground=false;
     juce::Colour customAccent{0xff15d4ff};
+    int silentInputTicks=0;
     int activeSkin=0;
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
