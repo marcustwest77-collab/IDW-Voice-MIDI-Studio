@@ -53,7 +53,8 @@ jobs:
           Copy-Item DAW/ai/idw_mcp_server.py beta-windows/AI/
           Copy-Item docs/V14_WINDOWS_RELEASE.md beta-windows/Documentation/
           Copy-Item DAW/README.md beta-windows/Documentation/DEVELOPMENT-NOTES.md
-          $version = (Get-Item beta-windows/IDW-DAW-V14-Beta.exe).VersionInfo.FileVersion
+          $info = (Get-Item beta-windows/IDW-DAW-V14-Beta.exe).VersionInfo
+          $version = '{0}.{1}.{2}.{3}' -f $info.FileMajorPart, $info.FileMinorPart, $info.FileBuildPart, $info.FilePrivatePart
           if ($version -ne '14.0.0.0') { throw "Unexpected DAW file version: $version" }
           @{
             source_commit = $env:GITHUB_SHA
