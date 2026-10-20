@@ -872,8 +872,8 @@ public:
         lyricsPanel.setBounds(dockX,430,dockWidth,juce::jmax(0,dockBottom-430));
         const int toolWidth=juce::jmax(100,arrangementRight()-20);
         const int toolHeight=juce::jmax(0,dockBottom-335);
-        connectPanel.setBounds(20,335,juce::jmin(toolWidth,565),juce::jmin(toolHeight,205));
-        aiPanel.setBounds(20,335,juce::jmin(toolWidth,575),juce::jmin(toolHeight,225));
+        connectPanel.setBounds(20,335,juce::jmin(toolWidth,565),juce::jmin(toolHeight,220));
+        aiPanel.setBounds(20,335,juce::jmin(toolWidth,640),juce::jmin(toolHeight,268));
         pianoViewport.setBounds(20,335,toolWidth,toolHeight);
         pianoRoll.setSize(juce::jmax(100,toolWidth-pianoViewport.getScrollBarThickness()),37*13);
     }

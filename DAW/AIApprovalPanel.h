@@ -224,7 +224,7 @@ public:
         copyStatus.setBounds(row.removeFromLeft(90).reduced(2));
         paste.setBounds(row.removeFromLeft(88).reduced(2));
         review.setBounds(row.removeFromLeft(113).reduced(2));
-        apply.setBounds(row.removeFromLeft(72).reduced(2));
+        apply.setBounds(row.removeFromLeft(125).reduced(2));
         a.removeFromTop(6);
         feedback.setBounds(a.removeFromTop(35));
     }

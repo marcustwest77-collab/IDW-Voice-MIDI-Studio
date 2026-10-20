@@ -105,3 +105,7 @@ Changing the selected track clears a clip selection belonging to another track a
 ### Project-switch editor reset
 
 A successful project load now clears clip and note selections, active drag state, timeline and piano-roll scrolling, pending voice-record confirmation, and the previous AI proposal review. Failed project loads leave the current editor state intact. Empty projects disable track-specific controls instead of showing an editable mixer for a nonexistent track. Native CI validation is pending.
+
+### Tool panel fit
+
+AI Studio now reserves 640 x 268 pixels so its complete approval button and feedback fit. Connect reserves 565 x 220 pixels so its explanatory notice fits. Both remain inside the arrangement at the default 1450 x 850 window size, including with the mixer expanded. Geometry was checked against the component row sizes; native on-screen validation remains pending.
