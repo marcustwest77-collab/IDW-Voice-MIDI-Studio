@@ -117,3 +117,7 @@ Arrangement audio clips now draw cached waveform previews beneath their filename
 ### MIDI arrangement preview
 
 MIDI lanes now show note bars at the same beat scale as audio clips. Bar lengths follow note durations; pitch determines vertical position within the lane, and velocity affects brightness. Notes are clipped at the side dock boundary. This is an arrangement overview; note editing remains in the piano roll. MIDI data and rendering are unchanged. Native build and visual validation are pending.
+
+### Desktop help and documentation
+
+Added in-app QUICK HELP for recording, clip editing and project/audio exports. BUILD INFO now lists arrangement previews and explicitly distinguishes unfinished plugin hosting. Updated the packaged Combined Beta Guide with the desktop workflow, workspace boundaries and a focused return-to-desktop check. The older workspace manual links to this guide. Desktop hardware testing remains deferred until the user returns.

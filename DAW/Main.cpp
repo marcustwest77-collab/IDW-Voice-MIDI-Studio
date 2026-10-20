@@ -507,6 +507,29 @@ public:
         exportProject.setButtonText("EXPORT PORTABLE");
         bounce.setButtonText("BOUNCE WAV");
         cancelBounce.setButtonText("CANCEL EXPORT");cancelBounce.setEnabled(false);
+        quickHelpButton.setButtonText("QUICK HELP");
+        quickHelpButton.setTooltip("Recording, editing, lyrics and export essentials.");
+        addAndMakeVisible(quickHelpButton);
+        quickHelpButton.onClick=[this]{
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                "IDW Desktop - Quick Help",
+                "RECORD OVER A BEAT\n"
+                "Open WAV/AIFF to load a beat. Add an audio track, select it, choose your input, "
+                "then enable ARM INPUT and PLAY BEAT WHILE RECORDING. Check READY, then RECORD VOCAL. "
+                "Press STOP RECORD to finish.\n\n"
+                "EDIT AND MIX\n"
+                "Stop transport before editing. Click a track or clip to select its mixer and FX controls. "
+                "Drag a clip to move it; drag its right edge to resize. Left/Right nudges a selected clip; "
+                "Shift+Left/Right changes its length. Select a MIDI track and open PIANO ROLL to edit notes.\n\n"
+                "SAVE YOUR WORK\n"
+                "SAVE PROJECT keeps arrangement, lyrics and mix settings. EXPORT PORTABLE copies the "
+                "project and its audio for transfer. BOUNCE WAV creates your finished audio mix.\n\n"
+                "Vocal FX affects playback and export; original recordings stay dry. "
+                "Waveforms show original audio. Full pitch correction and third-party plugin hosting "
+                "are not integrated into this timeline.\n\n"
+                "For a problem report, include BUILD INFO and what you clicked. "
+                "The installed Combined Beta Guide has the full desktop walkthrough.");
+        };
         buildInfoButton.setButtonText("BUILD INFO");
         buildInfoButton.setTooltip("Show the exact installed beta revision for troubleshooting.");
         addAndMakeVisible(buildInfoButton);
@@ -514,9 +537,11 @@ public:
             const juce::String details=juce::String("IDW Desktop DAW - V14 Beta\nVersion: ")+
                 ProjectInfo::versionString+"\nSource revision: "+IDW_DAW_SOURCE_REVISION+
                 "\n\nIncludes ten factory skins, vocal FX presets and amount, lyrics notebook, "
-                "built-in MIDI WAV export, and master mix recall."
+                "built-in MIDI WAV export, master mix recall, docked tools, audio waveforms "
+                "and MIDI arrangement previews."
                 "\n\nThis is the desktop integration beta. Full pitch correction and the complete "
-                "Song Studio workflow are still separate from this timeline."
+                "Song Studio workflow are still separate from this timeline. "
+                "Third-party plugin hosting is not implemented."
                 "\n\nInclude this revision when reporting a problem.";
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                 "IDW Build Info",details);
@@ -797,6 +822,7 @@ public:
         auto header=area.removeFromTop(42);
 
         buildInfoButton.setBounds(header.removeFromRight(110).reduced(3));
+        quickHelpButton.setBounds(header.removeFromRight(110).reduced(3));
         lyricsButton.setBounds(header.removeFromRight(90).reduced(3));
         skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
         skinSelector.setBounds(header.removeFromRight(165).reduced(3));
@@ -2634,7 +2660,7 @@ private:
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
     IDWLyricsPanel lyricsPanel;
-    juce::TextButton lyricsButton,buildInfoButton;
+    juce::TextButton lyricsButton,buildInfoButton,quickHelpButton;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
     IDWLoopbackCapture loopbackCapture;

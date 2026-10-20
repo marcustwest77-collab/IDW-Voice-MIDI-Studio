@@ -2,6 +2,10 @@
 
 IDW Voice MIDI Studio turns a live singing or beatboxing voice into MIDI in real time. It ships as a native C++/JUCE plugin (Standalone, VST3, and on macOS also Audio Unit) plus an optional Python companion, Audio Lab, for lyrics, dictation and take editing. This manual covers the plugin; see [Audio Lab](#audio-lab-companion) below for the companion app, and `docs/FL_STUDIO_SETUP.md` for FL Studio-specific routing.
 
+For the **IDW Combined Studio Beta** desktop timeline, recording controls, lyrics,
+waveforms and piano roll, use the [Combined Beta Guide](COMBINED-BETA.md). The
+instructions below cover the separate Voice MIDI/Tune/Song Studio workspace.
+
 ## V13 song beat arrangement (local preview)
 
 Song Studio now offers **Base** and numbered bars beside Bars. Base repeats until you edit a numbered bar; an asterisk marks that bar's custom beat. **Beat tools** copies the displayed pattern to an inclusive bar range, returns a selected bar to Base, and undoes/redoes beat or track edits. Stop transport before editing. Save song retains the arrangement; custom beats require V13 to reopen. See the [V13 guide](V13-BEAT-ARRANGEMENT.md) for setup, compatibility and testing. V13 installer validation is pending.
