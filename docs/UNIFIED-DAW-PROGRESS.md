@@ -93,3 +93,7 @@ revisions. No network connection or diagnostic upload is involved.
 ### Docked desktop layout
 
 Vocal FX and lyrics now sit beside the arrangement, with the existing mixer below. Arrangement painting and pointer selection stop at the dock boundary. Lyrics open by default; timeline shortcuts are suppressed only while the notebook has keyboard focus. Expanding the mixer also resizes the notebook. Master controls now fit above the arrangement, and voice commands and peak meters sit in the footer. This is the first structural pass toward the approved concept, not a claim of complete visual parity. Native compilation and Windows visual review remain pending.
+
+### Track selection and dock coexistence
+
+Clicking a lane header, empty lane, or clip selects that track and refreshes mixer, input, and vocal FX controls before clip editing begins. The FX card names its target track and identifies MIDI tracks as unsupported for these audio effects. Lyrics remain visible alongside Connect, AI Studio, and the piano roll; the piano roll scrolls vertically to retain its full pitch range in the shorter docked view. Those tools share the arrangement region and no longer cover the dock or bottom mixer. Parent timeline selection and scrolling are blocked while an arrangement tool is open. These changes await native CI compilation and interactive Windows validation.

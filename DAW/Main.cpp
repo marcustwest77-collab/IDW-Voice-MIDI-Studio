@@ -527,7 +527,6 @@ public:
         lyricsButton.onClick=[this]{
             lyricsPanel.setVisible(!lyricsPanel.isVisible());
             if(lyricsPanel.isVisible()){
-                aiPanel.setVisible(false);connectPanel.setVisible(false);pianoRoll.setVisible(false);
                 lyricsPanel.toFront(false);lyricsPanel.focusEditor();
             }
         };
@@ -535,8 +534,10 @@ public:
         addChildComponent(connectPanel);
         connectButton.onClick=[this]{
             connectPanel.setVisible(!connectPanel.isVisible());
-            lyricsPanel.setVisible(false);
-            connectPanel.toFront(false);
+            if(connectPanel.isVisible()){
+                aiPanel.setVisible(false);pianoViewport.setVisible(false);
+                connectPanel.toFront(false);
+            }
         };
         synthPreset.addItem("Keys",1);
         synthPreset.addItem("Bass",2);
@@ -568,24 +569,26 @@ public:
         releaseControl.onValueChange=updateEnvelope;
         pianoButton.setButtonText("PIANO ROLL");
         addAndMakeVisible(pianoButton);
-        addChildComponent(pianoRoll);
+        addChildComponent(pianoViewport);
+        pianoViewport.setViewedComponent(&pianoRoll,false);
+        pianoViewport.setScrollBarsShown(true,false);
         pianoRoll.session=&session;
         pianoButton.onClick=[this]{
             if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
             if(selectedTrack>=session.tracks.size() ||
                session.tracks[selectedTrack].type!=idw::daw::TrackType::midi)return;
             pianoRoll.trackIndex=selectedTrack;
-            pianoRoll.setVisible(!pianoRoll.isVisible());
-            if(pianoRoll.isVisible()){
-                lyricsPanel.setVisible(false);aiPanel.setVisible(false);connectPanel.setVisible(false);
-                pianoRoll.toFront(false);pianoRoll.repaint();
+            pianoViewport.setVisible(!pianoViewport.isVisible());
+            if(pianoViewport.isVisible()){
+                aiPanel.setVisible(false);connectPanel.setVisible(false);
+                pianoViewport.toFront(false);pianoRoll.repaint();
             }
         };
         aiButton.setButtonText("IDW AI STUDIO");
         addChildComponent(aiPanel);
         aiButton.onClick=[this]{
             aiPanel.setVisible(!aiPanel.isVisible());
-            if(aiPanel.isVisible()){lyricsPanel.setVisible(false);connectPanel.setVisible(false);aiPanel.toFront(false);}
+            if(aiPanel.isVisible()){connectPanel.setVisible(false);pianoViewport.setVisible(false);aiPanel.toFront(false);}
         };
         aiPanel.getSanitizedStatus=[this]{
             return juce::JSON::toString(idw::daw::aiSessionStatus(
@@ -628,7 +631,7 @@ public:
         overdubControl.setToggleState(false,juce::dontSendNotification);
         addAndMakeVisible(overdubControl);
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
-        play.onClick=[this]{if(playing.load() || loopbackCapture.isActive() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);
+        play.onClick=[this]{if(playing.load() || loopbackCapture.isActive() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoViewport.setVisible(false);
             std::atomic_store_explicit(&playbackSession,
                 std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
             sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;refreshMixer();startTimerHz(30);repaint();}};
@@ -861,9 +864,12 @@ public:
         vocalFxPreset.setBounds(dockX+10,354,dockWidth-20,28);
         vocalFxMix.setBounds(dockX+10,386,dockWidth-20,28);
         lyricsPanel.setBounds(dockX,430,dockWidth,juce::jmax(0,dockBottom-430));
-        connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
-        aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
-        pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
+        const int toolWidth=juce::jmax(100,arrangementRight()-20);
+        const int toolHeight=juce::jmax(0,dockBottom-335);
+        connectPanel.setBounds(20,335,juce::jmin(toolWidth,565),juce::jmin(toolHeight,205));
+        aiPanel.setBounds(20,335,juce::jmin(toolWidth,575),juce::jmin(toolHeight,225));
+        pianoViewport.setBounds(20,335,toolWidth,toolHeight);
+        pianoRoll.setSize(juce::jmax(100,toolWidth-pianoViewport.getScrollBarThickness()),37*13);
     }
     void startDictation(){
 #if JUCE_WINDOWS
@@ -980,7 +986,7 @@ public:
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
         const int mixerTop=getHeight()-mixerHeight-48;
         const int arrangementBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
-        if(event.x>=20 && event.x<arrangementRight() && event.y>=366 && event.y<arrangementBottom && !session.tracks.empty() && !aiPanel.isVisible() && !connectPanel.isVisible()){
+        if(event.x>=20 && event.x<arrangementRight() && event.y>=366 && event.y<arrangementBottom && !session.tracks.empty() && !aiPanel.isVisible() && !connectPanel.isVisible() && !pianoViewport.isVisible()){
             const int visible=juce::jmax(1,(arrangementBottom-366)/70);
             const size_t maximum=session.tracks.size()>(size_t)visible ?
                 session.tracks.size()-(size_t)visible : 0;
@@ -995,7 +1001,7 @@ public:
         draggingClip=false;
         selectedClipValid=false;
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() ||
-           aiPanel.isVisible() || connectPanel.isVisible())return;
+           aiPanel.isVisible() || connectPanel.isVisible() || pianoViewport.isVisible())return;
         // The Neo Mixer overview doubles as a channel selector when stopped.
         // Handle this before hit-testing clips beneath the overview.
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
@@ -1021,13 +1027,19 @@ public:
             return;
         }
         constexpr int top=366, height=70, left=205;
-        if(e.y<top || e.x<left || e.x>=arrangementRight() || session.tracks.empty())return;
+        if(e.y<top || e.x<20 || e.x>=arrangementRight() || session.tracks.empty())return;
         const int visibleMixerHeight=neoMixerExpanded ? 190 : 112;
         const int visibleMixerTop=getHeight()-visibleMixerHeight-48;
         const int arrangementLimit=visibleMixerTop>420 ? visibleMixerTop-8 : getHeight()-48;
         if(e.y>=arrangementLimit)return;
         const auto ti=(size_t)((e.y-top)/height)+arrangementScrollTrack;
         if(ti>=session.tracks.size())return;
+        // Lane, header, and clip clicks must all target the same mixer/FX track.
+        selectedTrack=ti;
+        refreshMixer();
+        grabKeyboardFocus();
+        repaint();
+        if(e.x<left)return;
         const auto& clips=session.tracks[ti].clips;
         for(size_t i=clips.size();i>0;--i){
             const auto& c=clips[i-1];
@@ -1089,7 +1101,11 @@ public:
         deck({20.0f,62.0f,fullWidth,84.0f},"");
         deck({20.0f,146.0f,fullWidth,106.0f},"");
         deck({20.0f,252.0f,fullWidth,73.0f},"");
-        deck({(float)arrangementRight()+16.0f,330.0f,324.0f,92.0f},"VOCAL FX — SELECTED TRACK");
+        const auto fxHeading=selectedTrack<session.tracks.size()
+            ? "VOCAL FX / "+juce::String(session.tracks[selectedTrack].name)+
+                (session.tracks[selectedTrack].type==idw::daw::TrackType::midi ? " (AUDIO ONLY)" : "")
+            : juce::String("VOCAL FX / NO TRACK");
+        deck({(float)arrangementRight()+16.0f,330.0f,324.0f,92.0f},fxHeading);
         const auto rect=getLocalBounds().reduced(20);
         const int top=330, trackHeight=70, left=205;
         g.setColour(juce::Colour(idw::daw::factorySkin(activeSkin).header));g.fillRect(20,top,arrangementRight()-20,36);
@@ -2530,6 +2546,7 @@ private:
     juce::Label attackLabel,releaseLabel;
     juce::Slider attackControl,releaseControl;
     IDWPianoRoll pianoRoll;
+    juce::Viewport pianoViewport;
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
     IDWLyricsPanel lyricsPanel;
