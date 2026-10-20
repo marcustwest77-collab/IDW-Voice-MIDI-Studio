@@ -36,3 +36,14 @@ that project's words; projects without lyrics open with a blank notebook.
 This is a manually edited notebook, not automatic transcription, timed lyrics,
 or import of the separate Song Studio project format. It allows 32,768
 characters. Older V14 builds ignore this field and discard it on re-save.
+
+## Built-in MIDI instrument WAV export
+
+BOUNCE WAV now includes piano-roll notes with the same built-in Keys, Bass,
+Lead, Organ and Pad instruments used in playback. MIDI-only projects can export,
+and notes after the last audio clip extend the export. Track volume, pan,
+mute/solo and the master tone/volume/ceiling apply. Muted material still retains
+its timeline duration, matching the existing audio export behavior.
+
+This renders the built-in instruments; it does not capture external MIDI
+hardware or host third-party instrument plugins.

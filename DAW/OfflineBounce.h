@@ -2,27 +2,34 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "SessionModel.h"
 #include "TrackVocalEffects.h"
+#include "MidiSineSynth.h"
 #include <algorithm>
 #include <cmath>
 #include <atomic>
 namespace idw::daw {
 // Offline stereo bounce. Reads source files into small blocks and sums against
-// the shared beat clock. Intended for PCM WAV/AIFF project clips, not MIDI yet.
+// the shared beat clock, including the built-in piano-roll instrument renderer.
 // Call only from a non-audio thread. Returns false and a readable error.
 inline bool renderSessionWav(const Session& session,const juce::File& destination,
                             juce::String& error,int sampleRate=44100,float masterGain=1.0f,float ceilingDb=-1.0f,float lowDb=0.0f,float highDb=0.0f,
                             std::atomic<float>* progress=nullptr,std::atomic<bool>* cancel=nullptr){
-    if(session.bpm<=0 || sampleRate<8000 || sampleRate>192000 || !std::isfinite(masterGain) || !std::isfinite(ceilingDb) || !std::isfinite(lowDb) || !std::isfinite(highDb)){
+    if(!std::isfinite(session.bpm) || session.bpm<=0 || sampleRate<8000 || sampleRate>192000 || !std::isfinite(masterGain) || !std::isfinite(ceilingDb) || !std::isfinite(lowDb) || !std::isfinite(highDb)){
         error="Invalid bounce rate or tempo.";return false;
     }
     double lastBeat=0.0;
-    for(const auto& t:session.tracks)
+    for(const auto& t:session.tracks){
         for(const auto& c:t.clips)lastBeat=std::max(lastBeat,c.startBeat+c.lengthBeats);
-    if(lastBeat<=0){error="Session has no clips.";return false;}
-    const int64_t frames=(int64_t)std::ceil(lastBeat*60.0/session.bpm*sampleRate);
-    if(frames<=0 || frames>(int64_t)sampleRate*60*60*4){
+        if(t.type==TrackType::midi)
+            for(const auto& note:t.notes)lastBeat=std::max(lastBeat,note.startBeat+note.lengthBeats);
+    }
+    if(lastBeat<=0){error="Session has no audio clips or MIDI notes.";return false;}
+    // Check the floating-point duration before narrowing: distant MIDI notes and
+    // malformed timing must not overflow the frame count.
+    const double requestedFrames=std::ceil(lastBeat*60.0/session.bpm*sampleRate);
+    if(!std::isfinite(requestedFrames) || requestedFrames<=0 || requestedFrames>(double)sampleRate*60*60*4){
         error="Export duration must be under four hours.";return false;
     }
+    const int64_t frames=(int64_t)requestedFrames;
     if(destination.existsAsFile()){error="Choose a new WAV filename.";return false;}
     auto stream=std::unique_ptr<juce::FileOutputStream>(destination.createOutputStream());
     if(!stream){error="Cannot create WAV output.";return false;}
@@ -154,6 +161,9 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 mix.addSample(1,offset+i,r*clip.right);
             }
         }
+        // Same instruments, gain/pan, mute/solo and note envelopes as playback.
+        // Mix before master tone/gain/ceiling so MIDI follows the whole output chain.
+        renderMidiSine(session,mix.getWritePointer(0),mix.getWritePointer(1),count,pos,sampleRate);
         for(int ch=0;ch<2;++ch){
             auto* p=mix.getWritePointer(ch);
             float state=filterState[ch];

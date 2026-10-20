@@ -377,6 +377,49 @@ int main(){
     throw std::runtime_error("accepted canceled bounce");
  if(canceledOutput.existsAsFile() || error!="Export canceled.")
     throw std::runtime_error("canceled bounce left an output");
+ // Piano-roll notes must export even without audio clips, through every preset.
+ Session midiOnly;midiOnly.addTrack(TrackType::midi);
+ midiOnly.addMidiNote(0,{64,1025.0/22050.0,0.2,100});
+ midiOnly.setTrackMix(0,0.75f,-0.5f);
+ for(int preset=0;preset<=4;++preset){
+    midiOnly.setTrackSynthPreset(0,preset);
+    const auto midiOutput=root.getChildFile("midi-"+juce::String(preset)+".wav");
+    if(!renderSessionWav(midiOnly,midiOutput,error))throw std::runtime_error("MIDI-only export");
+    auto midiReader=std::unique_ptr<juce::AudioFormatReader>(wav.createReaderFor(midiOutput.createInputStream().release(),true));
+    if(!midiReader || midiReader->lengthInSamples!=5435)throw std::runtime_error("MIDI duration");
+    juce::AudioBuffer<float> actual(2,5435),expected(2,5435);expected.clear();
+    midiReader->read(&actual,0,5435,0,true,true);
+    for(int pos=0;pos<5435;pos+=1024)
+        renderMidiSine(midiOnly,expected.getWritePointer(0,pos),expected.getWritePointer(1,pos),std::min(1024,5435-pos),pos,44100);
+    for(int ch=0;ch<2;++ch)for(int i=0;i<5435;++i)
+        if(std::abs(actual.getSample(ch,i)-expected.getSample(ch,i))>0.00001f)
+            throw std::runtime_error("MIDI waveform/preset/pan mismatch");
+    if(actual.getMagnitude(0,0,1025)>0.00001f || actual.getMagnitude(0,1025,4410)<0.01f)
+        throw std::runtime_error("MIDI onset or silence");
+ }
+ // A note after the audio ends extends the file; soloing audio silences MIDI.
+ auto combined=stereoSession;combined.addTrack(TrackType::midi);
+ combined.addMidiNote(1,{69,0.0,0.2,100});
+ combined.addMidiNote(1,{69,0.4,0.2,100});
+ for(int mode=0;mode<3;++mode){
+    combined.tracks[0].solo=mode==1;combined.tracks[1].mute=mode==2;
+    const auto mixedOutput=root.getChildFile("audio-midi-"+juce::String(mode)+".wav");
+    if(!renderSessionWav(combined,mixedOutput,error))throw std::runtime_error("audio/MIDI mix export");
+    auto mixedReader=std::unique_ptr<juce::AudioFormatReader>(wav.createReaderFor(mixedOutput.createInputStream().release(),true));
+    if(!mixedReader || std::abs(mixedReader->lengthInSamples-13230)>1)throw std::runtime_error("MIDI ending truncated");
+    juce::AudioBuffer<float> result(2,13230);mixedReader->read(&result,0,13230,0,true,true);
+    juce::AudioBuffer<float> midiReference(2,1024);midiReference.clear();
+    renderMidiSine(combined,midiReference.getWritePointer(0),midiReference.getWritePointer(1),1024,0,44100);
+    if(std::abs(result.getSample(0,100)-(0.2f+midiReference.getSample(0,100)))>0.0001f)
+        throw std::runtime_error("audio/MIDI overlap sum incorrect");
+    const auto midiPeak=result.getMagnitude(0,9000,4000);
+    if(mode==0 ? midiPeak<0.01f : midiPeak>0.00001f)throw std::runtime_error("MIDI mute/solo routing");
+ }
+ Session tooLong;tooLong.addTrack(TrackType::midi);
+ tooLong.addMidiNote(0,{60,1e20,1.0,100});
+ const auto tooLongOutput=root.getChildFile("too-long.wav");
+ if(renderSessionWav(tooLong,tooLongOutput,error) || tooLongOutput.existsAsFile())
+    throw std::runtime_error("unsafe MIDI duration accepted");
  reader.reset();root.deleteRecursively();
  std::cout<<"PASS: stereo WAV bounce timeline and signal test\n";
 }
