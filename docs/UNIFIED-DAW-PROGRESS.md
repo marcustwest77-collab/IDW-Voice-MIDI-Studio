@@ -109,3 +109,7 @@ A successful project load now clears clip and note selections, active drag state
 ### Tool panel fit
 
 AI Studio now reserves 640 x 268 pixels so its complete approval button and feedback fit. Connect reserves 565 x 220 pixels so its explanatory notice fits. Both remain inside the arrangement at the default 1450 x 850 window size, including with the mixer expanded. Geometry was checked against the component row sizes; native on-screen validation remains pending.
+
+### Audio waveform previews
+
+Arrangement audio clips now draw cached waveform previews beneath their filenames. Imports, completed takes, and restored project audio initialize separate JUCE thumbnail readers, scanned on the thumbnail cache thread. Drawing follows source offsets and tempo and uses only the visible clip width, avoiding stretched waveforms at the dock boundary. Missing audio stays without a waveform. The previews show original source audio, before track effects and mix processing. Native compilation and Windows visual validation are pending.
