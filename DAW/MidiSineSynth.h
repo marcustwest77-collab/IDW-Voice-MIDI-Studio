@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 namespace idw::daw {
 // Five lightweight oscillator timbres. MIDI note timing stays unchanged.
 enum class SynthPreset { keys, bass, lead, organ, pad };
@@ -37,6 +38,16 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
                            std::int64_t startFrame,double sampleRate) {
     if(!left || samples<=0 || sampleRate<=0 || !std::isfinite(sampleRate) ||
        !std::isfinite(s.bpm) || s.bpm<=0 || startFrame<0)return;
+    if(startFrame>std::numeric_limits<std::int64_t>::max()-samples)return;
+    // Fixed-size stack scratch keeps voice counting allocation-free. Large export
+    // blocks are split internally; normalization depends on sample positions only.
+    constexpr int countBlock=256;
+    if(samples>countBlock){
+        for(int offset=0;offset<samples;offset+=std::min(countBlock,samples-offset))
+            renderMidiSine(s,left+offset,right?right+offset:nullptr,
+                std::min(countBlock,samples-offset),startFrame+offset,sampleRate);
+        return;
+    }
     // Guard invalid tempo before calculating frame positions; malformed projects
     // should never feed nonfinite values to the audio callback.
     const double framesPerBeat=sampleRate*60.0/s.bpm;
@@ -44,7 +55,7 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
     bool anySolo=false;
     for(const auto& t:s.tracks)if(t.solo)anySolo=true;
     // Normalize active MIDI voices so stacked notes do not overwhelm the mix.
-    // Count only notes overlapping the current buffer; no allocations.
+    // Count voices at each sample using fixed-size scratch; no allocations.
     // Use the same precomputed pitch table for counting and rendering voices.
     static const auto pitchHz=[]{
         std::array<double,128> frequencies{};
@@ -52,26 +63,36 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
             frequencies[(std::size_t)pitch]=440.0*std::pow(2.0,(pitch-69)/12.0);
         return frequencies;
     }();
-    std::size_t activeVoices=0;
-    const double bufferEndBeat=((double)startFrame+(double)samples)/framesPerBeat;
-    const double bufferStartBeat=(double)startFrame/framesPerBeat;
+    // Difference events count only voices sounding at each sample, not every
+    // note touching the callback. A later note must not turn down earlier audio.
+    std::array<int,countBlock+1> changes{};
     for(const auto& track:s.tracks){
         if(track.type!=TrackType::midi || track.mute || (anySolo && !track.solo))continue;
-        for(const auto& note:track.notes)
-            if(note.pitch>=0 && note.pitch<=127 &&
-               note.velocity>=1 && note.velocity<=127 &&
-               std::isfinite(note.startBeat) && std::isfinite(note.lengthBeats) &&
-               note.startBeat>=0 && note.lengthBeats>0 &&
-               std::isfinite(note.startBeat+note.lengthBeats) &&
-               note.startBeat<bufferEndBeat &&
-               note.startBeat+note.lengthBeats>bufferStartBeat &&
-               pitchHz[(std::size_t)note.pitch]<sampleRate*0.5)
-                ++activeVoices;
+        for(const auto& note:track.notes){
+            if(note.pitch<0 || note.pitch>127 || note.velocity<1 || note.velocity>127 ||
+               !std::isfinite(note.startBeat) || !std::isfinite(note.lengthBeats) ||
+               note.startBeat<0 || note.lengthBeats<=0 ||
+               pitchHz[(std::size_t)note.pitch]>=sampleRate*0.5)continue;
+            const double begin=note.startBeat*framesPerBeat;
+            const double end=(note.startBeat+note.lengthBeats)*framesPerBeat;
+            if(!std::isfinite(begin) || !std::isfinite(end) || begin<0 || end>9e15)continue;
+            const auto firstFrame=(std::int64_t)std::llround(begin);
+            const auto lastFrame=(std::int64_t)std::llround(end);
+            if(lastFrame<=startFrame || firstFrame>=startFrame+samples)continue;
+            const int first=(int)std::max<std::int64_t>(0,firstFrame-startFrame);
+            const int last=(int)std::min<std::int64_t>(samples,lastFrame-startFrame);
+            if(first<last){++changes[(std::size_t)first];--changes[(std::size_t)last];}
+        }
     }
-    const float voiceScale=1.0f/std::sqrt((float)std::max<std::size_t>(1,activeVoices));
+    std::array<float,countBlock> voiceScale{};
+    int activeVoices=0;
+    for(int i=0;i<samples;++i){
+        activeVoices+=changes[(std::size_t)i];
+        voiceScale[(std::size_t)i]=1.0f/std::sqrt((float)std::max(1,activeVoices));
+    }
     for(const auto& t:s.tracks){
         if(t.type!=TrackType::midi || t.mute || (anySolo && !t.solo))continue;
-        const float gain=std::clamp(t.gain,0.0f,2.0f)*0.12f*voiceScale;
+        const float gain=std::clamp(t.gain,0.0f,2.0f)*0.12f;
         const float l=gain*(t.pan>0.0f?1.0f-t.pan:1.0f);
         const float r=gain*(t.pan<0.0f?1.0f+t.pan:1.0f);
         for(const auto& n:t.notes){
@@ -126,7 +147,7 @@ inline void renderMidiSine(const Session& s,float* left,float* right,int samples
                 float tone=fundamentalGain*(float)std::sin(phase);
                 if(secondGain>0.0f)tone+=secondGain*(float)std::sin(2.0*phase);
                 if(thirdGain>0.0f)tone+=thirdGain*(float)std::sin(3.0*phase);
-                const float wave=tone*velocity*std::max(0.0f,fade);
+                const float wave=tone*velocity*std::max(0.0f,fade)*voiceScale[(std::size_t)i];
                 left[i]+=wave*l;
                 if(right)right[i]+=wave*r;
             }

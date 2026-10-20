@@ -47,3 +47,12 @@ its timeline duration, matching the existing audio export behavior.
 
 This renders the built-in instruments; it does not capture external MIDI
 hardware or host third-party instrument plugins.
+
+## Consistent MIDI levels across audio buffers
+
+Polyphony normalization now counts notes at each sample. Previously, every note
+that touched a callback buffer affected the volume of that entire buffer, so
+staggered notes could sound quieter in a large-buffer WAV export than in playback.
+The correction preserves the existing audio mix and uses fixed stack buffers.
+Regression checks cover staggered notes, fractional start times, five instruments,
+stereo pan, mute, and buffer sizes 1, 64, 127, 256, 1024 and 4096.
