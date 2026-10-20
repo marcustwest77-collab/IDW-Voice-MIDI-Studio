@@ -8,6 +8,7 @@
 #include "SessionModel.h"
 #include "TrackVocalEffects.h"
 #include "LyricsPanel.h"
+#include "FactorySkins.h"
 #include "TimelineMath.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
@@ -33,8 +34,9 @@ class IDWNeoLookAndFeel final : public juce::LookAndFeel_V4 {
 public:
     IDWNeoLookAndFeel() { applySkin(0); }
     void applySkin(int skin) {
-        const auto accent=juce::Colour(skin==1?0xffffc857:skin==2?0xff73f9ae:skin==3?0xffd4a6ff:0xff15d4ff);
-        const auto base=juce::Colour(skin==1?0xff292014:skin==2?0xff102b25:skin==3?0xff20182f:0xff152638);
+        const auto palette=idw::daw::factorySkin(skin);
+        const auto accent=juce::Colour(palette.accent);
+        const auto base=juce::Colour(palette.button);
         setColour(juce::TextButton::buttonColourId,base);
         setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff007fa9));
         setColour(juce::TextButton::textColourOffId,juce::Colour(0xffd6ebf8));
@@ -50,8 +52,22 @@ public:
         setColour(juce::ToggleButton::tickColourId,accent);
         setColour(juce::TextEditor::backgroundColourId,juce::Colour(0xff101b2b));
         setColour(juce::TextEditor::textColourId,juce::Colours::white);
+        setColour(juce::TextEditor::highlightColourId,juce::Colour(0xff176b94));
         setColour(juce::PopupMenu::backgroundColourId,juce::Colour(0xff101b2b));
         setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(0xff176b94));
+        setColour(juce::ResizableWindow::backgroundColourId,juce::Colour(palette.background));
+        if(skin>=4){
+            const auto& studio=idw::skinByIndex(skin-4);
+            setColour(juce::TextButton::buttonOnColourId,juce::Colour(studio.buttonOn));
+            setColour(juce::ComboBox::backgroundColourId,juce::Colour(studio.card));
+            setColour(juce::ComboBox::outlineColourId,juce::Colour(studio.grid));
+            setColour(juce::Slider::trackColourId,juce::Colour(studio.accent));
+            setColour(juce::Slider::backgroundColourId,juce::Colour(studio.card));
+            setColour(juce::TextEditor::backgroundColourId,juce::Colour(studio.background));
+            setColour(juce::TextEditor::highlightColourId,juce::Colour(studio.buttonOn));
+            setColour(juce::PopupMenu::backgroundColourId,juce::Colour(studio.card));
+            setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(studio.buttonOn));
+        }
     }
     juce::Colour accentColour() const {return findColour(juce::Slider::thumbColourId);}
     void setCustomAccent(juce::Colour accent){
@@ -160,7 +176,7 @@ public:
                     }
                     const auto skinProperty=object->getProperty("skin");
                     const auto skinText=skinProperty.toString();
-                    if(skinText.length()!=1 || !skinText.containsOnly("0123")){invalid();return;}
+                    if(skinText.length()!=1 || !skinText.containsOnly("0123456789")){invalid();return;}
                     for(const char* key:{"background","panel","accent"}){
                         const auto rgb=object->getProperty(key).toString();
                         if(rgb.length()!=6 || !rgb.containsOnly("0123456789abcdefABCDEF")){
@@ -274,7 +290,7 @@ public:
                     if(!object)return;
                     const auto skinValue=object->getProperty("skin");
                     const int skin=(int)skinValue;
-                    if(skin<0 || skin>3)return;
+                    if(skin<0 || skin>=idw::daw::factorySkinCount())return;
                     auto validRGB=[object](const juce::Identifier& key){
                         const auto rgb=object->getProperty(key).toString();
                         return rgb.length()==6 && rgb.containsOnly("0123456789abcdefABCDEF");
@@ -322,9 +338,9 @@ public:
                             payload->setProperty("name",name);
                             payload->setProperty("skin",safeThis->activeSkin);
                             payload->setProperty("background",(safeThis->useCustomBackground ? safeThis->customBackground :
-                                juce::Colour(safeThis->activeSkin==1?0xff17100b:safeThis->activeSkin==2?0xff091c18:safeThis->activeSkin==3?0xff160d22:0xff080f1c)).toDisplayString(false));
+                                juce::Colour(idw::daw::factorySkin(safeThis->activeSkin).background)).toDisplayString(false));
                             payload->setProperty("panel",(safeThis->useCustomPanel ? safeThis->customPanel :
-                                juce::Colour(safeThis->activeSkin==1?0xff2b2118:safeThis->activeSkin==2?0xff112d26:safeThis->activeSkin==3?0xff261d39:0xff101f32)).toDisplayString(false));
+                                juce::Colour(idw::daw::factorySkin(safeThis->activeSkin).panel)).toDisplayString(false));
                             payload->setProperty("accent",safeThis->neoTheme.accentColour().toDisplayString(false));
                             root.getChildFile(name+".json").replaceWithText(juce::JSON::toString(juce::var(payload)));
                         }
@@ -402,16 +418,14 @@ public:
                 delete dialog;
             }));
         };
-        skinSelector.addItem("Neo Cyan",1);
-        skinSelector.addItem("Royal Gold",2);
-        skinSelector.addItem("Emerald Circuit",3);
-        skinSelector.addItem("Purple Night",4);
+        for(int index=0;index<idw::daw::factorySkinCount();++index)
+            skinSelector.addItem(idw::daw::factorySkin(index).name,index+1);
         const auto preferences=juce::File::getSpecialLocation(
             juce::File::userApplicationDataDirectory)
             .getChildFile("IDW Neo Studio").getChildFile("preferences.txt");
         const int storedSkin=preferences.existsAsFile() ?
             preferences.loadFileAsString().getIntValue() : 0;
-        activeSkin=juce::jlimit(0,3,storedSkin);
+        activeSkin=idw::daw::validFactorySkinIndex(storedSkin);
         skinSelector.setSelectedId(activeSkin+1,juce::dontSendNotification);
         neoTheme.applySkin(activeSkin);
         const auto panelFile=preferences.getSiblingFile("panel.txt");
@@ -443,7 +457,7 @@ public:
         skinSelector.onChange=[this]{
             // Choosing a factory skin must clear overrides from a previously
             // loaded custom preset, otherwise the visible palette never changes.
-            activeSkin=juce::jlimit(0,3,skinSelector.getSelectedId()-1);
+            activeSkin=idw::daw::validFactorySkinIndex(skinSelector.getSelectedId()-1);
             useCustomBackground=false;
             useCustomPanel=false;
             neoTheme.applySkin(activeSkin);
@@ -1040,10 +1054,10 @@ public:
     }
     void mouseUp(const juce::MouseEvent&) override { draggingClip=false; draggingMixerFader=false; draggingMixerPan=false; }
     void paint(juce::Graphics& g) override {
-        g.fillAll(useCustomBackground?customBackground:juce::Colour(activeSkin==1?0xff17100b:activeSkin==2?0xff091c18:activeSkin==3?0xff160d22:0xff080f1c));
+        g.fillAll(useCustomBackground?customBackground:juce::Colour(idw::daw::factorySkin(activeSkin).background));
         // Neo Studio control decks: visual grouping stays outside the audio callback.
         const auto deck=[&g,this](juce::Rectangle<float> bounds,const juce::String& label){
-            g.setColour(useCustomPanel ? customPanel : juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
+            g.setColour(useCustomPanel ? customPanel : juce::Colour(idw::daw::factorySkin(activeSkin).panel));
             g.fillRoundedRectangle(bounds,10.0f);
             g.setColour(neoTheme.accentColour().withAlpha(0.32f));
             g.drawRoundedRectangle(bounds,10.0f,1.0f);
@@ -1057,7 +1071,7 @@ public:
         deck({20.0f,251.0f,fullWidth,74.0f},"MASTER  /  SYNTH  /  PROCESSING");
         const auto rect=getLocalBounds().reduced(20);
         const int top=330, trackHeight=70, left=205;
-        g.setColour(juce::Colour(activeSkin==1?0xff352a1e:activeSkin==2?0xff173e32:activeSkin==3?0xff302340:0xff122338));g.fillRect(20,top,getWidth()-40,36);
+        g.setColour(juce::Colour(idw::daw::factorySkin(activeSkin).header));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
             const int x=left+bar*48;
@@ -1076,7 +1090,7 @@ public:
         size_t renderedTrackIndex=0;
         for(const auto& track:session.tracks){
             if(renderedTrackIndex<arrangementScrollTrack){++renderedTrackIndex;continue;}
-            g.setColour(juce::Colour(activeSkin==1?((y/trackHeight)%2?0xff33291e:0xff282016):activeSkin==2?((y/trackHeight)%2?0xff173b2f:0xff112c24):activeSkin==3?((y/trackHeight)%2?0xff302342:0xff261d36):((y/trackHeight)%2?0xff16283d:0xff102033)));
+            g.setColour(juce::Colour((y/trackHeight)%2?idw::daw::factorySkin(activeSkin).rowOdd:idw::daw::factorySkin(activeSkin).rowEven));
             g.fillRect(20,y,getWidth()-40,trackHeight-2);
             const bool selected=renderedTrackIndex==selectedTrack;
             const bool armed=track.type==idw::daw::TrackType::audio &&
@@ -1159,7 +1173,7 @@ public:
         if(mixTop>420){
             const int count=juce::jmin(10,(int)session.tracks.size());
             const int stripWidth=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
-            g.setColour(juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
+            g.setColour(juce::Colour(idw::daw::factorySkin(activeSkin).panel));
             g.fillRoundedRectangle(20.0f,(float)mixTop,(float)getWidth()-40.0f,(float)mixHeight,8.0f);
             g.setColour(neoTheme.accentColour());
             g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));

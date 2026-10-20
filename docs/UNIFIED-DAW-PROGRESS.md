@@ -67,3 +67,16 @@ Older projects have no saved master values, so they open at unity volume,
 flat tone, and a -1 dB ceiling instead of inheriting the previous song's mix.
 Older app builds ignore the new fields and discard them if the project is
 re-saved there. This stores mix settings, not automation over time.
+
+## Ten factory skins in the V14 workspace
+
+The skin dropdown now includes the six Voice MIDI Studio palettes: IDW Gold,
+Midnight Studio, Electric Blue, Vocal Heat, Platinum, and High Contrast, alongside
+Neo Cyan, Royal Gold, Emerald Circuit, and Purple Night. These adapt the original
+palette colors to V14's existing layout; they do not change recording or routing.
+The four original preset IDs remain stable. New selections persist across app
+restarts and work with V14's custom skin save/load/import/export tools.
+
+Older V14 builds do not understand the six added factory IDs. Custom skin files
+from the separate Voice MIDI Studio app still use a different format; this update
+brings over its factory palettes, not its custom-skin file importer.
