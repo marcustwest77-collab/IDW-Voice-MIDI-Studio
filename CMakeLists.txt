@@ -245,6 +245,26 @@ if(IDW_BUILD_DAW)
         PRODUCT_NAME "IDW DAW V14 Foundation"
         COMPANY_NAME "In Da Wind Entertainment"
         BUNDLE_ID "com.idwent.idwdaw")
+    # Embed the checked-out revision, including PR merge builds, in the app itself.
+    # Source archives without Git metadata remain explicitly unidentified.
+    set(IDW_DAW_SOURCE_REVISION "unknown (source archive)")
+    find_package(Git QUIET)
+    if(GIT_FOUND)
+        execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            RESULT_VARIABLE IDW_DAW_GIT_RESULT OUTPUT_VARIABLE IDW_DAW_GIT_SHA
+            OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        if(IDW_DAW_GIT_RESULT EQUAL 0 AND IDW_DAW_GIT_SHA MATCHES "^[0-9a-f]+$")
+            set(IDW_DAW_SOURCE_REVISION "${IDW_DAW_GIT_SHA}")
+            execute_process(COMMAND "${GIT_EXECUTABLE}" diff-index --quiet HEAD --
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                RESULT_VARIABLE IDW_DAW_DIRTY_RESULT ERROR_QUIET)
+            if(NOT IDW_DAW_DIRTY_RESULT EQUAL 0)
+                string(APPEND IDW_DAW_SOURCE_REVISION " (local changes)")
+            endif()
+        endif()
+    endif()
+    target_compile_definitions(IDWDAW PRIVATE IDW_DAW_SOURCE_REVISION="${IDW_DAW_SOURCE_REVISION}")
     juce_generate_juce_header(IDWDAW)
     target_sources(IDWDAW PRIVATE DAW/Main.cpp DAW/SessionModel.h)
     target_include_directories(IDWDAW PRIVATE DAW)

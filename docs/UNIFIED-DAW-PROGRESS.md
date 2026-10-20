@@ -80,3 +80,12 @@ restarts and work with V14's custom skin save/load/import/export tools.
 Older V14 builds do not understand the six added factory IDs. Custom skin files
 from the separate Voice MIDI Studio app still use a different format; this update
 brings over its factory palettes, not its custom-skin file importer.
+
+## Identifying the installed desktop beta
+
+Use BUILD INFO in the top header to see the app version and full source revision.
+That revision distinguishes updates which still share the V14 version number.
+It is embedded when the app is configured for compilation, including CI merge
+builds. Source archives without Git metadata display an unknown revision, and
+tracked local changes are marked. Reconfigure local CMake builds after changing
+revisions. No network connection or diagnostic upload is involved.

@@ -506,6 +506,20 @@ public:
         exportProject.setButtonText("EXPORT PORTABLE");
         bounce.setButtonText("BOUNCE WAV");
         cancelBounce.setButtonText("CANCEL EXPORT");cancelBounce.setEnabled(false);
+        buildInfoButton.setButtonText("BUILD INFO");
+        buildInfoButton.setTooltip("Show the exact installed beta revision for troubleshooting.");
+        addAndMakeVisible(buildInfoButton);
+        buildInfoButton.onClick=[this]{
+            const juce::String details=juce::String("IDW Desktop DAW - V14 Beta\nVersion: ")+
+                ProjectInfo::versionString+"\nSource revision: "+IDW_DAW_SOURCE_REVISION+
+                "\n\nIncludes ten factory skins, vocal FX presets and amount, lyrics notebook, "
+                "built-in MIDI WAV export, and master mix recall."
+                "\n\nThis is the desktop integration beta. Full pitch correction and the complete "
+                "Song Studio workflow are still separate from this timeline."
+                "\n\nInclude this revision when reporting a problem.";
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                "IDW Build Info",details);
+        };
         lyricsButton.setButtonText("LYRICS");
         addAndMakeVisible(lyricsButton);
         addChildComponent(lyricsPanel);
@@ -772,6 +786,7 @@ public:
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
         recordReadiness.setBounds(26,249,juce::jmax(100,getWidth()-52),18);
+        buildInfoButton.setBounds(header.removeFromRight(110).reduced(3));
         lyricsButton.setBounds(header.removeFromRight(90).reduced(3));
         skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
         skinSelector.setBounds(header.removeFromRight(165).reduced(3));
@@ -2512,7 +2527,7 @@ private:
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
     IDWLyricsPanel lyricsPanel;
-    juce::TextButton lyricsButton;
+    juce::TextButton lyricsButton,buildInfoButton;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
     IDWLoopbackCapture loopbackCapture;
