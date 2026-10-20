@@ -573,11 +573,16 @@ public:
         pianoViewport.setViewedComponent(&pianoRoll,false);
         pianoViewport.setScrollBarsShown(true,false);
         pianoRoll.session=&session;
+        pianoRoll.canEdit=[this]{
+            return !playing.load() && !recorder.isRecording() &&
+                !multiRecorder.isRecording() && !exportRunning.load();
+        };
+        pianoRoll.onChanged=[this]{repaint();};
         pianoButton.onClick=[this]{
             if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
             if(selectedTrack>=session.tracks.size() ||
                session.tracks[selectedTrack].type!=idw::daw::TrackType::midi)return;
-            pianoRoll.trackIndex=selectedTrack;
+            pianoRoll.selectTrack(selectedTrack);
             pianoViewport.setVisible(!pianoViewport.isVisible());
             if(pianoViewport.isVisible()){
                 aiPanel.setVisible(false);connectPanel.setVisible(false);
@@ -958,7 +963,7 @@ public:
             return true;
         }
         if(!selectedClipValid || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) ||
-           exportRunning.load() || aiPanel.isVisible() || connectPanel.isVisible())
+           exportRunning.load() || aiPanel.isVisible() || connectPanel.isVisible() || pianoViewport.isVisible())
             return false;
         if(selectedClipTrack>=session.tracks.size() ||
            selectedClipIndex>=session.tracks[selectedClipTrack].clips.size()){
@@ -1420,6 +1425,12 @@ private:
         if(session.tracks.empty())return;
         if(selectedTrack>=session.tracks.size())selectedTrack=0;
         const auto& track=session.tracks[selectedTrack];
+        if(selectedClipValid && selectedClipTrack!=selectedTrack)selectedClipValid=false;
+        if(pianoViewport.isVisible() &&
+           (pianoRoll.trackIndex!=selectedTrack || track.type!=idw::daw::TrackType::midi)){
+            pianoViewport.setVisible(false);
+            pianoRoll.selectTrack(selectedTrack);
+        }
         vocalFxPreset.setEnabled(track.type==idw::daw::TrackType::audio &&
             !playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() && !exportRunning.load());
         vocalFxPreset.setSelectedId(track.vocalFxPreset+1,juce::dontSendNotification);
@@ -1671,7 +1682,8 @@ private:
         voiceCommandInput.selectAll();
     }
     void selectTrack(int direction){
-        if(playing.load() || session.tracks.empty())return;
+        if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() ||
+           exportRunning.load() || session.tracks.empty())return;
         const auto current=(int)selectedTrack;
         selectedTrack=(size_t)juce::jlimit(0,(int)session.tracks.size()-1,current+direction);
         ensureSelectedTrackVisible();

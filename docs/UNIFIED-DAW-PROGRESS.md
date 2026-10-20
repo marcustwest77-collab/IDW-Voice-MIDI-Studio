@@ -97,3 +97,7 @@ Vocal FX and lyrics now sit beside the arrangement, with the existing mixer belo
 ### Track selection and dock coexistence
 
 Clicking a lane header, empty lane, or clip selects that track and refreshes mixer, input, and vocal FX controls before clip editing begins. The FX card names its target track and identifies MIDI tracks as unsupported for these audio effects. Lyrics remain visible alongside Connect, AI Studio, and the piano roll; the piano roll scrolls vertically to retain its full pitch range in the shorter docked view. Those tools share the arrangement region and no longer cover the dock or bottom mixer. Parent timeline selection and scrolling are blocked while an arrangement tool is open. These changes await native CI compilation and interactive Windows validation.
+
+### Editing selection guards
+
+Changing the selected track clears a clip selection belonging to another track and closes a piano roll targeting the old track. Reopening the piano roll resets its note selection, so Delete cannot reuse an index from another track. Piano-roll note creation, dragging, and deletion now check transport, recording, and export state at the point of editing. Arrangement keyboard nudges are blocked while the piano roll is open. Previous/next track buttons also respect recording and export activity. Native build validation is pending.
