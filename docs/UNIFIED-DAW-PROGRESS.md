@@ -113,3 +113,7 @@ AI Studio now reserves 640 x 268 pixels so its complete approval button and feed
 ### Audio waveform previews
 
 Arrangement audio clips now draw cached waveform previews beneath their filenames. Imports, completed takes, and restored project audio initialize separate JUCE thumbnail readers, scanned on the thumbnail cache thread. Drawing follows source offsets and tempo and uses only the visible clip width, avoiding stretched waveforms at the dock boundary. Missing audio stays without a waveform. The previews show original source audio, before track effects and mix processing. Native compilation and Windows visual validation are pending.
+
+### MIDI arrangement preview
+
+MIDI lanes now show note bars at the same beat scale as audio clips. Bar lengths follow note durations; pitch determines vertical position within the lane, and velocity affects brightness. Notes are clipped at the side dock boundary. This is an arrangement overview; note editing remains in the piano roll. MIDI data and rendering are unchanged. Native build and visual validation are pending.

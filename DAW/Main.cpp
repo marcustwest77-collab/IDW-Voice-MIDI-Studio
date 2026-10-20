@@ -1163,6 +1163,27 @@ public:
             g.drawText("VOL",36,y+32,37,12,juce::Justification::centredLeft);
             g.drawText(track.mute ? "MUTED" : (track.solo ? "SOLO" : (armed ? "REC READY" : "READY")),
                        83,y+32,100,12,juce::Justification::centredRight);
+            if(track.type==idw::daw::TrackType::midi && !track.notes.empty()){
+                int lowest=127,highest=0;
+                for(const auto& note:track.notes){
+                    lowest=juce::jmin(lowest,note.pitch);
+                    highest=juce::jmax(highest,note.pitch);
+                }
+                const int pitchSpan=juce::jmax(12,highest-lowest+1);
+                const float noteHeight=juce::jlimit(2.0f,4.0f,46.0f/(float)pitchSpan);
+                for(const auto& note:track.notes){
+                    const float noteLeft=(float)(left+note.startBeat*12.0);
+                    const float noteRight=juce::jmin((float)arrangementRight()-5.0f,
+                        noteLeft+juce::jmax(2.0f,(float)(note.lengthBeats*12.0)));
+                    if(noteLeft>=(float)arrangementRight()-5.0f || noteRight<=noteLeft)continue;
+                    const float noteY=(float)y+10.0f+
+                        (float)(highest-note.pitch)*46.0f/(float)pitchSpan;
+                    // Velocity affects preview brightness, not the MIDI data.
+                    g.setColour(laneAccent.brighter(0.3f).withAlpha(
+                        0.4f+0.6f*(float)note.velocity/127.0f));
+                    g.fillRoundedRectangle(noteLeft,noteY,noteRight-noteLeft,noteHeight,1.0f);
+                }
+            }
             size_t renderedClipIndex=0;
             for(const auto& clip:track.clips){
                 const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
