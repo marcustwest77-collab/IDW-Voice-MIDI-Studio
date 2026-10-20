@@ -8,6 +8,12 @@ class IDWAIApprovalPanel final : public juce::Component {
 public:
     std::function<bool(const idw::daw::AIProposal&)> onApproved;
     std::function<juce::String()> getSanitizedStatus;
+    void resetForProject() {
+        apply.setEnabled(false);
+        editor.setText({},false);
+        feedback.setText("Project changed. Load and review a proposal for this session.",
+                         juce::dontSendNotification);
+    }
     IDWAIApprovalPanel(){
         heading.setText("IDW AI STUDIO  |  REVIEW PROPOSED ACTION",juce::dontSendNotification);
         heading.setColour(juce::Label::textColourId,juce::Colours::gold);

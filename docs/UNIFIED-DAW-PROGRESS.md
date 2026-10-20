@@ -101,3 +101,7 @@ Clicking a lane header, empty lane, or clip selects that track and refreshes mix
 ### Editing selection guards
 
 Changing the selected track clears a clip selection belonging to another track and closes a piano roll targeting the old track. Reopening the piano roll resets its note selection, so Delete cannot reuse an index from another track. Piano-roll note creation, dragging, and deletion now check transport, recording, and export state at the point of editing. Arrangement keyboard nudges are blocked while the piano roll is open. Previous/next track buttons also respect recording and export activity. Native build validation is pending.
+
+### Project-switch editor reset
+
+A successful project load now clears clip and note selections, active drag state, timeline and piano-roll scrolling, pending voice-record confirmation, and the previous AI proposal review. Failed project loads leave the current editor state intact. Empty projects disable track-specific controls instead of showing an editable mixer for a nonexistent track. Native CI validation is pending.

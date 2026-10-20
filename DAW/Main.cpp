@@ -19,6 +19,7 @@
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
 #include <atomic>
+#include <initializer_list>
 #include <memory>
 #include <thread>
 #if JUCE_WINDOWS
@@ -1422,7 +1423,20 @@ private:
         }
     }
     void refreshMixer(){
-        if(session.tracks.empty())return;
+        const bool hasTracks=!session.tracks.empty();
+        for(auto* control : std::initializer_list<juce::Component*>{
+                &gainControl,&panControl,&muteControl,&soloControl,&previousTrack,&nextTrack})
+            control->setEnabled(hasTracks);
+        if(!hasTracks){
+            selectedClipValid=false;
+            pianoViewport.setVisible(false);
+            for(auto* control : std::initializer_list<juce::Component*>{
+                    &vocalFxPreset,&vocalFxMix,&synthPreset,&attackControl,&releaseControl,
+                    &armControl,&inputChannel})control->setEnabled(false);
+            gainLabel.setText("NO TRACK",juce::dontSendNotification);
+            recordReadiness.setText("Add an audio track to record.",juce::dontSendNotification);
+            return;
+        }
         if(selectedTrack>=session.tracks.size())selectedTrack=0;
         const auto& track=session.tracks[selectedTrack];
         if(selectedClipValid && selectedClipTrack!=selectedTrack)selectedClipValid=false;
@@ -1852,6 +1866,15 @@ private:
         for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
         sources.clear();
         session=std::move(restored);
+        // Editor selections belong to the old project, even if track indices match.
+        selectedClipValid=false;
+        draggingClip=false;draggingMixerFader=false;draggingMixerPan=false;
+        arrangementScrollTrack=0;
+        pianoViewport.setVisible(false);
+        pianoViewport.setViewPosition(0,0);
+        pianoRoll.selectTrack(0);
+        aiPanel.resetForProject();
+        pendingVoiceRecord=false;
         masterGain.setValue(session.masterMix.gain,juce::dontSendNotification);
         lowEq.setValue(session.masterMix.lowDb,juce::dontSendNotification);
         highEq.setValue(session.masterMix.highDb,juce::dontSendNotification);
