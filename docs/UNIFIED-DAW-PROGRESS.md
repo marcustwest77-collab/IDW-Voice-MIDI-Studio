@@ -56,3 +56,14 @@ staggered notes could sound quieter in a large-buffer WAV export than in playbac
 The correction preserves the existing audio mix and uses fixed stack buffers.
 Regression checks cover staggered notes, fractional start times, five instruments,
 stereo pan, mute, and buffer sizes 1, 64, 127, 256, 1024 and 4096.
+
+## Master mix project recall
+
+SAVE PROJECT and EXPORT PORTABLE now retain master volume, bass/treble tone,
+and output ceiling. Opening a project restores both the controls and the audio
+settings. WAV export takes the complete mix from one session snapshot.
+
+Older projects have no saved master values, so they open at unity volume,
+flat tone, and a -1 dB ceiling instead of inheriting the previous song's mix.
+Older app builds ignore the new fields and discard them if the project is
+re-saved there. This stores mix settings, not automation over time.

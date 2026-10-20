@@ -8,6 +8,12 @@ inline juce::var sessionToJson(const Session& s) {
     root->setProperty("version",1);
     root->setProperty("bpm",s.bpm);
     root->setProperty("lyrics",juce::String::fromUTF8(s.lyrics.c_str()));
+    auto master=std::make_unique<juce::DynamicObject>();
+    master->setProperty("gain",s.masterMix.gain);
+    master->setProperty("lowDb",s.masterMix.lowDb);
+    master->setProperty("highDb",s.masterMix.highDb);
+    master->setProperty("ceilingDb",s.masterMix.ceilingDb);
+    root->setProperty("masterMix",juce::var(master.release()));
     root->setProperty("numerator",s.numerator);
     root->setProperty("denominator",s.denominator);
     juce::Array<juce::var> tracks;
@@ -55,6 +61,19 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
     if(!root || root->getProperty("format").toString()!="idw-daw-session" ||
        (int)root->getProperty("version")!=1)return false;
     Session next;
+    const auto master=root->getProperty("masterMix");
+    if(!master.isVoid()){
+        auto* obj=master.getDynamicObject();
+        if(!obj)return false;
+        for(const auto* key:{"gain","lowDb","highDb","ceilingDb"}){
+            const auto value=obj->getProperty(key);
+            if(!value.isDouble() && !value.isInt() && !value.isInt64())return false;
+        }
+        next.masterMix={(float)(double)obj->getProperty("gain"),
+            (float)(double)obj->getProperty("lowDb"),(float)(double)obj->getProperty("highDb"),
+            (float)(double)obj->getProperty("ceilingDb")};
+        if(!next.masterMix.valid())return false;
+    }
     const auto lyrics=root->getProperty("lyrics");
     if(!lyrics.isVoid()){
         if(!lyrics.isString() || lyrics.toString().length()>32768)return false;

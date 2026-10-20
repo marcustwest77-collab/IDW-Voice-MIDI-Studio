@@ -734,7 +734,7 @@ public:
         masterGain.setValue(1.0);
         masterGain.setTextBoxStyle(juce::Slider::TextBoxRight,false,55,25);
         addAndMakeVisible(masterGain);
-        masterGain.onValueChange=[this]{masterLevel.store((float)masterGain.getValue(),std::memory_order_relaxed);};
+        masterGain.onValueChange=[this]{session.masterMix.gain=(float)masterGain.getValue();masterLevel.store(session.masterMix.gain,std::memory_order_relaxed);};
         clearClips.setButtonText("RESET CLIP");addAndMakeVisible(clearClips);
         clearClips.onClick=[this]{peakClipLeft.store(false);peakClipRight.store(false);repaint();};
         eqLabel.setText("MASTER TONE",juce::dontSendNotification);addAndMakeVisible(eqLabel);
@@ -744,13 +744,13 @@ public:
             slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,56,24);
             addAndMakeVisible(*slider);
         }
-        lowEq.onValueChange=[this]{lowDb.store((float)lowEq.getValue());};
-        highEq.onValueChange=[this]{highDb.store((float)highEq.getValue());};
+        lowEq.onValueChange=[this]{session.masterMix.lowDb=(float)lowEq.getValue();lowDb.store(session.masterMix.lowDb);};
+        highEq.onValueChange=[this]{session.masterMix.highDb=(float)highEq.getValue();highDb.store(session.masterMix.highDb);};
         limitLabel.setText("OUTPUT CEILING",juce::dontSendNotification);addAndMakeVisible(limitLabel);
         ceilingControl.setRange(-12.0,-0.1,0.1);ceilingControl.setValue(-1.0);
         ceilingControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,60,24);
         addAndMakeVisible(ceilingControl);
-        ceilingControl.onValueChange=[this]{ceilingDb.store((float)ceilingControl.getValue(),std::memory_order_relaxed);};
+        ceilingControl.onValueChange=[this]{session.masterMix.ceilingDb=(float)ceilingControl.getValue();ceilingDb.store(session.masterMix.ceilingDb,std::memory_order_relaxed);};
         refreshMixer();
     }
     void resized() override {
@@ -1271,6 +1271,7 @@ private:
         const auto& playback=*snapshot;
         for(auto& peak:channelPeaks)peak.store(0.0f,std::memory_order_relaxed);
         const auto blockStart=sessionFrames.load(std::memory_order_relaxed);
+        if(blockStart==0)for(auto& state:eqState)state=0.0f; // Reset on audio thread for repeatable starts.
         const bool anySolo=std::any_of(playback.tracks.begin(),playback.tracks.end(),[](const auto& t){return t.solo;});
         for(auto& slot:sources) {
             if(blockStart==0)slot->vocalFx.reset(); // Audio-thread reset on every playback/overdub start.
@@ -1788,6 +1789,13 @@ private:
         for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
         sources.clear();
         session=std::move(restored);
+        masterGain.setValue(session.masterMix.gain,juce::dontSendNotification);
+        lowEq.setValue(session.masterMix.lowDb,juce::dontSendNotification);
+        highEq.setValue(session.masterMix.highDb,juce::dontSendNotification);
+        ceilingControl.setValue(session.masterMix.ceilingDb,juce::dontSendNotification);
+        masterLevel.store(session.masterMix.gain);
+        lowDb.store(session.masterMix.lowDb);highDb.store(session.masterMix.highDb);
+        ceilingDb.store(session.masterMix.ceilingDb);
         lyricsPanel.setLyrics(juce::String::fromUTF8(session.lyrics.c_str()));
         sources=std::move(staged);
         armedTracks.fill(false); // Reopening a project must never arm recording automatically.
@@ -1822,7 +1830,8 @@ private:
                 output=output.withFileExtension(".wav");
                 if(exportThread.joinable())exportThread.join();
                 const auto snapshot=session;
-                const float gain=masterLevel.load(),ceiling=ceilingDb.load(),bass=lowDb.load(),treble=highDb.load();
+                const float gain=snapshot.masterMix.gain,ceiling=snapshot.masterMix.ceilingDb,
+                    bass=snapshot.masterMix.lowDb,treble=snapshot.masterMix.highDb;
                 bounce.setEnabled(false);
                 cancelBounce.setEnabled(true);
                 exportCancel.store(false);

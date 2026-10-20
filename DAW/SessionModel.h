@@ -28,9 +28,19 @@ struct Track {
     std::vector<Clip> clips;
     std::vector<MidiNote> notes;
 };
+struct MasterMix {
+    float gain=1.0f,lowDb=0.0f,highDb=0.0f,ceilingDb=-1.0f;
+    bool valid() const {
+        return std::isfinite(gain) && gain>=0 && gain<=1.5f &&
+            std::isfinite(lowDb) && lowDb>=-12 && lowDb<=12 &&
+            std::isfinite(highDb) && highDb>=-12 && highDb<=12 &&
+            std::isfinite(ceilingDb) && ceilingDb>=-12 && ceilingDb<=-0.1f;
+    }
+};
 class Session {
 public:
     std::string lyrics;
+    MasterMix masterMix;
     double bpm=120.0;
     int numerator=4, denominator=4;
     std::vector<Track> tracks;
