@@ -24,3 +24,15 @@ Verification includes exact stereo bypass, stereo channel isolation, determinist
 restart, preset validation, project round trips, legacy defaults, and rendered
 WAV comparison against the same processor used by playback. Hardware listening
 and Windows UI checks are still required after a successful native build.
+
+## Lyrics notebook
+
+The LYRICS button in the top header opens a notebook inside V14. Paste or type
+hooks, verses and song notes; it stays available during playback and recording.
+Use SAVE PROJECT while stopped to save the words. Portable projects carry them
+along with the session. Opening a different project replaces the notebook with
+that project's words; projects without lyrics open with a blank notebook.
+
+This is a manually edited notebook, not automatic transcription, timed lyrics,
+or import of the separate Song Studio project format. It allows 32,768
+characters. Older V14 builds ignore this field and discard it on re-save.

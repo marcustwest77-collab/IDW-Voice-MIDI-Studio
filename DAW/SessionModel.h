@@ -30,6 +30,7 @@ struct Track {
 };
 class Session {
 public:
+    std::string lyrics;
     double bpm=120.0;
     int numerator=4, denominator=4;
     std::vector<Track> tracks;

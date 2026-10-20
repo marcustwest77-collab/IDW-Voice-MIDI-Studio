@@ -7,6 +7,7 @@ inline juce::var sessionToJson(const Session& s) {
     root->setProperty("format","idw-daw-session");
     root->setProperty("version",1);
     root->setProperty("bpm",s.bpm);
+    root->setProperty("lyrics",juce::String::fromUTF8(s.lyrics.c_str()));
     root->setProperty("numerator",s.numerator);
     root->setProperty("denominator",s.denominator);
     juce::Array<juce::var> tracks;
@@ -54,6 +55,11 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
     if(!root || root->getProperty("format").toString()!="idw-daw-session" ||
        (int)root->getProperty("version")!=1)return false;
     Session next;
+    const auto lyrics=root->getProperty("lyrics");
+    if(!lyrics.isVoid()){
+        if(!lyrics.isString() || lyrics.toString().length()>32768)return false;
+        next.lyrics=lyrics.toString().toStdString();
+    }
     next.setTempo((double)root->getProperty("bpm"));
     next.numerator=(int)root->getProperty("numerator");
     next.denominator=(int)root->getProperty("denominator");

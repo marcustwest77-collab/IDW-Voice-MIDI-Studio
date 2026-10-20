@@ -7,6 +7,7 @@
 #include <JuceHeader.h>
 #include "SessionModel.h"
 #include "TrackVocalEffects.h"
+#include "LyricsPanel.h"
 #include "TimelineMath.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
@@ -491,10 +492,22 @@ public:
         exportProject.setButtonText("EXPORT PORTABLE");
         bounce.setButtonText("BOUNCE WAV");
         cancelBounce.setButtonText("CANCEL EXPORT");cancelBounce.setEnabled(false);
+        lyricsButton.setButtonText("LYRICS");
+        addAndMakeVisible(lyricsButton);
+        addChildComponent(lyricsPanel);
+        lyricsPanel.onEdited=[this](const juce::String& words){session.lyrics=words.toStdString();};
+        lyricsButton.onClick=[this]{
+            lyricsPanel.setVisible(!lyricsPanel.isVisible());
+            if(lyricsPanel.isVisible()){
+                aiPanel.setVisible(false);connectPanel.setVisible(false);pianoRoll.setVisible(false);
+                lyricsPanel.toFront(false);lyricsPanel.focusEditor();
+            }
+        };
         connectButton.setButtonText("IDW CONNECT");
         addChildComponent(connectPanel);
         connectButton.onClick=[this]{
             connectPanel.setVisible(!connectPanel.isVisible());
+            lyricsPanel.setVisible(false);
             connectPanel.toFront(false);
         };
         synthPreset.addItem("Keys",1);
@@ -536,7 +549,7 @@ public:
             pianoRoll.trackIndex=selectedTrack;
             pianoRoll.setVisible(!pianoRoll.isVisible());
             if(pianoRoll.isVisible()){
-                aiPanel.setVisible(false);connectPanel.setVisible(false);
+                lyricsPanel.setVisible(false);aiPanel.setVisible(false);connectPanel.setVisible(false);
                 pianoRoll.toFront(false);pianoRoll.repaint();
             }
         };
@@ -544,7 +557,7 @@ public:
         addChildComponent(aiPanel);
         aiButton.onClick=[this]{
             aiPanel.setVisible(!aiPanel.isVisible());
-            if(aiPanel.isVisible()){connectPanel.setVisible(false);aiPanel.toFront(false);}
+            if(aiPanel.isVisible()){lyricsPanel.setVisible(false);connectPanel.setVisible(false);aiPanel.toFront(false);}
         };
         aiPanel.getSanitizedStatus=[this]{
             return juce::JSON::toString(idw::daw::aiSessionStatus(
@@ -745,6 +758,7 @@ public:
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
         recordReadiness.setBounds(26,249,juce::jmax(100,getWidth()-52),18);
+        lyricsButton.setBounds(header.removeFromRight(90).reduced(3));
         skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
         skinSelector.setBounds(header.removeFromRight(165).reduced(3));
         title.setBounds(header);
@@ -812,6 +826,7 @@ public:
         auto ceilingRow=area.removeFromTop(35);
         limitLabel.setBounds(ceilingRow.removeFromLeft(145));
         ceilingControl.setBounds(ceilingRow.removeFromLeft(220));
+        lyricsPanel.setBounds(juce::jmax(20,getWidth()-600),335,juce::jmin(getWidth()-40,580),juce::jmax(180,getHeight()-355));
         connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
         aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
         pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
@@ -896,6 +911,7 @@ public:
 #endif
     }
     bool keyPressed(const juce::KeyPress& key) override {
+        if(lyricsPanel.isVisible())return false; // Typing must never trigger timeline or dictation commands.
         if(key.getKeyCode()==juce::KeyPress::F9Key && !key.getModifiers().isAltDown() &&
            !key.getModifiers().isCommandDown()){
             startDictation();
@@ -1772,6 +1788,7 @@ private:
         for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
         sources.clear();
         session=std::move(restored);
+        lyricsPanel.setLyrics(juce::String::fromUTF8(session.lyrics.c_str()));
         sources=std::move(staged);
         armedTracks.fill(false); // Reopening a project must never arm recording automatically.
         selectedTrack=0;sessionFrames.store(0);playheadBeats=0;
@@ -2471,6 +2488,8 @@ private:
     IDWPianoRoll pianoRoll;
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
+    IDWLyricsPanel lyricsPanel;
+    juce::TextButton lyricsButton;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
     IDWLoopbackCapture loopbackCapture;
