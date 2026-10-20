@@ -522,7 +522,7 @@ public:
         };
         lyricsButton.setButtonText("LYRICS");
         addAndMakeVisible(lyricsButton);
-        addChildComponent(lyricsPanel);
+        addAndMakeVisible(lyricsPanel);
         lyricsPanel.onEdited=[this](const juce::String& words){session.lyrics=words.toStdString();};
         lyricsButton.onClick=[this]{
             lyricsPanel.setVisible(!lyricsPanel.isVisible());
@@ -781,11 +781,12 @@ public:
         ceilingControl.onValueChange=[this]{session.masterMix.ceilingDb=(float)ceilingControl.getValue();ceilingDb.store(session.masterMix.ceilingDb,std::memory_order_relaxed);};
         refreshMixer();
     }
+    int arrangementRight() const { return getWidth()-360; }
     void resized() override {
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
-        recordReadiness.setBounds(26,249,juce::jmax(100,getWidth()-52),18);
+
         buildInfoButton.setBounds(header.removeFromRight(110).reduced(3));
         lyricsButton.setBounds(header.removeFromRight(90).reduced(3));
         skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
@@ -810,11 +811,12 @@ public:
         aiButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         pianoButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         synthPreset.setBounds(projectRow.removeFromLeft(100).reduced(3));
-        voiceCommandInput.setBounds(projectRow.removeFromLeft(145).reduced(3));
-        runVoiceCommand.setBounds(projectRow.removeFromLeft(80).reduced(3));
-        voiceHistoryButton.setBounds(projectRow.removeFromLeft(80).reduced(3));
-        pushToTalkButton.setBounds(projectRow.removeFromLeft(70).reduced(3));
-        commandStatus.setBounds(projectRow.removeFromLeft(95).reduced(3));
+        auto commandRow=juce::Rectangle<int>(20,getHeight()-40,getWidth()-280,30);
+        voiceCommandInput.setBounds(commandRow.removeFromLeft(300).reduced(3));
+        runVoiceCommand.setBounds(commandRow.removeFromLeft(80).reduced(3));
+        voiceHistoryButton.setBounds(commandRow.removeFromLeft(80).reduced(3));
+        pushToTalkButton.setBounds(commandRow.removeFromLeft(70).reduced(3));
+        commandStatus.setBounds(commandRow.reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(165));
@@ -829,7 +831,7 @@ public:
         auto monitorRow=area.removeFromTop(28);
         monitorControl.setBounds(monitorRow.removeFromLeft(190));
         audioDevices.setBounds(monitorRow.removeFromLeft(155).reduced(2));
-        inputLevel.setBounds(area.removeFromTop(26));
+        inputLevel.setBounds(monitorRow.reduced(8,0));
         auto overdubRow=area.removeFromTop(36);
         overdubControl.setBounds(overdubRow.removeFromLeft(285));
         latencyLabel.setBounds(overdubRow.removeFromLeft(120));
@@ -838,24 +840,27 @@ public:
         generateCalibration.setBounds(overdubRow.removeFromLeft(170).reduced(3));
         liveCalibration.setBounds(overdubRow.removeFromLeft(175).reduced(3));
         auto masterRow=area.removeFromTop(38);
-        masterLabel.setBounds(masterRow.removeFromLeft(115));
-        masterGain.setBounds(masterRow.removeFromLeft(260));
-        clearClips.setBounds(masterRow.removeFromLeft(120).reduced(3));
-        vocalFxPreset.setBounds(masterRow.removeFromLeft(220).reduced(3));
-        vocalFxMix.setBounds(masterRow.removeFromLeft(190).reduced(3));
+        masterLabel.setBounds(masterRow.removeFromLeft(90));
+        masterGain.setBounds(masterRow.removeFromLeft(175));
+        clearClips.setBounds(masterRow.removeFromLeft(100).reduced(3));
+        eqLabel.setBounds(masterRow.removeFromLeft(90));
+        lowEq.setBounds(masterRow.removeFromLeft(130));
+        highEq.setBounds(masterRow.removeFromLeft(130));
+        limitLabel.setBounds(masterRow.removeFromLeft(125));
+        ceilingControl.setBounds(masterRow.removeFromLeft(130));
         auto synthRow=area.removeFromTop(35);
         attackLabel.setBounds(synthRow.removeFromLeft(100));
         attackControl.setBounds(synthRow.removeFromLeft(175));
         releaseLabel.setBounds(synthRow.removeFromLeft(115));
         releaseControl.setBounds(synthRow.removeFromLeft(175));
-        auto eqRow=area.removeFromTop(35);
-        eqLabel.setBounds(eqRow.removeFromLeft(115));
-        lowEq.setBounds(eqRow.removeFromLeft(180));
-        highEq.setBounds(eqRow.removeFromLeft(180));
-        auto ceilingRow=area.removeFromTop(35);
-        limitLabel.setBounds(ceilingRow.removeFromLeft(145));
-        ceilingControl.setBounds(ceilingRow.removeFromLeft(220));
-        lyricsPanel.setBounds(juce::jmax(20,getWidth()-600),335,juce::jmin(getWidth()-40,580),juce::jmax(180,getHeight()-355));
+        recordReadiness.setBounds(synthRow.reduced(8,0));
+        const int dockX=arrangementRight()+16;
+        const int dockWidth=getWidth()-20-dockX;
+        const int mixerTop=getHeight()-(neoMixerExpanded ? 190 : 112)-48;
+        const int dockBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
+        vocalFxPreset.setBounds(dockX+10,354,dockWidth-20,28);
+        vocalFxMix.setBounds(dockX+10,386,dockWidth-20,28);
+        lyricsPanel.setBounds(dockX,430,dockWidth,juce::jmax(0,dockBottom-430));
         connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
         aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
         pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
@@ -940,7 +945,7 @@ public:
 #endif
     }
     bool keyPressed(const juce::KeyPress& key) override {
-        if(lyricsPanel.isVisible())return false; // Typing must never trigger timeline or dictation commands.
+        if(lyricsPanel.hasKeyboardFocus(true))return false; // Typing must never trigger timeline or dictation commands.
         if(key.getKeyCode()==juce::KeyPress::F9Key && !key.getModifiers().isAltDown() &&
            !key.getModifiers().isCommandDown()){
             startDictation();
@@ -975,7 +980,7 @@ public:
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
         const int mixerTop=getHeight()-mixerHeight-48;
         const int arrangementBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
-        if(event.x>=20 && event.x<getWidth()-20 && event.y>=366 && event.y<arrangementBottom && !session.tracks.empty() && !aiPanel.isVisible() && !connectPanel.isVisible()){
+        if(event.x>=20 && event.x<arrangementRight() && event.y>=366 && event.y<arrangementBottom && !session.tracks.empty() && !aiPanel.isVisible() && !connectPanel.isVisible()){
             const int visible=juce::jmax(1,(arrangementBottom-366)/70);
             const size_t maximum=session.tracks.size()>(size_t)visible ?
                 session.tracks.size()-(size_t)visible : 0;
@@ -996,7 +1001,7 @@ public:
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
         const int mixerTop=getHeight()-mixerHeight-48;
         if(mixerTop>420 && e.y>=mixerTop && e.y<mixerTop+mixerHeight && e.x>=30 && !session.tracks.empty()){ 
-            if(e.y<mixerTop+22 && e.x<360){neoMixerExpanded=!neoMixerExpanded;ensureSelectedTrackVisible();repaint();return;}
+            if(e.y<mixerTop+22 && e.x<360){neoMixerExpanded=!neoMixerExpanded;resized();ensureSelectedTrackVisible();repaint();return;}
             const int count=juce::jmin(10,(int)session.tracks.size());
             const int width=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
             const int index=(e.x-30)/width;
@@ -1016,7 +1021,7 @@ public:
             return;
         }
         constexpr int top=366, height=70, left=205;
-        if(e.y<top || e.x<left || session.tracks.empty())return;
+        if(e.y<top || e.x<left || e.x>=arrangementRight() || session.tracks.empty())return;
         const int visibleMixerHeight=neoMixerExpanded ? 190 : 112;
         const int visibleMixerTop=getHeight()-visibleMixerHeight-48;
         const int arrangementLimit=visibleMixerTop>420 ? visibleMixerTop-8 : getHeight()-48;
@@ -1081,16 +1086,17 @@ public:
             g.drawText(label,bounds.removeFromTop(16.0f).reduced(10.0f,0.0f),juce::Justification::centredLeft);
         };
         const auto fullWidth=(float)juce::jmax(100,getWidth()-40);
-        deck({20.0f,68.0f,fullWidth,93.0f},"TRANSPORT  /  PROJECT");
-        deck({20.0f,164.0f,fullWidth,84.0f},"TRACK CONTROL  /  INPUT ROUTING");
-        deck({20.0f,251.0f,fullWidth,74.0f},"MASTER  /  SYNTH  /  PROCESSING");
+        deck({20.0f,62.0f,fullWidth,84.0f},"");
+        deck({20.0f,146.0f,fullWidth,106.0f},"");
+        deck({20.0f,252.0f,fullWidth,73.0f},"");
+        deck({(float)arrangementRight()+16.0f,330.0f,324.0f,92.0f},"VOCAL FX — SELECTED TRACK");
         const auto rect=getLocalBounds().reduced(20);
         const int top=330, trackHeight=70, left=205;
-        g.setColour(juce::Colour(idw::daw::factorySkin(activeSkin).header));g.fillRect(20,top,getWidth()-40,36);
+        g.setColour(juce::Colour(idw::daw::factorySkin(activeSkin).header));g.fillRect(20,top,arrangementRight()-20,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
             const int x=left+bar*48;
-            if(x>=getWidth()-30)break;
+            if(x>=arrangementRight()-10)break;
             g.drawVerticalLine(x,(float)top,(float)(getHeight()-30));
             g.drawText(juce::String(bar+1),x+3,top,40,30,juce::Justification::centredLeft);
         }
@@ -1100,13 +1106,13 @@ public:
         // Clip all arrangement drawing so expanding the mixer does not obscure
         // or receive stray clicks from timeline regions below its viewport.
         g.saveState();
-        g.reduceClipRegion(20,top,getWidth()-40,juce::jmax(0,arrangementBottom-top));
+        g.reduceClipRegion(20,top,arrangementRight()-20,juce::jmax(0,arrangementBottom-top));
         int y=top+36;
         size_t renderedTrackIndex=0;
         for(const auto& track:session.tracks){
             if(renderedTrackIndex<arrangementScrollTrack){++renderedTrackIndex;continue;}
             g.setColour(juce::Colour((y/trackHeight)%2?idw::daw::factorySkin(activeSkin).rowOdd:idw::daw::factorySkin(activeSkin).rowEven));
-            g.fillRect(20,y,getWidth()-40,trackHeight-2);
+            g.fillRect(20,y,arrangementRight()-20,trackHeight-2);
             const bool selected=renderedTrackIndex==selectedTrack;
             const bool armed=track.type==idw::daw::TrackType::audio &&
                 renderedTrackIndex<armedTracks.size() && armedTracks[renderedTrackIndex];
@@ -1116,7 +1122,7 @@ public:
             g.fillRect(20,y,selected?6:4,trackHeight-2);
             if(selected){
                 g.setColour(neoTheme.accentColour().withAlpha(0.75f));
-                g.drawRect(20,y,getWidth()-40,trackHeight-2,1);
+                g.drawRect(20,y,arrangementRight()-20,trackHeight-2,1);
             }
             if(armed){
                 g.setColour(juce::Colour(0xfff44368));
@@ -1139,23 +1145,23 @@ public:
             for(const auto& clip:track.clips){
                 const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
                 const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*12.0));
-                if(clipX>=getWidth()-25){++renderedClipIndex;continue;}
+                if(clipX>=arrangementRight()-5){++renderedClipIndex;continue;}
                 g.setColour(track.type==idw::daw::TrackType::audio ? neoTheme.accentColour().darker(0.72f) : neoTheme.accentColour().darker(0.92f));
-                g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
+                g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,arrangementRight()-5-clipX), (float)trackHeight-18,4.0f);
                 if(selectedClipValid && renderedTrackIndex==selectedClipTrack && renderedClipIndex==selectedClipIndex){
                     g.setColour(neoTheme.accentColour());
-                    g.drawRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX),(float)trackHeight-18,4.0f,2.0f);
+                    g.drawRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,arrangementRight()-5-clipX),(float)trackHeight-18,4.0f,2.0f);
                 }
                 ++renderedClipIndex;
                 g.setColour(juce::Colours::white);
-                g.drawFittedText(juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
+                g.drawFittedText(juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,arrangementRight()-15-clipX)),25,juce::Justification::centredLeft,1);
             }
             y+=trackHeight;
             ++renderedTrackIndex;
             if(y>getHeight()-60)break;
         }
         const int head=left+(int)(playheadBeats*12.0);
-        if(head<getWidth()-30){
+        if(head<arrangementRight()-10){
             g.setColour(juce::Colour(0xff17d9ff));
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
         }
@@ -1169,10 +1175,10 @@ public:
             g.setFont(juce::Font(juce::FontOptions(10.0f)));
             g.drawText("TRACKS "+juce::String((int)first+1)+"-"+juce::String((int)last)+
                        " / "+juce::String((int)session.tracks.size()),
-                       getWidth()-177,top+5,154,19,juce::Justification::centredRight);
+                       arrangementRight()-157,top+5,154,19,juce::Justification::centredRight);
         }
         // Peak bars are updated from atomics, never directly from the audio thread.
-        const int meterLeft=getWidth()-220,meterTop=215,meterWidth=80;
+        const int meterLeft=getWidth()-220,meterTop=getHeight()-42,meterWidth=80;
         for(int ch=0;ch<2;++ch){
             const auto peak=ch==0?peakLeft.load():peakRight.load();
             const auto clipped=ch==0?peakClipLeft.load():peakClipRight.load();
@@ -1626,9 +1632,9 @@ private:
             if(!busy){selectTrack(-1);feedback="Selected previous track";}
             else feedback="Track selection unavailable while busy";
         }else if(command=="expand mixer" || command=="open mixer"){
-            neoMixerExpanded=true;ensureSelectedTrackVisible();repaint();feedback="Mixer expanded";
+            neoMixerExpanded=true;resized();ensureSelectedTrackVisible();repaint();feedback="Mixer expanded";
         }else if(command=="collapse mixer" || command=="close mixer"){
-            neoMixerExpanded=false;ensureSelectedTrackVisible();repaint();feedback="Mixer collapsed";
+            neoMixerExpanded=false;resized();ensureSelectedTrackVisible();repaint();feedback="Mixer collapsed";
         }else if(command=="mute" || command=="mute track" || command=="unmute" ||
                  command=="unmute track" || command=="solo" || command=="solo track" ||
                  command=="unsolo" || command=="unsolo track"){

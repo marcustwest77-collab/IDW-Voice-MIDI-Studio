@@ -89,3 +89,7 @@ It is embedded when the app is configured for compilation, including CI merge
 builds. Source archives without Git metadata display an unknown revision, and
 tracked local changes are marked. Reconfigure local CMake builds after changing
 revisions. No network connection or diagnostic upload is involved.
+
+### Docked desktop layout
+
+Vocal FX and lyrics now sit beside the arrangement, with the existing mixer below. Arrangement painting and pointer selection stop at the dock boundary. Lyrics open by default; timeline shortcuts are suppressed only while the notebook has keyboard focus. Expanding the mixer also resizes the notebook. Master controls now fit above the arrangement, and voice commands and peak meters sit in the footer. This is the first structural pass toward the approved concept, not a claim of complete visual parity. Native compilation and Windows visual review remain pending.
