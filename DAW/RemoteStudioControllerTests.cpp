@@ -39,6 +39,13 @@ int main(){
     check(c.command("record","a"),"command before timeout");auto before=sent.size();
     now+=std::chrono::seconds(10);c.tick();
     check(status.contains("unknown") && sent.size()==before && !c.command("record","a"),"timeout never retries");
+    c.requestControl();grant.getDynamicObject()->setProperty("request",sent.back().getProperty("request",{}));c.receive(grant);
+    c.receive(juce::JSON::parse(R"({"type":"control_tracks","from":"guest","session":"abcdefghijklmnopqrstuvwx","grant":"1","tracks":[{"id":"a","name":"Lead"}]})"));
+    c.send=[&](const auto&){c.reset();status="Connection failed; recording state unknown.";};
+    check(!c.command("record","a"),"synchronous send failure is not success");
+    check(status.contains("Connection failed") && visible.getArray()->isEmpty(),"send failure status and cleared controls preserved");
+    c.receive(juce::JSON::parse(R"({"type":"joined","role":"host","peer_present":true,"control_session":"abcdefghijklmnopqrstuvwx"})"));
+    c.requestControl();check(status.contains("Connection failed"),"request failure status preserved");
     c.receive(juce::JSON::parse(R"({"type":"peer_left","role":"guest"})"));
     auto count=sent.size();c.requestControl();check(sent.size()==count,"departed peer cannot request");
     std::cout<<"Studio controller tests: PASS\n";

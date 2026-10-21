@@ -71,7 +71,8 @@ public:
     void requestControl(){
         if(!send || peer.isEmpty()){say("Connect both participants first.");return;}
         clearGrant();request=juce::Uuid().toString();auto v=message("control_request");
-        v.getDynamicObject()->setProperty("request",request);send(v);say("Request sent. The other person must open My Permissions and allow control.");
+        v.getDynamicObject()->setProperty("request",request);const auto sentRequest=request;send(v);
+        if(request==sentRequest)say("Request sent. The other person must open My Permissions and allow control.");
     }
     bool command(const std::string& action,const std::string& track){
         if(!send || !grant || now()>=expires || pending || !known.count(track) ||
@@ -81,7 +82,10 @@ public:
         pending=++sequence;pendingUntil=now()+std::chrono::seconds(10);
         auto v=message("control_command");auto* o=v.getDynamicObject();
         o->setProperty("grant",juce::String(std::to_string(grant)));o->setProperty("sequence",juce::String(std::to_string(pending)));
-        o->setProperty("action",juce::String(action));o->setProperty("track",juce::String(track));send(v);
+        o->setProperty("action",juce::String(action));o->setProperty("track",juce::String(track));
+        const auto sentGrant=grant, sentSequence=pending;send(v);
+        // The transport failure callback may synchronously reset this controller.
+        if(grant!=sentGrant || pending!=sentSequence)return false;
         say("Command sent; waiting for recorder result…");return true;
     }
     void tick(){
