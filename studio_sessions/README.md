@@ -206,3 +206,12 @@ builds a native two-client loopback integration test against the actual Python s
 and a fake recording engine, covering command/result round trip and peer departure.
 Windows compile, live network test, WSS certificate behavior, UI visual inspection
 and real recording on two Windows machines remain pending until those checks run.
+
+### Local test room launcher
+
+For two native IDW windows on one Windows computer, run
+`python studio_sessions/local_test_room.py` after installing requirements.
+The helper binds only 127.0.0.1 and prints separate host/guest tickets. See
+`docs/REMOTE-RECORDING-TEST.md` for the step-by-step recording and permission checks.
+The launcher was exercised locally with two authenticated WebSocket clients;
+that check is not a native Windows recording test.
