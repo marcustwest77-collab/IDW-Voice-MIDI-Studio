@@ -9,7 +9,7 @@ public:
     std::function<void(const juce::String&)> status;
     std::function<void(const juce::var&)> tracksChanged;
     using Clock=std::chrono::steady_clock;
-    explicit RemoteStudioController(std::function<Clock::time_point()> clock=[] {return Clock::now();})
+    explicit RemoteStudioController(std::function<Clock::time_point()> clock=[] {return std::chrono::steady_clock::now();})
         : now(std::move(clock)){startTimer(250);}
     ~RemoteStudioController() override {stopTimer();}
     void reset(){session.clear();peer.clear();request.clear();clearGrant();}
