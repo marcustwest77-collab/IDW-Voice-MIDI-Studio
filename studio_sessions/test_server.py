@@ -54,6 +54,17 @@ class ProtocolTests(AioHTTPTestCase):
         await ws.send_json({"type":"join","room":invite["room"],"ticket":invite[role+"_ticket"]})
         return ws
 
+    async def test_client_assets_and_headers(self):
+        response = await self.client.get("/")
+        self.assertEqual(response.status, 200)
+        self.assertIn("IDW Studio Session", await response.text())
+        self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+        self.assertIn("script-src 'self'", response.headers["Content-Security-Policy"])
+        response = await self.client.get("/app.mjs")
+        self.assertEqual(response.status, 200)
+        self.assertIn("javascript", response.headers["Content-Type"])
+        self.assertEqual((await self.client.get("/server.py")).status, 404)
+
     async def test_create_requires_service_auth(self):
         response = await self.client.post("/v1/rooms")
         self.assertEqual(response.status, 401)
@@ -65,6 +76,8 @@ class ProtocolTests(AioHTTPTestCase):
         guest = await self.join(invite, "guest")
         self.assertTrue((await guest.receive_json())["peer_present"])
         self.assertEqual((await host.receive_json())["type"], "peer_joined")
+        await guest.send_json({"type":"ready"})
+        self.assertEqual(await host.receive_json(), {"type":"ready", "from":"guest"})
         await host.send_json({"type":"offer","sdp":"test-offer"})
         self.assertEqual(await guest.receive_json(), {"type":"offer","sdp":"test-offer","from":"host"})
         await guest.send_json({"type":"answer","sdp":"test-answer"})

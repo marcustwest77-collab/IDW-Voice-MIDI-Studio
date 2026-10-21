@@ -19,3 +19,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r studio_sessions/requirements.txt
       - run: python -m unittest discover -s studio_sessions -p 'test_*.py' -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test studio_sessions/web/session.test.mjs

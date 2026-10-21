@@ -137,3 +137,7 @@ Track selection accepts English number words as well as digits (1-128). Added re
 ### Two-person studio-session foundation
 
 User selected the integrated two-person session direction. Added an undeployed signalling service prototype under studio_sessions with host/guest tickets, two-seat admission, message validation, peer reconnect/leave, room expiry and a separate CI workflow. Nine local admission/protocol tests pass. The desktop Connect button is unchanged; embedded camera UI, media permissions, authenticated room hosting, TURN and AudioBox mix sharing remain to implement. No live service or call is claimed.
+
+### Two-person call-screen prototype
+
+Added a black/gold IDW call page served by the signalling prototype: invitation join, host/guest camera areas, microphone-only mode, mute, camera toggle, status and Leave. Browser media access starts after Join and successful seat admission. Client cleanup handles late permission results, device loss, disconnect and leave. SDP precedes queued ICE candidates, and the host negotiates after media-ready signalling. Ten Python protocol tests and eight mocked JavaScript lifecycle tests pass locally. The page has not been visually or real-media tested and is not yet embedded in the native DAW. No internet relay, hosted service or DAW-mix audio route is configured.

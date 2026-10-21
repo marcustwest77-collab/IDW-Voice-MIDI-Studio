@@ -6,6 +6,7 @@ import json
 import os
 import secrets
 import time
+from pathlib import Path
 from dataclasses import dataclass, field
 
 from aiohttp import WSMsgType, web
@@ -67,6 +68,8 @@ class Rooms:
 def valid_signal(payload):
     if not isinstance(payload, dict):
         return False
+    if payload == {"type": "ready"}:
+        return True
     if payload.get("type") in ("offer", "answer"):
         return set(payload) == {"type", "sdp"} and isinstance(payload["sdp"], str) and 0 < len(payload["sdp"]) <= 60000
     if payload.get("type") == "candidate":
@@ -204,6 +207,22 @@ def create_app(create_key, allowed_origins, rooms=None):
         registry.rooms.clear()
 
     app.cleanup_ctx.append(lifetime)
+    async def client_file(request):
+        filename = request.match_info.get("filename", "index.html")
+        if filename not in {"index.html", "app.mjs", "session.mjs", "session.css"}:
+            raise web.HTTPNotFound()
+        response = web.FileResponse(Path(__file__).parent / "web" / filename)
+        response.headers.update({
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+            "Permissions-Policy": "camera=(self), microphone=(self), geolocation=()",
+        })
+        return response
+
+    app.router.add_get("/", client_file)
+    app.router.add_get("/{filename:index.html|app.mjs|session.mjs|session.css}", client_file)
     app.router.add_post("/v1/rooms", new_room)
     app.router.add_get("/v1/connect", connect)
     return app
