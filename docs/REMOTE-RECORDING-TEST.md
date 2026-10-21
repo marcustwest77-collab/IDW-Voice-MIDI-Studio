@@ -10,8 +10,10 @@ projects and leave any important recordings closed.
 
 ## One computer, two IDW windows
 
-The first check needs no hosted server. A developer or tester with Python and this
-source checkout can start the included loopback server:
+The first check needs no hosted server. Python is required separately; the beta
+does not install it. Open a terminal in the installed beta folder (normally
+`%LOCALAPPDATA%\Programs\IDW Combined Studio Beta`), the extracted portable beta
+folder, or this source checkout, then start the included loopback server:
 
 ```sh
 python -m pip install -r studio_sessions/requirements.txt

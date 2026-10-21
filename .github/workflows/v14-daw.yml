@@ -62,6 +62,10 @@ jobs:
           Copy-Item docs/COMBINED-BETA.md beta-windows/Documentation/
           Copy-Item docs/UNIFIED-DAW-PROGRESS.md beta-windows/Documentation/
           Copy-Item docs/USER_MANUAL.md beta-windows/Documentation/
+          Copy-Item docs/REMOTE-RECORDING-TEST.md beta-windows/Documentation/
+          New-Item -ItemType Directory -Force -Path beta-windows/studio_sessions/web | Out-Null
+          Copy-Item studio_sessions/server.py, studio_sessions/local_test_room.py, studio_sessions/requirements.txt beta-windows/studio_sessions/
+          Copy-Item studio_sessions/web/index.html, studio_sessions/web/app.mjs, studio_sessions/web/session.mjs, studio_sessions/web/session.css beta-windows/studio_sessions/web/
           New-Item -ItemType Directory -Force -Path beta-windows/ThirdPartyNotices | Out-Null
           Copy-Item build-v14/_deps/juce-src/LICENSE.md beta-windows/ThirdPartyNotices/JUCE-LICENSE.md
           Copy-Item DAW/ai/idw_mcp_server.py beta-windows/AI/
