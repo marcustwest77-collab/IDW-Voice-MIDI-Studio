@@ -11,6 +11,7 @@
 #include "FactorySkins.h"
 #include "TimelineMath.h"
 #include "VoiceTrackNumber.h"
+#include "RemoteRecordingControl.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
 #include "SessionPersistence.h"
@@ -560,6 +561,7 @@ public:
         };
         connectButton.setButtonText("IDW CONNECT");
         addChildComponent(connectPanel);
+        connectPanel.onRecordingControl=[this]{showRecordingPermissions();};
         connectButton.onClick=[this]{
             connectPanel.setVisible(!connectPanel.isVisible());
             if(connectPanel.isVisible()){
@@ -1375,7 +1377,113 @@ public:
         g.setColour(juce::Colours::grey);
         g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline playback prototype; drag clips to move or resize their right edge." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
     }
+// Trusted transport integration points. Invoke on the JUCE message thread only.
+    // Transport must authenticate identity/session before calling; never expose
+    // these methods directly to arbitrary browser scripts or incoming JSON.
+    void setAuthenticatedRecordingPeer(const std::string& peer, const std::string& connection) {
+        jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return;
+        remoteRecordingGate.revoke();
+        remotePeer=connection.empty() ? std::string{} : peer;
+        remoteConnection=peer.empty() ? std::string{} : connection;
+        ++remoteConnectionGeneration;
+    }
+    std::string executeRemoteRecording(const std::string& peer, const std::string& connection,
+        const std::string& trackId, uint64_t grantId, uint64_t sequence,
+        idw::RemoteRecordingControl::Action action) {
+        jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+        using Gate=idw::RemoteRecordingControl;
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return "denied";
+        if(peer.empty() || peer!=remotePeer || connection.empty() || connection!=remoteConnection)
+            return "denied";
+        const auto target=session.findTrackById(trackId);
+        if(!target || *target>=armedTracks.size() ||
+           session.tracks[*target].type!=idw::daw::TrackType::audio)return "denied";
+        const bool capturing=recorder.isRecording() || multiRecorder.isRecording();
+        std::vector<std::string> affected;
+        if(action==Gate::Action::Arm)affected.push_back(trackId);
+        else if(action==Gate::Action::Stop && capturing){
+            if(multiRecorder.isRecording()){
+                for(const auto& take:multiTakes){
+                    if(take.first>=session.tracks.size())return "denied";
+                    affected.push_back(session.tracks[take.first].id);
+                }
+            }else if(recordTargetTrack<session.tracks.size())
+                affected.push_back(session.tracks[recordTargetTrack].id);
+        }else if(action==Gate::Action::Record){
+            for(size_t i=0;i<session.tracks.size() && i<armedTracks.size();++i)
+                if(armedTracks[i] && session.tracks[i].type==idw::daw::TrackType::audio)
+                    affected.push_back(session.tracks[i].id);
+        }
+        // No remote auto-arm or selected-track fallback. Validate the actual
+        // complete capture set, including the command's named target.
+        if(std::find(affected.begin(),affected.end(),trackId)==affected.end())return "not_ready";
+        if(remoteRecordingGate.authorizeTargets(peer,projectGeneration,affected,grantId,sequence,
+            action,Gate::Clock::now())!=Gate::Result::Allowed)return "denied";
+        if(exportRunning.load() || loopbackCapture.isActive())return "not_ready";
+        if(action==Gate::Action::Stop){
+            if(!capturing)return "not_ready";
+            toggleRecording();
+            return recorder.isRecording() || multiRecorder.isRecording() ? "failed" : "succeeded";
+        }
+        if(capturing || playing.load())return "not_ready";
+        auto* device=deviceManager.getCurrentAudioDevice();
+        if(!device)return "not_ready";
+        for(const auto& id:affected){
+            const auto index=session.findTrackById(id);
+            if(!index)return "denied";
+            const int input=session.tracks[*index].inputChannel;
+            if(input<0 || input>=device->getInputChannelNames().size() ||
+               !device->getActiveInputChannels()[input])return "not_ready";
+        }
+        if(action==Gate::Action::Arm){
+            armedTracks[*target]=true;refreshMixer();return "succeeded";
+        }
+        if(action!=Gate::Action::Record)return "denied";
+        toggleRecording();
+        return recorder.isRecording() || multiRecorder.isRecording() ? "succeeded" : "failed";
+    }
+    // Native consent emits the resulting grant for the future authenticated
+    // transport to serialize. No network transport is installed by this change.
+    std::function<void(const idw::RemoteRecordingControl::Grant&)> onRemoteRecordingGrant;
+    std::function<void()> onRemoteRecordingRevoke;
 private:
+    idw::RemoteRecordingControl remoteRecordingGate;
+    std::string remotePeer,remoteConnection;
+    uint64_t remoteConnectionGeneration=0;
+    void showRecordingPermissions(){
+        auto* dialog=new juce::AlertWindow("Recording permissions",
+            remotePeer.empty() ? "No authenticated IDW recording peer is connected. Browser video calls do not grant DAW control."
+                : "Allow the connected IDW peer to Arm, Record and Stop for 15 minutes. All tracks includes future audio tracks. Local Stop remains available.",
+            juce::MessageBoxIconType::InfoIcon);
+        dialog->addButton("Close",0,juce::KeyPress(juce::KeyPress::escapeKey));
+        dialog->addButton("Revoke control",3);
+        std::vector<std::string> selected;
+        if(selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::audio)
+            selected.push_back(session.tracks[selectedTrack].id);
+        if(!remotePeer.empty() && onRemoteRecordingGrant){
+            if(!selected.empty())dialog->addButton("Allow selected track",1);
+            dialog->addButton("Allow all tracks",2);
+        }
+        const auto project=projectGeneration, connection=remoteConnectionGeneration;
+        juce::Component::SafePointer<Workstation> safeThis(this);
+        dialog->enterModalState(true,juce::ModalCallbackFunction::create(
+            [safeThis,project,connection,selected](int result){
+                if(!safeThis || result==0)return;
+                if(result==3){
+                    safeThis->remoteRecordingGate.revoke();
+                    if(safeThis->onRemoteRecordingRevoke)safeThis->onRemoteRecordingRevoke();
+                    return;
+                }
+                if(project!=safeThis->projectGeneration || connection!=safeThis->remoteConnectionGeneration ||
+                   safeThis->remotePeer.empty() || !safeThis->onRemoteRecordingGrant)return;
+                using Gate=idw::RemoteRecordingControl;
+                const auto grant=safeThis->remoteRecordingGate.grant(safeThis->remotePeer,
+                    result==2 ? Gate::Scope::AllTracks : Gate::Scope::SelectedTracks,
+                    result==2 ? std::vector<std::string>{} : selected, project, Gate::Clock::now(),std::chrono::seconds(900));
+                if(grant)safeThis->onRemoteRecordingGrant(*grant);
+            }),true);
+    }
     bool neoMixerExpanded=false;
     size_t arrangementScrollTrack=0;
     bool draggingMixerFader=false,draggingMixerPan=false;
@@ -1980,6 +2088,7 @@ private:
         sources.clear();
         session=std::move(restored);
         ++projectGeneration;
+        remoteRecordingGate.revoke();
         // Editor selections belong to the old project, even if track indices match.
         selectedClipValid=false;
         draggingClip=false;draggingMixerFader=false;draggingMixerPan=false;

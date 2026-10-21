@@ -237,3 +237,27 @@ without modifying the output session. Existing version-1 files remain readable.
 Model identity/removal/reorder tests pass locally. Native persistence tests were
 added for round trip, legacy migration and duplicate rejection; CI execution is
 pending. The remote recording adapter and permission UI remain unconnected.
+
+### Native recording adapter and consent dialog
+
+IDW Connect now opens a recording-permissions dialog. It offers revoke at any
+time, and selected-track/all-track grants only when a trusted recording peer and
+a grant transport callback have been installed. Async consent captures project
+and connection generations, preventing an old dialog from granting a new peer.
+The default build reports no authenticated recording peer: Jitsi browser calls do
+not install this connection. There is no simulated connection or automatic grant.
+
+Workstation exposes message-thread trusted transport entry points for connection
+changes and Arm/Record/Stop execution. Connection changes and project load revoke
+permission. Commands resolve stable IDs, derive complete armed/active sets,
+validate scope and replay, check input availability, and use the existing native
+recording path. Remote Record never falls back to auto-arming and cannot toggle
+an existing recording off. Remote Stop cannot start a recording. Result succeeded
+means recorder state changed as requested, not that audio quality/import passed.
+Local recording controls are unchanged; revocation preserves any running take.
+
+Local permission and model tests pass. Native compilation, UI layout and real
+recording still require CI and desktop testing. The authenticated network client,
+message serialization/dispatch, visible connection/expiry status, multiple-selected
+track UI, and remote controller screen remain unfinished. This is native adapter
+integration, not a completed two-computer recording session.

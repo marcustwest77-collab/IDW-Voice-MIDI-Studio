@@ -6,6 +6,7 @@
 // This is NOT synchronized DAW collaboration and does not enforce attendance limits.
 class IDWConnectPanel final : public juce::Component {
 public:
+    std::function<void()> onRecordingControl;
     IDWConnectPanel() {
         heading.setText("IDW CONNECT  |  2-PERSON STUDIO CALL",juce::dontSendNotification);
         heading.setColour(juce::Label::textColourId,juce::Colours::gold);
@@ -16,10 +17,7 @@ public:
         join.setButtonText("OPEN VIDEO ROOM");
         invite.setButtonText("COPY INVITE");
         for(auto* button:{&create,&join,&invite})addAndMakeVisible(*button);
-        notice.setText("Video opens in your browser using Jitsi Meet (third party). "
-                       "Room codes are invitations, not passwords. Two people intended; "
-                       "participant limit is not technically enforced. "
-                       "DAW audio and projects are NOT shared.",
+        notice.setText("Video opens in Jitsi Meet in your browser. Room codes are not passwords; attendance is not limited to two. DAW audio, projects and recording control are not shared.",
                        juce::dontSendNotification);
         notice.setJustificationType(juce::Justification::topLeft);
         notice.setColour(juce::Label::textColourId,juce::Colours::lightgrey);
@@ -52,6 +50,9 @@ public:
                 "Join my IDW Connect two-person video session: https://meet.jit.si/"+code+
                 "\nThis uses Jitsi Meet; do not share the link publicly.");
         };
+        control.setButtonText("RECORDING PERMISSIONS");
+        addAndMakeVisible(control);
+        control.onClick=[this]{if(onRecordingControl)onRecordingControl();};
         invite.setEnabled(false);
         room.onTextChange=[this]{invite.setEnabled(isValidCode(room.getText().trim()));};
     }
@@ -66,7 +67,8 @@ public:
         join.setBounds(actions.removeFromLeft(165).reduced(2));
         invite.setBounds(actions.removeFromLeft(130).reduced(2));
         bounds.removeFromTop(10);
-        notice.setBounds(bounds.removeFromTop(80));
+        notice.setBounds(bounds.removeFromTop(50));
+        control.setBounds(bounds.removeFromTop(28));
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff181e28));
@@ -82,5 +84,5 @@ private:
     }
     juce::Label heading,notice;
     juce::TextEditor room;
-    juce::TextButton create,join,invite;
+    juce::TextButton create,join,invite,control;
 };
