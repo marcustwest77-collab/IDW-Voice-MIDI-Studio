@@ -133,3 +133,7 @@ Enabled the workstation tooltip window so existing device, input, vocal FX, skin
 ### Voice command readiness
 
 Track selection accepts English number words as well as digits (1-128). Added regression coverage for spoken numbers, bounds and malformed phrases. Corrected outdated command hints to describe existing TALK/F9 native Windows recognition, the text/Win+H fallback and two-step recording confirmation. Added a voice-testing walkthrough to the bundled guide. Real speech and AudioBox testing remain pending.
+
+### Two-person studio-session foundation
+
+User selected the integrated two-person session direction. Added an undeployed signalling service prototype under studio_sessions with host/guest tickets, two-seat admission, message validation, peer reconnect/leave, room expiry and a separate CI workflow. Nine local admission/protocol tests pass. The desktop Connect button is unchanged; embedded camera UI, media permissions, authenticated room hosting, TURN and AudioBox mix sharing remain to implement. No live service or call is claimed.
