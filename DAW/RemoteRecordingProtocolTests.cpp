@@ -39,5 +39,16 @@ int main(){
     check(!p.receive(command) && calls==1,"departed peer denied");
     check(!p.publishGrant(*grant),"departed grant denied");
     p.disconnect();check(changes>=3,"connection invalidates consent");
+    check(p.receive(juce::JSON::parse(R"({"type":"joined","role":"host","peer_present":true,"control_session":"abcdefghijklmnopqrstuvwx"})")),"rejoin for send failure");
+    check(p.receive(juce::JSON::parse(R"({"type":"control_request","session":"abcdefghijklmnopqrstuvwx","from":"guest","request":"req2"})")),"fresh request");
+    int failedSends=0;
+    p.send=[&, marker=std::string("callback survives reset")](const auto&){
+        ++failedSends;p.disconnect();p.send={};
+        check(marker=="callback survives reset","callback retained through reset");
+    };
+    check(!p.publishGrant(*grant),"failed grant is not reported as published");
+    p.publishTracks(*grant,juce::var(juce::Array<juce::var>{}));
+    p.publishRevoke();
+    check(failedSends==1,"disconnect suppresses follow-up messages");
     std::cout<<"Remote recording protocol tests: PASS\n";
 }

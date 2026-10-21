@@ -78,7 +78,7 @@ public:
         reply.getDynamicObject()->setProperty("grant",obj->getProperty("grant"));
         reply.getDynamicObject()->setProperty("sequence",obj->getProperty("sequence"));
         reply.getDynamicObject()->setProperty("status",juce::String(result));
-        send(reply);return true;
+        emit(reply);return true;
     }
     bool publishGrant(const Gate::Grant& grant){
         if(!send || peer.empty() || request.empty() || grant.peer!=peer)return false;
@@ -92,23 +92,30 @@ public:
         const auto seconds=std::chrono::duration_cast<std::chrono::seconds>(grant.expires-Gate::Clock::now()).count();
         if(seconds<=0 || seconds>900)return false;
         obj->setProperty("ttl_seconds",int(seconds));
-        lastGrant=grant.id;send(reply);return true;
+        lastGrant=grant.id;return emit(reply);
     }
     void publishTracks(const Gate::Grant& grant,const juce::var& tracks){
         if(!send || peer.empty() || lastGrant!=grant.id)return;
         auto reply=message("control_tracks");
         reply.getDynamicObject()->setProperty("grant",juce::String(std::to_string(grant.id)));
-        reply.getDynamicObject()->setProperty("tracks",tracks);send(reply);
+        reply.getDynamicObject()->setProperty("tracks",tracks);emit(reply);
     }
     void publishRevoke(){
         if(send && !peer.empty() && lastGrant){
             auto reply=message("control_revoke");
             reply.getDynamicObject()->setProperty("grant",juce::String(std::to_string(lastGrant)));
-            send(reply);
+            emit(reply);
         }
         lastGrant=0;
     }
 private:
+    bool emit(const juce::var& value){
+        // Keep the callback alive if its failure handler clears send synchronously.
+        const auto sender=send;const auto connection=session;
+        if(!sender || connection.empty())return false;
+        sender(value);
+        return send && session==connection && !peer.empty();
+    }
     std::string role,peer,session,request;
     uint64_t lastGrant=0;
     void activate(){peer=role=="host"?"guest":"host";lastGrant=0;if(peerChanged)peerChanged(peer,session);}
