@@ -57,6 +57,30 @@ AI review. Reopened tracks are disarmed. The AI panel requires a fresh review an
 approval for a new action. Connect opens a browser video room; it does not share
 DAW audio, synchronize playback or exchange projects.
 
+## Voice commands on Windows
+
+Click **TALK** or press **F9** to recognize and run one command. Listening stops
+after one recognized phrase or eight seconds; click TALK again to cancel. F9 is
+not handled by the timeline while you are typing lyrics. You can also type in the
+command field, or dictate there with Win+H, then press Enter. **HISTORY** shows
+recognized/typed commands and their results.
+
+Examples: **play the beat**, **stop**, **arm track**, **disarm track**,
+**select track three**, **next track**, **mute track**, **solo track**,
+**overdub on**, **add audio track**, **save project**, and **voice help**.
+Track selection accepts digits or English number words from one through 128,
+provided that track exists. Save project opens a dialog; it does not choose a file.
+
+To record, say **record vocals**, activate TALK again, then say **confirm recording**
+within 15 seconds. Use **stop recording** to end the take. Starting recording still
+requires valid audio routing and an available armed audio track.
+
+TALK uses the Windows Speech recognizer, whose microphone selection can differ
+from the DAW's AudioBox input. Recognition with your setup remains unverified.
+This is a fixed command set, not an always-listening assistant or conversational
+multi-step mixing system. Include TALK/F9, cancellation, history, playback,
+track selection and recording confirmation in the desktop tests.
+
 ## What this beta does not yet provide
 
 - Third-party VST3 instruments/effects cannot be loaded into the V14 timeline.

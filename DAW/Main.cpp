@@ -10,6 +10,7 @@
 #include "LyricsPanel.h"
 #include "FactorySkins.h"
 #include "TimelineMath.h"
+#include "VoiceTrackNumber.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
 #include "SessionPersistence.h"
@@ -493,14 +494,14 @@ public:
         voiceHistoryButton.setButtonText("HISTORY");
         voiceHistoryButton.setTooltip("Show recent voice and typed commands with their results.");
         voiceHistoryButton.onClick=[this]{executeStudioCommand("command history");};
-        commandStatus.setText("VOICE READY: click field, Win+H, speak, Enter",juce::dontSendNotification);
+        commandStatus.setText("VOICE: TALK / F9, or type a command",juce::dontSendNotification);
         commandStatus.setTooltip("Windows: focus the command field, use Win+H for speech-to-text, then Enter to run. No always-listening microphone.");
         runVoiceCommand.setButtonText("COMMAND");
         runVoiceCommand.onClick=[this]{
             voiceCommandInput.grabKeyboardFocus();
             executeStudioCommand(voiceCommandInput.getText());
         };
-        runVoiceCommand.setTooltip("Voice-ready command input: on Windows press Win+H and dictate a command, then press Enter. Native speech recognition is not yet integrated.");
+        runVoiceCommand.setTooltip("Run the command field. Type a command or use Win+H, then press Enter. TALK/F9 recognizes and runs one spoken command directly.");
         voiceCommandInput.onReturnKey=[this]{executeStudioCommand(voiceCommandInput.getText());};
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN PROJECT");
@@ -1637,7 +1638,7 @@ private:
             arrangementScrollTrack=juce::jmin(maxScroll,selectedTrack-visible+1);
     }
     void executeStudioCommand(juce::String spoken){
-        auto command=spoken.trim().toLowerCase().replaceCharacter('-', ' ');
+        auto command=spoken.trim().toLowerCase();
         command=command.trimCharactersAtEnd(".!?");
         if(command.startsWith("idw "))command=command.fromFirstOccurrenceOf("idw ",false,false);
         if(command.startsWith("studio "))command=command.fromFirstOccurrenceOf("studio ",false,false);
@@ -1664,13 +1665,16 @@ private:
         }else if(command=="voice help" || command=="help" || command=="list commands"){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                 "IDW Voice Commands",
-                "Click the command field, press Win+H, dictate a phrase, then press Enter.\n"
+                "Windows: TALK or F9 listens for one command (up to 8 seconds).\n"
+                "Click TALK again to cancel. Alternatively type, or use Win+H, then Enter.\n"
                 "Transport: play, stop, record vocals, stop recording.\n"
                 "Recording: arm track, disarm track, input status, overdub on/off.\n"
                 "Tracks: next track, previous track, select track 3, add audio track.\n"
                 "Mixing: mute/unmute, solo/unsolo, expand/collapse mixer.\n"
-                "Projects: save project.\n"
-                "Voice recognition uses Windows dictation; the DAW is not always listening.");
+                "Projects: save project (opens the save dialog).\n"
+                "Recording: say record vocals, then use TALK again and say confirm recording within 15 seconds.\n"
+                "Track numbers accept digits or words, such as select track three.\n"
+                "TALK uses Windows Speech recognition. It is not always listening.");
             feedback="Voice command list displayed";
         }else if(command=="record status" || command=="input status" || command=="microphone status"){
             auto* device=deviceManager.getCurrentAudioDevice();
@@ -1754,9 +1758,8 @@ private:
             }else feedback="Stop playback or recording before saving the project";
         }else if(command.startsWith("select track ") || command.startsWith("go to track ")){
             const auto numberText=command.fromLastOccurrenceOf("track ",false,false).trim();
-            const int number=numberText.getIntValue();
-            if(numberText.isEmpty() || !numberText.containsOnly("0123456789") ||
-               number<1 || (size_t)number>session.tracks.size()){
+            const int number=idw::daw::voiceTrackNumber(numberText.toStdString());
+            if(number<1 || (size_t)number>session.tracks.size()){
                 feedback="Invalid track number. Choose 1 to "+
                     juce::String((int)session.tracks.size());
             }else if(busy || playing.load()){

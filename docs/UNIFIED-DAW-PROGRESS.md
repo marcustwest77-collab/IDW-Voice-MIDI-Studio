@@ -129,3 +129,7 @@ Added RENAME TRACK for the selected audio or MIDI track. Names appear in lane he
 ### Hover guidance
 
 Enabled the workstation tooltip window so existing device, input, vocal FX, skin and command guidance appears on hover. Selected-track volume and rename tips include the full name, while empty-project tips clear the previous target. This improves access to long names without changing project data. Native compilation and visual checks are pending.
+
+### Voice command readiness
+
+Track selection accepts English number words as well as digits (1-128). Added regression coverage for spoken numbers, bounds and malformed phrases. Corrected outdated command hints to describe existing TALK/F9 native Windows recognition, the text/Win+H fallback and two-step recording confirmation. Added a voice-testing walkthrough to the bundled guide. Real speech and AudioBox testing remain pending.
