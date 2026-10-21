@@ -81,5 +81,21 @@ int main() {
     check(call(broadId, 4) == R::WrongGrant, "narrowing invalidates broad grant");
     check(gate.authorize("guest", 7, "track-b", grant->id, 1, A::Record, now)
           == R::WrongTrack, "narrowing removes other tracks");
+    grant = gate.grant("guest", Gate::Scope::SelectedTracks, {"a", "b"}, 7, now, ttl);
+    check(gate.authorizeTargets("guest", 7, {"a", "c"}, grant->id, 1, A::Record, now)
+          == R::WrongTrack, "one unapproved armed track denies entire capture");
+    check(gate.authorizeTargets("guest", 7, {"b", "a"}, grant->id, 1, A::Record, now)
+          == R::Allowed, "entire approved capture succeeds atomically");
+    check(gate.authorizeTargets("guest", 7, {"a", "b"}, grant->id, 1, A::Stop, now)
+          == R::Replay, "batch consumes sequence once");
+    check(gate.authorizeTargets("guest", 7, {"a", "c"}, grant->id, 2, A::Stop, now)
+          == R::WrongTrack, "remote stop cannot stop unapproved recording");
+    check(gate.authorizeTargets("guest", 7, {}, grant->id, 2, A::Record, now)
+          == R::WrongTrack, "empty capture denied");
+    check(gate.authorizeTargets("guest", 7, {"a", "a"}, grant->id, 2, A::Record, now)
+          == R::WrongTrack, "duplicate capture target denied");
+    grant = gate.grant("guest", Gate::Scope::AllTracks, {}, 7, now, ttl);
+    check(gate.authorizeTargets("guest", 7, {"a", "b", "c"}, grant->id, 1, A::Record, now)
+          == R::Allowed, "all scope authorizes complete armed set");
     std::cout << "Remote recording permission tests: PASS\n";
 }

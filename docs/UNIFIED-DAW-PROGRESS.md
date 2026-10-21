@@ -209,3 +209,18 @@ capture is a separate engine feature. Existing undeployed prototypes must upgrad
 together. Local native consent UI and recording integration remain pending.
 C++ permission tests and all 13 Python tests pass locally, including multiple
 selected targets, all-track grants, narrowing and malformed scope messages.
+
+### Atomic permission checks for armed track sets
+
+Native recording inspection confirmed that toggleRecording can start multiple
+armed tracks and stops the whole active capture. Added authorizeTargets to check
+all engine-derived affected track IDs before consuming one command sequence.
+Any unapproved target rejects the entire operation, including remote Stop; local
+Stop continues to bypass remote permission. Empty/duplicate/oversized sets fail.
+Selected scope cannot start or stop an unapproved companion track. AllTracks
+can authorize the complete set. Regression tests pass locally.
+
+This gate is still not wired to Main.cpp: the native adapter must resolve stable
+track IDs, derive actual armed/active targets, call this check on the message
+thread, and invoke explicit start/stop semantics (never blindly toggle). Native
+track identity mapping, consent UI and authenticated connection remain pending.

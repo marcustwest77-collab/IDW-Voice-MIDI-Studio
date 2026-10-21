@@ -71,15 +71,34 @@ public:
                      std::uint64_t currentProject, const std::string& targetTrack,
                      std::uint64_t grantId, std::uint64_t sequence,
                      Action action, Time now) {
+        return authorizeTargets(authenticatedPeer, currentProject, {targetTrack},
+                                grantId, sequence, action, now);
+    }
+
+    // One command may affect every armed/recording track. Authorize the entire
+    // engine-derived set atomically before calling the engine, on the same
+    // message thread. Never substitute only the track named by the sender.
+    Result authorizeTargets(const std::string& authenticatedPeer,
+                            std::uint64_t currentProject,
+                            const std::vector<std::string>& affectedTracks,
+                            std::uint64_t grantId, std::uint64_t sequence,
+                            Action action, Time now) {
         if (!current) return Result::NoGrant;
         if (now >= current->expires) { revoke(); return Result::Expired; }
         if (currentProject != current->project) {
             revoke(); return Result::WrongProject;
         }
         if (authenticatedPeer != current->peer) return Result::WrongPeer;
-        if (targetTrack.empty() || (current->scope == Scope::SelectedTracks
-            && !std::binary_search(current->tracks.begin(), current->tracks.end(), targetTrack)))
+        if (affectedTracks.empty() || affectedTracks.size() > 128)
             return Result::WrongTrack;
+        auto targets = affectedTracks;
+        std::sort(targets.begin(), targets.end());
+        if (std::adjacent_find(targets.begin(), targets.end()) != targets.end())
+            return Result::WrongTrack;
+        for (const auto& target : targets)
+            if (target.empty() || (current->scope == Scope::SelectedTracks
+                && !std::binary_search(current->tracks.begin(), current->tracks.end(), target)))
+                return Result::WrongTrack;
         if (grantId != current->id) return Result::WrongGrant;
         if (action != Action::Arm && action != Action::Record && action != Action::Stop)
             return Result::InvalidAction;
