@@ -24,6 +24,28 @@ int main(){
        restored.tracks[0].name!="Lead Vocal" || restored.tracks[1].name!="Keys / Chorus")
         throw std::runtime_error("renamed track round trip");
  }
+ {
+    Session source;source.addTrack(TrackType::audio);source.addTrack(TrackType::audio);
+    Session restored;
+    auto json=sessionToJson(source);
+    if(!sessionFromJson(json,restored) || restored.tracks[0].id!=source.tracks[0].id ||
+       restored.tracks[1].id!=source.tracks[1].id)throw std::runtime_error("identity round trip");
+    auto* tracks=json.getDynamicObject()->getProperty("tracks").getArray();
+    auto* first=tracks->getReference(0).getDynamicObject();
+    auto* second=tracks->getReference(1).getDynamicObject();
+    second->setProperty("id",first->getProperty("id"));
+    if(sessionFromJson(json,restored) || restored.tracks[1].id!=source.tracks[1].id)
+        throw std::runtime_error("duplicate identity must fail atomically");
+    second->removeProperty("id");first->removeProperty("id");
+    if(!sessionFromJson(json,restored) || restored.tracks[0].id==restored.tracks[1].id)
+        throw std::runtime_error("legacy identity migration");
+    const auto migrated=restored.tracks[0].id;
+    Session reopened;
+    if(!sessionFromJson(sessionToJson(restored),reopened) || reopened.tracks[0].id!=migrated)
+        throw std::runtime_error("migrated identity persistence");
+    first->setProperty("id","bad/id");
+    if(sessionFromJson(json,restored))throw std::runtime_error("malformed identity accepted");
+ }
  for(int fx=0;fx<=3;++fx){
     Session source;source.addTrack(TrackType::audio);source.setTrackVocalFxPreset(0,fx);
     source.setTrackVocalFxMix(0,0.4f);

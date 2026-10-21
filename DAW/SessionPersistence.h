@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_core/juce_core.h>
 #include "SessionModel.h"
+#include <set>
 namespace idw::daw {
 inline juce::var sessionToJson(const Session& s) {
     auto root=std::make_unique<juce::DynamicObject>();
@@ -19,6 +20,7 @@ inline juce::var sessionToJson(const Session& s) {
     juce::Array<juce::var> tracks;
     for(const auto& t:s.tracks){
         auto track=std::make_unique<juce::DynamicObject>();
+        track->setProperty("id",juce::String(t.id));
         track->setProperty("name",juce::String(t.name));
         track->setProperty("type",t.type==TrackType::audio?"audio":"midi");
         track->setProperty("mute",t.mute);
@@ -85,6 +87,17 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
     if(next.numerator<1 || next.numerator>32 || next.denominator<1 || next.denominator>32)return false;
     const auto tracks=root->getProperty("tracks");
     if(!tracks.isArray())return false;
+    std::set<std::string> identities;
+    // Reserve all explicit IDs before generating any legacy identities.
+    for(const auto& t:*tracks.getArray()){
+        auto* obj=t.getDynamicObject();
+        if(!obj)return false;
+        if(obj->hasProperty("id")){
+            const auto id=obj->getProperty("id");
+            if(!id.isString() || !validTrackId(id.toString().toStdString()) ||
+               !identities.insert(id.toString().toStdString()).second)return false;
+        }
+    }
     for(const auto& t:*tracks.getArray()){
         auto* obj=t.getDynamicObject();
         if(!obj)return false;
@@ -92,6 +105,10 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
         if(type!="audio" && type!="midi")return false;
         if(!next.addTrack(type=="audio"?TrackType::audio:TrackType::midi))return false;
         auto& target=next.tracks.back();
+        if(obj->hasProperty("id"))target.id=obj->getProperty("id").toString().toStdString();
+        else {
+            while(!identities.insert(target.id).second)target.id=newTrackId();
+        }
         target.name=obj->getProperty("name").toString().toStdString();
         target.mute=(bool)obj->getProperty("mute");
         target.solo=(bool)obj->getProperty("solo");

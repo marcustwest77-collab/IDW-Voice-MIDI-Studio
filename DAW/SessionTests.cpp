@@ -5,6 +5,9 @@ int main() {
     if(s.tracks.size()!=0 || s.bpm!=120.0)throw std::runtime_error("initial session");
     if(!s.addTrack(idw::daw::TrackType::audio)||!s.addTrack(idw::daw::TrackType::midi))throw std::runtime_error("add");
     if(s.tracks[0].name!="Audio 1" || s.tracks[1].name!="MIDI 2")throw std::runtime_error("names");
+    const auto firstId=s.tracks[0].id, secondId=s.tracks[1].id;
+    if(!idw::daw::validTrackId(firstId) || firstId==secondId || s.findTrackById(firstId)!=0)
+        throw std::runtime_error("stable track identity");
     if(!s.renameTrack(0,"Lead Vocal") || s.tracks[0].name!="Lead Vocal")throw std::runtime_error("rename audio");
     if(!s.renameTrack(1,"Keys / Chorus") || s.tracks[1].name!="Keys / Chorus")throw std::runtime_error("rename MIDI");
     for(const auto& invalid:{std::string{},std::string("   "),std::string("bad\nname"),std::string(257,'a')})
@@ -21,4 +24,13 @@ int main() {
        s.addClip(0, {"bad.wav",0.0,0.0,0.0}))throw std::runtime_error("invalid clip accepted");
     if(s.tracks[0].clips.size()!=1 || s.tracks[0].clips[0].startBeat!=4.0)throw std::runtime_error("clip metadata");
     if(!s.removeTrack(0)||s.removeTrack(99)||s.tracks.size()!=1)throw std::runtime_error("remove");
+    if(s.findTrackById(firstId) || s.findTrackById(secondId)!=0)
+        throw std::runtime_error("identity after removal");
+    s.addTrack(idw::daw::TrackType::audio);
+    if(s.tracks[1].id==firstId || s.tracks[1].id==secondId)
+        throw std::runtime_error("new track identity reused");
+    std::swap(s.tracks[0],s.tracks[1]);
+    if(s.findTrackById(secondId)!=1)throw std::runtime_error("identity after reorder");
+    s.tracks[0].id=secondId;
+    if(s.findTrackById(secondId))throw std::runtime_error("ambiguous identity accepted");
 }

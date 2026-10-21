@@ -224,3 +224,16 @@ This gate is still not wired to Main.cpp: the native adapter must resolve stable
 track IDs, derive actual armed/active targets, call this check on the message
 thread, and invoke explicit start/stop semantics (never blindly toggle). Native
 track identity mapping, consent UI and authenticated connection remain pending.
+
+### Persistent track identity
+
+Tracks now carry opaque 32-character lowercase hexadecimal IDs. Rename and reorder
+preserve identity; newly added tracks receive a new ID. findTrackById rejects
+missing, malformed or ambiguous identities rather than falling back to a name or
+position. IDs are not credentials and remain scoped by project generation.
+Session JSON persists IDs. Older projects without IDs receive them on load and
+retain them after saving; explicit malformed or duplicate IDs reject the load
+without modifying the output session. Existing version-1 files remain readable.
+Model identity/removal/reorder tests pass locally. Native persistence tests were
+added for round trip, legacy migration and duplicate rejection; CI execution is
+pending. The remote recording adapter and permission UI remain unconnected.
