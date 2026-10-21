@@ -261,3 +261,21 @@ recording still require CI and desktop testing. The authenticated network client
 message serialization/dispatch, visible connection/expiry status, multiple-selected
 track UI, and remote controller screen remain unfinished. This is native adapter
 integration, not a completed two-computer recording session.
+
+### Native studio-message adapter
+
+RemoteRecordingProtocol converts trusted studio signalling events to native
+connection changes and recording calls. Commands require the active server-issued
+session and opposite peer role, exact command fields, valid action and lossless
+positive uint64 strings. It serializes actual handler results, local grants and
+revokes. Peer departure/disconnect clears native permission. Workstation wires
+these callbacks, publishes revocation on project changes, and exposes sender,
+receive and disconnect entry points for a future authenticated network client.
+Only authenticated server events may enter this adapter; it does not authenticate
+arbitrary JSON or provide a socket. A control request never grants consent.
+
+Added a native JUCE test target for dispatch, result propagation, malformed numbers,
+spoofed sender, stale session, grant/revoke and departure. Native CI is required to
+execute it; source diff checks pass locally. Prior Windows/macOS builds were still
+running when checked. No end-to-end network or recording test is claimed. Live
+socket connection, controller screen, hosting and embedded video remain pending.

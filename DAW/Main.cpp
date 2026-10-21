@@ -12,6 +12,7 @@
 #include "TimelineMath.h"
 #include "VoiceTrackNumber.h"
 #include "RemoteRecordingControl.h"
+#include "RemoteRecordingProtocol.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
 #include "SessionPersistence.h"
@@ -562,6 +563,13 @@ public:
         connectButton.setButtonText("IDW CONNECT");
         addChildComponent(connectPanel);
         connectPanel.onRecordingControl=[this]{showRecordingPermissions();};
+        remoteRecordingProtocol.peerChanged=[this](const auto& peer,const auto& connection){
+            setAuthenticatedRecordingPeer(peer,connection);
+        };
+        remoteRecordingProtocol.execute=[this](const auto& peer,const auto& connection,const auto& track,
+            uint64_t grant,uint64_t sequence,idw::RemoteRecordingControl::Action action){
+            return executeRemoteRecording(peer,connection,track,grant,sequence,action);
+        };
         connectButton.onClick=[this]{
             connectPanel.setVisible(!connectPanel.isVisible());
             if(connectPanel.isVisible()){
@@ -1377,7 +1385,27 @@ public:
         g.setColour(juce::Colours::grey);
         g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline playback prototype; drag clips to move or resize their right edge." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
     }
-// Trusted transport integration points. Invoke on the JUCE message thread only.
+// Install only a sender owned by the authenticated studio-room connection.
+    void setRecordingSignalSender(std::function<void(const juce::var&)> sender){
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return;
+        remoteRecordingProtocol.disconnect();
+        remoteRecordingProtocol.send=std::move(sender);
+        onRemoteRecordingGrant=[this](const auto& grant){
+            if(!remoteRecordingProtocol.publishGrant(grant))remoteRecordingGate.revoke();
+        };
+        onRemoteRecordingRevoke=[this]{remoteRecordingProtocol.publishRevoke();};
+    }
+    bool receiveRecordingSignal(const juce::var& signal){
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return false;
+        if(!remoteRecordingProtocol.send)return false;
+        return remoteRecordingProtocol.receive(signal);
+    }
+    void recordingSignalDisconnected(){
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return;
+        remoteRecordingProtocol.disconnect();
+        remoteRecordingProtocol.send={};
+    }
+    // Trusted transport integration points. Invoke on the JUCE message thread only.
     // Transport must authenticate identity/session before calling; never expose
     // these methods directly to arbitrary browser scripts or incoming JSON.
     void setAuthenticatedRecordingPeer(const std::string& peer, const std::string& connection) {
@@ -1449,6 +1477,7 @@ public:
     std::function<void()> onRemoteRecordingRevoke;
 private:
     idw::RemoteRecordingControl remoteRecordingGate;
+    idw::RemoteRecordingProtocol remoteRecordingProtocol;
     std::string remotePeer,remoteConnection;
     uint64_t remoteConnectionGeneration=0;
     void showRecordingPermissions(){
@@ -2089,6 +2118,7 @@ private:
         session=std::move(restored);
         ++projectGeneration;
         remoteRecordingGate.revoke();
+        remoteRecordingProtocol.publishRevoke();
         // Editor selections belong to the old project, even if track indices match.
         selectedClipValid=false;
         draggingClip=false;draggingMixerFader=false;draggingMixerPan=false;
