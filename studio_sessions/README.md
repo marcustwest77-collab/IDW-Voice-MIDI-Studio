@@ -100,3 +100,26 @@ do not validate real browser permissions, camera images or audio quality.
 No hosting account, paid service, public endpoint or external invitation is
 created by this prototype. Server capacity and production deployment remain open
 engineering work. Local protocol tests are not a completed video-session test.
+
+### Remote recording permission foundation
+
+Added a standalone C++ permission gate for Arm, Record and Stop. Explicit local
+consent grants one authenticated peer access to one stable track ID in one project
+generation, for at most 15 minutes. Regranting invalidates old command generations;
+sequence checks reject duplicates and out-of-order requests. Expiry and project
+changes revoke access. Both roles can grant permission independently.
+
+This is not yet wired to the DAW or signalling service. The future adapter must
+serialize access on the message thread, derive peer identity from the authenticated
+connection, supply local project generation and steady-clock time, revoke on
+peer disconnect/track deletion/project replacement, and keep local Stop independent.
+Grant IDs are process-local counters, not authentication tokens: reconnecting must
+require fresh consent and messages must be bound to the current connection. Before
+executing an allowed command, validate track/input/transport readiness and report
+actual success or failure. Do not auto-delete or discard a take on revocation.
+
+Standalone permission tests cover default denial, peer/track/project binding,
+replacement, replay, expiry, invalid commands and lifetime bounds. Local C++ tests
+pass with address/undefined-behavior sanitizers; leak detection is disabled because
+this execution environment blocks its process inspection. Native CI and actual
+remote recording remain pending.
