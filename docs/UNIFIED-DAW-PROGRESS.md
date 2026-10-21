@@ -121,3 +121,7 @@ MIDI lanes now show note bars at the same beat scale as audio clips. Bar lengths
 ### Desktop help and documentation
 
 Added in-app QUICK HELP for recording, clip editing and project/audio exports. BUILD INFO now lists arrangement previews and explicitly distinguishes unfinished plugin hosting. Updated the packaged Combined Beta Guide with the desktop workflow, workspace boundaries and a focused return-to-desktop check. The older workspace manual links to this guide. Desktop hardware testing remains deferred until the user returns.
+
+### Track names
+
+Added RENAME TRACK for the selected audio or MIDI track. Names appear in lane headers, mixer and FX target labels and use the existing project name field. Blank/control-character/overlong names are rejected. The dialog is guarded against playback, recording, export and project replacement. Model validation tests run locally; name save/reopen coverage is added to native persistence tests.

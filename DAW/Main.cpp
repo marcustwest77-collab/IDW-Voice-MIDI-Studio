@@ -519,6 +519,7 @@ public:
                 "Press STOP RECORD to finish.\n\n"
                 "EDIT AND MIX\n"
                 "Stop transport before editing. Click a track or clip to select its mixer and FX controls. "
+                "Use RENAME TRACK to label the selected part. "
                 "Drag a clip to move it; drag its right edge to resize. Left/Right nudges a selected clip; "
                 "Shift+Left/Right changes its length. Select a MIDI track and open PIANO ROLL to edit notes.\n\n"
                 "SAVE YOUR WORK\n"
@@ -723,6 +724,35 @@ public:
             session.setTrackVocalFxMix(selectedTrack,(float)(vocalFxMix.getValue()/100.0));
             refreshMixer();
         };
+        renameTrackButton.setButtonText("RENAME TRACK");
+        renameTrackButton.setTooltip("Name the selected track; save the project to keep it.");
+        addAndMakeVisible(renameTrackButton);
+        renameTrackButton.onClick=[this]{
+            if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() ||
+               exportRunning.load() || selectedTrack>=session.tracks.size())return;
+            const auto index=selectedTrack;
+            const auto generation=projectGeneration;
+            auto* dialog=new juce::AlertWindow("Rename Track","Enter a track name (up to 64 characters).",
+                juce::MessageBoxIconType::InfoIcon);
+            dialog->addTextEditor("name",juce::String(session.tracks[index].name),"Track name");
+            dialog->getTextEditor("name")->setInputRestrictions(64);
+            dialog->addButton("Rename",1);dialog->addButton("Cancel",0);
+            juce::Component::SafePointer<Workstation> safeThis(this);
+            dialog->enterModalState(true,juce::ModalCallbackFunction::create(
+                [safeThis,dialog,index,generation](int result){
+                    if(result!=1 || safeThis==nullptr)return;
+                    if(safeThis->projectGeneration!=generation || safeThis->playing.load() ||
+                       safeThis->recorder.isRecording() || safeThis->multiRecorder.isRecording() ||
+                       safeThis->exportRunning.load())return;
+                    const auto name=dialog->getTextEditorContents("name").trim();
+                    if(!safeThis->session.renameTrack(index,name.toStdString())){
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                            "Track name unchanged","Use a nonempty name without control characters.");
+                        return;
+                    }
+                    safeThis->refreshMixer();safeThis->repaint();
+                }),true);
+        };
         previousTrack.setButtonText("< TRACK");
         nextTrack.setButtonText("TRACK >");
         addAndMakeVisible(previousTrack);addAndMakeVisible(nextTrack);
@@ -863,6 +893,7 @@ public:
         nextTrack.setBounds(mixRow.removeFromLeft(100));
         armControl.setBounds(mixRow.removeFromLeft(105));
         inputChannel.setBounds(mixRow.removeFromLeft(90));
+        renameTrackButton.setBounds(mixRow.removeFromLeft(125).reduced(3));
         auto monitorRow=area.removeFromTop(28);
         monitorControl.setBounds(monitorRow.removeFromLeft(190));
         audioDevices.setBounds(monitorRow.removeFromLeft(155).reduced(2));
@@ -1490,7 +1521,7 @@ private:
     void refreshMixer(){
         const bool hasTracks=!session.tracks.empty();
         for(auto* control : std::initializer_list<juce::Component*>{
-                &gainControl,&panControl,&muteControl,&soloControl,&previousTrack,&nextTrack})
+                &gainControl,&panControl,&muteControl,&soloControl,&previousTrack,&nextTrack,&renameTrackButton})
             control->setEnabled(hasTracks);
         if(!hasTracks){
             selectedClipValid=false;
@@ -1939,6 +1970,7 @@ private:
         for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
         sources.clear();
         session=std::move(restored);
+        ++projectGeneration;
         // Editor selections belong to the old project, even if track indices match.
         selectedClipValid=false;
         draggingClip=false;draggingMixerFader=false;draggingMixerPan=false;
@@ -2649,7 +2681,8 @@ private:
     std::thread voiceListenThread;
     bool pendingVoiceRecord=false; // Spoken record requires a second explicit command.
     juce::uint32 voiceRecordRequestedAt=0; // Confirmation expires after 15 seconds.
-    juce::TextButton previousTrack,nextTrack;
+    juce::TextButton previousTrack,nextTrack,renameTrackButton;
+    uint64_t projectGeneration=0;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration,liveCalibration;
     juce::ComboBox synthPreset;

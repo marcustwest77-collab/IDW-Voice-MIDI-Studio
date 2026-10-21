@@ -16,6 +16,14 @@
 #include <iostream>
 int main(){
  using namespace idw::daw;
+ {
+    Session source;source.addTrack(TrackType::audio);source.addTrack(TrackType::midi);
+    source.renameTrack(0,"Lead Vocal");source.renameTrack(1,"Keys / Chorus");
+    Session restored;
+    if(!sessionFromJson(sessionToJson(source),restored) ||
+       restored.tracks[0].name!="Lead Vocal" || restored.tracks[1].name!="Keys / Chorus")
+        throw std::runtime_error("renamed track round trip");
+ }
  for(int fx=0;fx<=3;++fx){
     Session source;source.addTrack(TrackType::audio);source.setTrackVocalFxPreset(0,fx);
     source.setTrackVocalFxMix(0,0.4f);

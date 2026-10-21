@@ -49,6 +49,12 @@ public:
         tracks.push_back({(type == TrackType::audio ? "Audio " : "MIDI ") + std::to_string(tracks.size()+1),type});
         return true;
     }
+    bool renameTrack(size_t index,const std::string& name) {
+        if(index>=tracks.size() || name.empty() || name.size()>256 ||
+           name.find_first_not_of(" \t\r\n")==std::string::npos)return false;
+        for(unsigned char c:name)if(c<32 || c==127)return false;
+        tracks[index].name=name;return true;
+    }
     bool setTrackVocalFxMix(size_t index,float mix) {
         if(index>=tracks.size() || tracks[index].type!=TrackType::audio ||
            !std::isfinite(mix) || mix<0 || mix>1)return false;

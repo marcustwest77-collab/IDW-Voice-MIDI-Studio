@@ -34,7 +34,8 @@ A unified timeline and a single audio engine remain future integration work.
 3. Press **RECORD VOCAL**, then **STOP RECORD** to finish. Play the result to hear
    the take with the beat. Check MUTE/SOLO if either part is missing.
 4. With transport stopped, click a lane header or clip to select that track.
-   The vocal FX heading identifies its target. Gentle, Warm and Forward are
+   Use **RENAME TRACK** for names such as Beat, Lead Vocal, Double and Adlibs;
+   **SAVE PROJECT** keeps these names. The vocal FX heading identifies its target. Gentle, Warm and Forward are
    audio-track presets; the amount blends them with the original sound. These
    effects apply to playback/export, not to the recorded source or live monitoring.
 5. Audio waveforms show original files, before effects. MIDI note bars show the
