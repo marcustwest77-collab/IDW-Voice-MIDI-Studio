@@ -11,6 +11,7 @@ int main(){
         check(!StudioNetworkClient::validOrigin(url),"reject unsafe origin");
     auto now=idw::RemoteStudioController::Clock::now();
     idw::RemoteStudioController c([&]{return now;});std::vector<juce::var> sent;juce::var visible;juce::String status;
+    bool available=false;c.commandsAvailable=[&](bool ready){available=ready;};
     c.send=[&](const auto& v){sent.push_back(v);};c.tracksChanged=[&](const auto& v){visible=v;};
     c.status=[&](const auto& v){status=v;};
     c.requestControl();check(sent.empty(),"no request before join");
@@ -22,15 +23,19 @@ int main(){
     check(!c.command("record","a"),"catalog required");
     c.receive(juce::JSON::parse(R"({"type":"control_tracks","from":"guest","session":"abcdefghijklmnopqrstuvwx","grant":"1","tracks":[{"id":"a","name":"Lead"}]})"));
     check(visible.isArray() && visible.getArray()->size()==1,"catalog visible");
+    check(available,"catalog enables command buttons");
     check(!c.command("record","b"),"unlisted track denied");
     check(c.command("arm","a"),"approved command");
+    check(!available,"pending result disables command buttons");
     check(!c.command("record","a"),"one pending command");
     c.receive(juce::JSON::parse(R"({"type":"control_result","from":"guest","session":"abcdefghijklmnopqrstuvwx","grant":"1","sequence":"99","status":"succeeded"})"));
     check(!c.command("record","a"),"unmatched result ignored");
     c.receive(juce::JSON::parse(R"({"type":"control_result","from":"guest","session":"abcdefghijklmnopqrstuvwx","grant":"1","sequence":"1","status":"not_ready"})"));
+    check(available,"matching result enables command buttons");
     check(c.command("record","a"),"matching result releases pending");
     c.receive(juce::JSON::parse(R"({"type":"control_revoke","from":"guest","session":"abcdefghijklmnopqrstuvwx","grant":"1"})"));
     check(!c.command("stop","a") && visible.getArray()->isEmpty(),"revoke clears controls");
+    check(!available,"revocation disables command buttons");
     c.requestControl();grant.getDynamicObject()->setProperty("request",sent.back().getProperty("request",{}));c.receive(grant);
     now+=std::chrono::seconds(60);c.tick();
     check(status.contains("expired") && !c.command("arm","a"),"expiry clears controls");

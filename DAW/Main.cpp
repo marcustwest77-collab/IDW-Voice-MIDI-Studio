@@ -593,6 +593,7 @@ public:
         };
         studioControllerPanel.onRequest=[this]{remoteStudioController.requestControl();};
         studioControllerPanel.onCommand=[this](const auto& action,const auto& track){remoteStudioController.command(action,track);};
+        remoteStudioController.commandsAvailable=[this](bool ready){studioControllerPanel.enableCommands(ready);};
         remoteStudioController.status=[this](const auto& text){studioControllerPanel.setStatus(text);};
         remoteStudioController.tracksChanged=[this](const auto& tracks){studioControllerPanel.setTracks(tracks);};
         studioNetwork.onStatus=[this](const auto& text){

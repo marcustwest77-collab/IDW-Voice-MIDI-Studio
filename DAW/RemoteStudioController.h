@@ -8,6 +8,7 @@ public:
     std::function<void(const juce::var&)> send;
     std::function<void(const juce::String&)> status;
     std::function<void(const juce::var&)> tracksChanged;
+    std::function<void(bool)> commandsAvailable;
     using Clock=std::chrono::steady_clock;
     explicit RemoteStudioController(std::function<Clock::time_point()> clock=[] {return std::chrono::steady_clock::now();})
         : now(std::move(clock)){startTimer(250);}
@@ -58,14 +59,14 @@ public:
                 if(!RemoteRecordingProtocol::token(track) || !name.isString() || name.toString().length()>256 ||
                    !seen.insert(track.toString().toStdString()).second || (!all && !allowed.count(track.toString().toStdString())))return;
             }
-            known=std::move(seen);if(tracksChanged)tracksChanged(list);
+            known=std::move(seen);if(tracksChanged)tracksChanged(list);notifyAvailability();
             say("Recording control ready. Record affects all approved armed tracks.");return;
         }
         if(type=="control_result"){
             uint64_t seq=0;if(!RemoteRecordingProtocol::number(o->getProperty("sequence"),seq) || !pending || seq!=pending)return;
             const auto result=o->getProperty("status").toString();
             if(result!="succeeded" && result!="denied" && result!="not_ready" && result!="failed")return;
-            pending=0;say("Command result: "+result+". This does not confirm recorded audio quality.");
+            pending=0;notifyAvailability();say("Command result: "+result+". This does not confirm recorded audio quality.");
         }
     }
     void requestControl(){
@@ -79,7 +80,7 @@ public:
            (action!="arm" && action!="record" && action!="stop") || sequence==UINT64_MAX){
             say("Command unavailable: check permission, track and pending result.");return false;
         }
-        pending=++sequence;pendingUntil=now()+std::chrono::seconds(10);
+        pending=++sequence;pendingUntil=now()+std::chrono::seconds(10);notifyAvailability();
         auto v=message("control_command");auto* o=v.getDynamicObject();
         o->setProperty("grant",juce::String(std::to_string(grant)));o->setProperty("sequence",juce::String(std::to_string(pending)));
         o->setProperty("action",juce::String(action));o->setProperty("track",juce::String(track));
@@ -100,7 +101,8 @@ private:
     uint64_t grant=0,sequence=0,pending=0;bool all=false;
     std::set<std::string> allowed,known;Clock::time_point expires{},pendingUntil{};
     void say(const juce::String& text){if(status)status(text);}
-    void clearGrant(){grant=sequence=pending=0;known.clear();allowed.clear();if(tracksChanged)tracksChanged(juce::var(juce::Array<juce::var>{}));}
+    void clearGrant(){grant=sequence=pending=0;known.clear();allowed.clear();if(tracksChanged)tracksChanged(juce::var(juce::Array<juce::var>{}));notifyAvailability();}
+    void notifyAvailability(){if(commandsAvailable)commandsAvailable(send && grant && now()<expires && !pending && !known.empty());}
     juce::var message(const char* type){auto* o=new juce::DynamicObject();o->setProperty("type",type);o->setProperty("session",session);return juce::var(o);}
     void timerCallback() override {tick();}
 };
