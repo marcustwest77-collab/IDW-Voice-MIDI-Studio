@@ -15,6 +15,8 @@ public:
         uint64_t,uint64_t,Gate::Action)> execute;
     std::function<void(const juce::var&)> send;
 
+    std::string pendingRequest() const {return send && !peer.empty() ? request : std::string{};}
+
     void disconnect(){
         role.clear();peer.clear();session.clear();request.clear();lastGrant=0;
         if(peerChanged)peerChanged({},{});
@@ -92,7 +94,9 @@ public:
         const auto seconds=std::chrono::duration_cast<std::chrono::seconds>(grant.expires-Gate::Clock::now()).count();
         if(seconds<=0 || seconds>900)return false;
         obj->setProperty("ttl_seconds",int(seconds));
-        lastGrant=grant.id;return emit(reply);
+        lastGrant=grant.id;
+        if(!emit(reply))return false;
+        request.clear();return true;
     }
     void publishTracks(const Gate::Grant& grant,const juce::var& tracks){
         if(!send || peer.empty() || lastGrant!=grant.id)return;

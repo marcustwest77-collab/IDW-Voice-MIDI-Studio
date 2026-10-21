@@ -1438,7 +1438,11 @@ public:
         remoteRecordingProtocol.disconnect();
         remoteRecordingProtocol.send=std::move(sender);
         onRemoteRecordingGrant=[this](const auto& grant){
-            if(!remoteRecordingProtocol.publishGrant(grant)){remoteRecordingGate.revoke();return;}
+            if(!remoteRecordingProtocol.publishGrant(grant)){
+                remoteRecordingGate.revoke();
+                studioControllerPanel.setStatus("Permission could not be sent. Ask the participant to request control again.");
+                return;
+            }
             juce::Array<juce::var> tracks;
             for(const auto& track:session.tracks){
                 if(track.type!=idw::daw::TrackType::audio)continue;
@@ -1542,8 +1546,10 @@ private:
     std::string remotePeer,remoteConnection;
     uint64_t remoteConnectionGeneration=0;
     void showRecordingPermissions(){
+        const auto request=remoteRecordingProtocol.pendingRequest();
         auto* dialog=new juce::AlertWindow("Recording permissions",
             remotePeer.empty() ? "No authenticated IDW recording peer is connected. Browser video calls do not grant DAW control."
+                : request.empty() ? "Ask the other participant to click Request Control, then reopen My Permissions. Existing control can be revoked here."
                 : "Allow the connected IDW peer to Arm, Record and Stop for 15 minutes. All tracks includes future audio tracks. Local Stop remains available.",
             juce::MessageBoxIconType::InfoIcon);
         dialog->addButton("Close",0,juce::KeyPress(juce::KeyPress::escapeKey));
@@ -1551,14 +1557,14 @@ private:
         std::vector<std::string> selected;
         if(selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::audio)
             selected.push_back(session.tracks[selectedTrack].id);
-        if(!remotePeer.empty() && onRemoteRecordingGrant){
+        if(!request.empty() && onRemoteRecordingGrant){
             if(!selected.empty())dialog->addButton("Allow selected track",1);
             dialog->addButton("Allow all tracks",2);
         }
         const auto project=projectGeneration, connection=remoteConnectionGeneration;
         juce::Component::SafePointer<Workstation> safeThis(this);
         dialog->enterModalState(true,juce::ModalCallbackFunction::create(
-            [safeThis,project,connection,selected](int result){
+            [safeThis,project,connection,selected,request](int result){
                 if(!safeThis || result==0)return;
                 if(result==3){
                     safeThis->remoteRecordingGate.revoke();
@@ -1566,7 +1572,11 @@ private:
                     return;
                 }
                 if(project!=safeThis->projectGeneration || connection!=safeThis->remoteConnectionGeneration ||
-                   safeThis->remotePeer.empty() || !safeThis->onRemoteRecordingGrant)return;
+                   safeThis->remotePeer.empty() || !safeThis->onRemoteRecordingGrant ||
+                   request.empty() || safeThis->remoteRecordingProtocol.pendingRequest()!=request){
+                    safeThis->studioControllerPanel.setStatus("Permission request changed. Reopen My Permissions to review the current request.");
+                    return;
+                }
                 using Gate=idw::RemoteRecordingControl;
                 const auto grant=safeThis->remoteRecordingGate.grant(safeThis->remotePeer,
                     result==2 ? Gate::Scope::AllTracks : Gate::Scope::SelectedTracks,

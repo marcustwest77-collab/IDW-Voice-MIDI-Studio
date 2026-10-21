@@ -33,6 +33,10 @@ expire after one hour or when the process exits. Do not post the tickets in scre
 4. In A, click **Request Control**. In B, open **My Permissions**, then choose
    **Allow selected track** or **Allow all tracks**. No command should run merely
    because permission was requested or granted.
+   Before A requests control, B's permissions dialog should explain that a request
+   is needed and show no Allow buttons. Reopen the dialog after the request arrives.
+   Each successful grant consumes that request; changing permission requires a fresh
+   request. If the request changes while the dialog is open, reopen it before approving.
 5. In A, select "Remote test" from the track list and click **Arm**. B's track
    should become armed. The result in A should report success.
 6. Click **Record** in A, speak a short phrase into B's microphone, then click
