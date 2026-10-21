@@ -6,7 +6,7 @@
 // This is NOT synchronized DAW collaboration and does not enforce attendance limits.
 class IDWConnectPanel final : public juce::Component {
 public:
-    std::function<void()> onRecordingControl;
+    std::function<void()> onRecordingControl,onStudioController;
     IDWConnectPanel() {
         heading.setText("IDW CONNECT  |  2-PERSON STUDIO CALL",juce::dontSendNotification);
         heading.setColour(juce::Label::textColourId,juce::Colours::gold);
@@ -53,6 +53,8 @@ public:
         control.setButtonText("RECORDING PERMISSIONS");
         addAndMakeVisible(control);
         control.onClick=[this]{if(onRecordingControl)onRecordingControl();};
+        studio.setButtonText("REMOTE CONTROLLER");addAndMakeVisible(studio);
+        studio.onClick=[this]{if(onStudioController)onStudioController();};
         invite.setEnabled(false);
         room.onTextChange=[this]{invite.setEnabled(isValidCode(room.getText().trim()));};
     }
@@ -68,7 +70,7 @@ public:
         invite.setBounds(actions.removeFromLeft(130).reduced(2));
         bounds.removeFromTop(10);
         notice.setBounds(bounds.removeFromTop(50));
-        control.setBounds(bounds.removeFromTop(28));
+        auto bottom=bounds.removeFromTop(28);control.setBounds(bottom.removeFromLeft(260));studio.setBounds(bottom);
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff181e28));
@@ -84,5 +86,5 @@ private:
     }
     juce::Label heading,notice;
     juce::TextEditor room;
-    juce::TextButton create,join,invite,control;
+    juce::TextButton create,join,invite,control,studio;
 };

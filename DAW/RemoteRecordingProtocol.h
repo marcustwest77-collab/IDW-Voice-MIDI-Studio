@@ -94,6 +94,12 @@ public:
         obj->setProperty("ttl_seconds",int(seconds));
         lastGrant=grant.id;send(reply);return true;
     }
+    void publishTracks(const Gate::Grant& grant,const juce::var& tracks){
+        if(!send || peer.empty() || lastGrant!=grant.id)return;
+        auto reply=message("control_tracks");
+        reply.getDynamicObject()->setProperty("grant",juce::String(std::to_string(grant.id)));
+        reply.getDynamicObject()->setProperty("tracks",tracks);send(reply);
+    }
     void publishRevoke(){
         if(send && !peer.empty() && lastGrant){
             auto reply=message("control_revoke");

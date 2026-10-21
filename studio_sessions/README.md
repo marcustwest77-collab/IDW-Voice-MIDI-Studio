@@ -168,3 +168,41 @@ capture is a separate engine feature. Existing undeployed prototypes must upgrad
 together. Local native consent UI and recording integration remain pending.
 C++ permission tests and all 13 Python tests pass locally, including multiple
 selected targets, all-track grants, narrowing and malformed scope messages.
+
+### Windows network client and remote controller
+
+Added a Windows WinHTTP WebSocket client and native controller dialog, opened from
+IDW Connect > Remote Controller. Join takes a server origin, room ID and private
+seat ticket. WSS uses normal Windows certificate validation; plain HTTP is allowed
+only for localhost/127.0.0.1 development. Redirects are disabled. Tickets are masked,
+cleared from the editor on join and not persisted/logged. Incoming messages are
+bounded to 64 KiB with at most 128 queued dispatches. Network callbacks dispatch
+to the message thread; leave/destruction invalidates queued callbacks. No automatic
+reconnection or recording-command retries. macOS reports networking unavailable.
+
+Both participants join the same room using their own seat tickets. The engineer
+clicks Request Control; the performer opens My Permissions and grants selected
+track or all-track access. The performer publishes only approved audio IDs/names.
+The engineer chooses a track, arms it, and starts/stops recording. Record still
+affects all armed tracks and the receiving DAW validates the entire affected set.
+The controller permits one outstanding command, correlates results, clears controls
+on expiry/revoke/disconnect, and requires fresh permission after a 10-second result
+timeout. A missing result means unknown recording state, never automatic retry.
+Closing the controller window leaves the connection active; use Leave to disconnect.
+Local recording continues on disconnect/revoke and remains stoppable locally.
+
+Track lists are snapshots at grant time. Request fresh permission to refresh newly
+added/renamed tracks. All-track permission includes newly added tracks at the gate,
+but they do not appear in the remote selector until refreshed. Mixer/effects/editing,
+video embedding, audio streaming and take transfer are not implemented by this step.
+There is no hosted room service or in-app room broker yet: this is a developer-test
+connection to a separately started signalling server. Remote computers require a
+configured HTTPS endpoint with the matching allowed origin; no server is deployed.
+
+Validation: native controller tests compiled and passed locally against JUCE 9.0.2;
+workstation syntax check passed on Linux. Fourteen Python server tests pass, including
+track catalog validation/relay; eight existing browser tests pass. Windows CI now
+builds a native two-client loopback integration test against the actual Python server
+and a fake recording engine, covering command/result round trip and peer departure.
+Windows compile, live network test, WSS certificate behavior, UI visual inspection
+and real recording on two Windows machines remain pending until those checks run.

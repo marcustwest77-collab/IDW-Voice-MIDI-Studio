@@ -78,6 +78,7 @@ def valid_control(payload):
         "control_request": {"request"},
         "control_grant": {"request", "grant", "scope", "tracks", "ttl_seconds"},
         "control_revoke": {"grant"},
+        "control_tracks": {"grant", "tracks"},
         "control_command": {"grant", "sequence", "action", "track"},
         "control_result": {"grant", "sequence", "status"},
     }
@@ -105,6 +106,21 @@ def valid_control(payload):
             return False
         scope_ok = (payload["scope"] == "all" and not tracks) or (payload["scope"] == "selected" and bool(tracks))
         return scope_ok and type(payload["ttl_seconds"]) is int and 1 <= payload["ttl_seconds"] <= 900
+    if kind == "control_tracks":
+        tracks = payload["tracks"]
+        if not isinstance(tracks, list) or len(tracks) > 128:
+            return False
+        seen = set()
+        for track in tracks:
+            if not isinstance(track, dict) or set(track) != {"id", "name"}:
+                return False
+            ident, name = track["id"], track["name"]
+            if not isinstance(ident, str) or re.fullmatch(r"[A-Za-z0-9_-]{1,128}", ident) is None:
+                return False
+            if ident in seen or not isinstance(name, str) or not 1 <= len(name) <= 256:
+                return False
+            seen.add(ident)
+        return True
     if kind == "control_command":
         return payload["action"] in ("arm", "record", "stop")
     if kind == "control_result":

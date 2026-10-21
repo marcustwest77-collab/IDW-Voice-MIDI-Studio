@@ -13,6 +13,9 @@
 #include "VoiceTrackNumber.h"
 #include "RemoteRecordingControl.h"
 #include "RemoteRecordingProtocol.h"
+#include "StudioNetworkClient.h"
+#include "StudioControllerPanel.h"
+#include "RemoteStudioController.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
 #include "SessionPersistence.h"
@@ -563,6 +566,50 @@ public:
         connectButton.setButtonText("IDW CONNECT");
         addChildComponent(connectPanel);
         connectPanel.onRecordingControl=[this]{showRecordingPermissions();};
+        connectPanel.onStudioController=[this]{
+            if(studioWindow){studioWindow->toFront(true);return;}
+            juce::DialogWindow::LaunchOptions options;
+            options.content.setNonOwned(&studioControllerPanel);
+            options.dialogTitle="IDW Remote Recording Controller";
+            options.dialogBackgroundColour=juce::Colour(0xff181e28);
+            options.escapeKeyTriggersCloseButton=true;options.useNativeTitleBar=true;options.resizable=false;
+            studioWindow=options.launchAsync();
+        };
+        studioControllerPanel.onPermissions=[this]{showRecordingPermissions();};
+        studioControllerPanel.onJoin=[this](const auto& origin,const auto& room,const auto& ticket){
+            studioNetwork.disconnect();recordingSignalDisconnected();remoteStudioController.reset();
+            auto sender=[this](const juce::var& value){
+                if(!studioNetwork.send(value)){
+                    recordingSignalDisconnected();remoteStudioController.reset();
+                    studioControllerPanel.setStatus("Send failed. Recording state may be unknown; no retry was sent.");
+                }
+            };
+            setRecordingSignalSender(sender);remoteStudioController.send=sender;
+            studioNetwork.connect(origin,room,ticket);
+        };
+        studioControllerPanel.onLeave=[this]{
+            studioNetwork.disconnect();recordingSignalDisconnected();remoteStudioController.reset();
+            studioControllerPanel.setStatus("Disconnected. Local recording, if active, continues until you stop it.");
+        };
+        studioControllerPanel.onRequest=[this]{remoteStudioController.requestControl();};
+        studioControllerPanel.onCommand=[this](const auto& action,const auto& track){remoteStudioController.command(action,track);};
+        remoteStudioController.status=[this](const auto& text){studioControllerPanel.setStatus(text);};
+        remoteStudioController.tracksChanged=[this](const auto& tracks){studioControllerPanel.setTracks(tracks);};
+        studioNetwork.onStatus=[this](const auto& text){
+            if(text!="Connecting…"){recordingSignalDisconnected();remoteStudioController.reset();}
+            studioControllerPanel.setStatus(text);
+        };
+        studioNetwork.onMessage=[this](const juce::var& value){
+            const auto accepted=receiveRecordingSignal(value);
+            const auto type=value.getProperty("type",{}).toString();
+            if((type=="joined" || type=="peer_joined") && !accepted){
+                studioNetwork.disconnect();recordingSignalDisconnected();remoteStudioController.reset();
+                studioControllerPanel.setStatus("Invalid studio admission response.");return;
+            }
+            remoteStudioController.receive(value);
+            if(type=="control_request" && accepted)
+                studioControllerPanel.setStatus("The other participant requests recording control. Open My Permissions to allow or decline.");
+        };
         remoteRecordingProtocol.peerChanged=[this](const auto& peer,const auto& connection){
             setAuthenticatedRecordingPeer(peer,connection);
         };
@@ -1391,7 +1438,17 @@ public:
         remoteRecordingProtocol.disconnect();
         remoteRecordingProtocol.send=std::move(sender);
         onRemoteRecordingGrant=[this](const auto& grant){
-            if(!remoteRecordingProtocol.publishGrant(grant))remoteRecordingGate.revoke();
+            if(!remoteRecordingProtocol.publishGrant(grant)){remoteRecordingGate.revoke();return;}
+            juce::Array<juce::var> tracks;
+            for(const auto& track:session.tracks){
+                if(track.type!=idw::daw::TrackType::audio)continue;
+                if(grant.scope==idw::RemoteRecordingControl::Scope::SelectedTracks &&
+                   std::find(grant.tracks.begin(),grant.tracks.end(),track.id)==grant.tracks.end())continue;
+                auto* item=new juce::DynamicObject();item->setProperty("id",juce::String(track.id));
+                item->setProperty("name",juce::String(track.name.empty()?"Audio track":track.name));
+                tracks.add(juce::var(item));
+            }
+            remoteRecordingProtocol.publishTracks(grant,juce::var(tracks));
         };
         onRemoteRecordingRevoke=[this]{remoteRecordingProtocol.publishRevoke();};
     }
@@ -1478,6 +1535,10 @@ public:
 private:
     idw::RemoteRecordingControl remoteRecordingGate;
     idw::RemoteRecordingProtocol remoteRecordingProtocol;
+    StudioNetworkClient studioNetwork;
+    StudioControllerPanel studioControllerPanel;
+    idw::RemoteStudioController remoteStudioController;
+    juce::Component::SafePointer<juce::DialogWindow> studioWindow;
     std::string remotePeer,remoteConnection;
     uint64_t remoteConnectionGeneration=0;
     void showRecordingPermissions(){
@@ -2779,7 +2840,7 @@ private:
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {studioNetwork.disconnect();if(studioWindow)delete studioWindow.getComponent();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
     juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton,skinToolsButton;

@@ -27,6 +27,13 @@ jobs:
       - name: Test local AI MCP protocol
         run: python DAW/ai/test_mcp_server.py
 
+      - name: Test Windows studio network round trip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m pip install -r studio_sessions/requirements.txt
+          python studio_sessions/test_windows_network.py build-v14/Release/IDWDAWStudioNetworkTests.exe
+
       - name: Package Windows private beta
         if: matrix.os == 'windows-latest'
         shell: pwsh

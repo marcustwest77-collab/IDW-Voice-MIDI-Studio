@@ -52,6 +52,15 @@ class AdmissionTests(unittest.TestCase):
             self.assertFalse(valid_control({**grant, "ttl_seconds":ttl}))
         self.assertFalse(valid_control({"type":[]}))
 
+    def test_track_catalog_validation(self):
+        payload = {"type":"control_tracks", "session":"session", "grant":"1",
+                   "tracks":[{"id":"a", "name":"Lead Vocal"}]}
+        self.assertTrue(valid_control(payload))
+        for tracks in ([{"id":"a", "name":"x"}, {"id":"a", "name":"y"}],
+                       [{"id":"a", "name":3}], [{"id":"a", "name":"x", "path":"private"}],
+                       [{"id":"a", "name":"x"}]*129):
+            self.assertFalse(valid_control({**payload, "tracks":tracks}))
+
     def test_signal_validation(self):
         self.assertTrue(valid_signal({"type":"offer","sdp":"test"}))
         self.assertTrue(valid_signal({"type":"candidate","candidate":None}))
@@ -121,6 +130,7 @@ class ProtocolTests(AioHTTPTestCase):
             {"type":"control_command", "grant":"1", "sequence":"1", "action":"record", "track":"track-a"},
             {"type":"control_result", "grant":"1", "sequence":"1", "status":"not_ready"},
             {"type":"control_revoke", "grant":"1"},
+            {"type":"control_tracks", "grant":"1", "tracks":[{"id":"a", "name":"Lead Vocal"}]},
         ]
         for i, frame in enumerate(frames):
             sender, receiver = (host, guest) if i % 2 == 0 else (guest, host)
