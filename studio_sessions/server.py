@@ -76,9 +76,9 @@ def valid_control(payload):
     kind = payload.get("type")
     fields = {
         "control_request": {"request"},
-        "control_grant": {"request", "grant", "track", "ttl_seconds"},
+        "control_grant": {"request", "grant", "scope", "tracks", "ttl_seconds"},
         "control_revoke": {"grant"},
-        "control_command": {"grant", "sequence", "action"},
+        "control_command": {"grant", "sequence", "action", "track"},
         "control_result": {"grant", "sequence", "status"},
     }
     if not isinstance(kind, str) or kind not in fields:
@@ -96,7 +96,15 @@ def valid_control(payload):
                 or int(payload[key]) > 18446744073709551615):
             return False
     if kind == "control_grant":
-        return type(payload["ttl_seconds"]) is int and 1 <= payload["ttl_seconds"] <= 900
+        tracks = payload["tracks"]
+        if not isinstance(tracks, list) or len(tracks) > 128:
+            return False
+        if any(not isinstance(t, str) or re.fullmatch(r"[A-Za-z0-9_-]{1,128}", t) is None for t in tracks):
+            return False
+        if len(set(tracks)) != len(tracks):
+            return False
+        scope_ok = (payload["scope"] == "all" and not tracks) or (payload["scope"] == "selected" and bool(tracks))
+        return scope_ok and type(payload["ttl_seconds"]) is int and 1 <= payload["ttl_seconds"] <= 900
     if kind == "control_command":
         return payload["action"] in ("arm", "record", "stop")
     if kind == "control_result":

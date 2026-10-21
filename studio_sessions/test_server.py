@@ -33,15 +33,21 @@ class AdmissionTests(unittest.TestCase):
 
     def test_control_shapes(self):
         base = {"type":"control_command", "session":"session", "grant":"1",
-                "sequence":"18446744073709551615", "action":"record"}
+                "sequence":"18446744073709551615", "action":"record", "track":"track-a"}
         self.assertTrue(valid_control(base))
         for patch in ({"sequence":True}, {"sequence":1}, {"sequence":"0"},
                       {"sequence":"18446744073709551616"}, {"action":"delete"},
                       {"from":"host"}, {"session":""}, {"grant":"01"}):
             self.assertFalse(valid_control({**base, **patch}))
         grant = {"type":"control_grant", "session":"s", "request":"r",
-                 "grant":"1", "track":"track-a", "ttl_seconds":900}
+                 "grant":"1", "scope":"selected", "tracks":["track-a"], "ttl_seconds":900}
         self.assertTrue(valid_control(grant))
+        self.assertTrue(valid_control({**grant, "scope":"all", "tracks":[]}))
+        self.assertTrue(valid_control({**grant, "tracks":["a", "b"]}))
+        for patch in ({"scope":"all"}, {"scope":"unknown"}, {"tracks":[]},
+                      {"tracks":["a", "a"]}, {"tracks":"a"}, {"tracks":[True]},
+                      {"tracks":[str(i) for i in range(129)]}):
+            self.assertFalse(valid_control({**grant, **patch}))
         for ttl in (True, 0, -1, 901, 1.5):
             self.assertFalse(valid_control({**grant, "ttl_seconds":ttl}))
         self.assertFalse(valid_control({"type":[]}))
@@ -111,8 +117,8 @@ class ProtocolTests(AioHTTPTestCase):
         self.assertEqual((await host.receive_json())["control_session"], session)
         frames = [
             {"type":"control_request", "request":"r1"},
-            {"type":"control_grant", "request":"r1", "grant":"1", "track":"a", "ttl_seconds":60},
-            {"type":"control_command", "grant":"1", "sequence":"1", "action":"record"},
+            {"type":"control_grant", "request":"r1", "grant":"1", "scope":"all", "tracks":[], "ttl_seconds":60},
+            {"type":"control_command", "grant":"1", "sequence":"1", "action":"record", "track":"track-a"},
             {"type":"control_result", "grant":"1", "sequence":"1", "status":"not_ready"},
             {"type":"control_revoke", "grant":"1"},
         ]

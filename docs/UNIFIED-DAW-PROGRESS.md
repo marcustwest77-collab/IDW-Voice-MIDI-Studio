@@ -191,3 +191,21 @@ reconnect rejection, and 8 mocked browser lifecycle tests pass locally.
 The current single-track grant is an initial test scope, not a permanent product
 limit. Selected-track groups or all recording tracks require a future extension
 of the gate, message schema and engine adapter; they are not implemented here.
+
+### Selected-track and all-track recording scopes
+
+Supersedes the earlier single-track scope. The C++ gate supports SelectedTracks
+(1-128 unique stable IDs) or AllTracks (including future tracks in the same project).
+The single-track helper remains available. Replacing or narrowing a grant creates
+a fresh grant ID and invalidates old commands. Project changes revoke either scope.
+Empty targets, duplicate selections and ambiguous scopes are rejected. The adapter
+must validate target existence/type/input readiness before execution; AllTracks is
+not permission to create/delete tracks or change mixer, effects or clips.
+
+Wire change: control_grant now uses scope (selected/all) and tracks (ID array),
+replacing track. All scope requires an empty array. control_command now requires
+the explicit track target. Each command targets one track; simultaneous multitrack
+capture is a separate engine feature. Existing undeployed prototypes must upgrade
+together. Local native consent UI and recording integration remain pending.
+C++ permission tests and all 13 Python tests pass locally, including multiple
+selected targets, all-track grants, narrowing and malformed scope messages.

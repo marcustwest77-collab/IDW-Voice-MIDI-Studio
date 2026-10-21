@@ -56,5 +56,30 @@ int main() {
     check(!gate.grant("guest", "track-a", 7, Gate::Time::max(), ttl), "time overflow");
     check(gate.grant("guest", "track-a", 7, now, std::chrono::seconds(900)).has_value(),
           "maximum lifetime accepted");
+    grant = gate.grant("guest", Gate::Scope::SelectedTracks, {"track-b", "track-a"}, 7, now, ttl);
+    check(grant.has_value(), "multiple tracks granted");
+    check(call(grant->id, 1) == R::Allowed, "first selected track");
+    check(gate.authorize("guest", 7, "track-b", grant->id, 2, A::Arm, now)
+          == R::Allowed, "second selected track");
+    check(gate.authorize("guest", 7, "track-c", grant->id, 3, A::Record, now)
+          == R::WrongTrack, "unselected track denied");
+    check(!gate.grant("guest", Gate::Scope::SelectedTracks, {"a", "a"}, 7, now, ttl), "duplicate tracks");
+    check(!gate.grant("guest", Gate::Scope::SelectedTracks, {}, 7, now, ttl), "empty selection");
+    check(!gate.grant("guest", Gate::Scope::AllTracks, {"a"}, 7, now, ttl), "ambiguous scope");
+    grant = gate.grant("guest", Gate::Scope::AllTracks, {}, 7, now, ttl);
+    check(grant.has_value(), "all tracks granted");
+    check(call(grant->id, 1) == R::Allowed, "all includes original track");
+    check(gate.authorize("guest", 7, "new-track", grant->id, 2, A::Record, now)
+          == R::Allowed, "all includes new track");
+    check(gate.authorize("guest", 7, "", grant->id, 3, A::Record, now)
+          == R::WrongTrack, "all still requires target");
+    check(gate.authorize("guest", 8, "new-track", grant->id, 3, A::Record, now)
+          == R::WrongProject, "all remains project scoped");
+    grant = gate.grant("guest", Gate::Scope::AllTracks, {}, 7, now, ttl);
+    auto broadId = grant->id;
+    grant = gate.grant("guest", "track-a", 7, now, ttl);
+    check(call(broadId, 4) == R::WrongGrant, "narrowing invalidates broad grant");
+    check(gate.authorize("guest", 7, "track-b", grant->id, 1, A::Record, now)
+          == R::WrongTrack, "narrowing removes other tracks");
     std::cout << "Remote recording permission tests: PASS\n";
 }

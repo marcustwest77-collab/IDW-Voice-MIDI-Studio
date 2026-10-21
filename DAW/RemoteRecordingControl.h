@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <vector>
 #include <chrono>
 #include <cstdint>
 #include <limits>
@@ -17,9 +19,11 @@ public:
     enum class Action { Arm, Record, Stop };
     enum class Result { Allowed, NoGrant, Expired, WrongPeer, WrongProject,
                         WrongTrack, WrongGrant, Replay, InvalidAction };
+    enum class Scope { SelectedTracks, AllTracks };
     struct Grant {
         std::string peer;
-        std::string track;
+        Scope scope;
+        std::vector<std::string> tracks;
         std::uint64_t project;
         std::uint64_t id;
         Time expires;
@@ -30,13 +34,32 @@ public:
     std::optional<Grant> grant(const std::string& peer, const std::string& track,
                                std::uint64_t project, Time now,
                                std::chrono::seconds lifetime) {
+        return grant(peer, Scope::SelectedTracks, {track}, project, now, lifetime);
+    }
+
+    // AllTracks includes tracks added later within this project. The native
+    // adapter must validate every target still exists and can record audio.
+    std::optional<Grant> grant(const std::string& peer, Scope scope,
+                               const std::vector<std::string>& tracks,
+                               std::uint64_t project, Time now,
+                               std::chrono::seconds lifetime) {
         revoke();
-        if (peer.empty() || track.empty() || lifetime <= std::chrono::seconds::zero()
+        if (scope != Scope::SelectedTracks && scope != Scope::AllTracks)
+            return std::nullopt;
+        if ((scope == Scope::AllTracks && !tracks.empty())
+            || (scope == Scope::SelectedTracks && (tracks.empty() || tracks.size() > 128)))
+            return std::nullopt;
+        auto sorted = tracks;
+        std::sort(sorted.begin(), sorted.end());
+        if (std::any_of(sorted.begin(), sorted.end(), [](const auto& t) { return t.empty(); })
+            || std::adjacent_find(sorted.begin(), sorted.end()) != sorted.end())
+            return std::nullopt;
+        if (peer.empty() || lifetime <= std::chrono::seconds::zero()
             || lifetime > std::chrono::minutes(15)
             || now > Time::max() - lifetime
             || nextId == std::numeric_limits<std::uint64_t>::max())
             return std::nullopt;
-        current = Grant{peer, track, project, ++nextId, now + lifetime};
+        current = Grant{peer, scope, sorted, project, ++nextId, now + lifetime};
         return current;
     }
 
@@ -54,7 +77,9 @@ public:
             revoke(); return Result::WrongProject;
         }
         if (authenticatedPeer != current->peer) return Result::WrongPeer;
-        if (targetTrack != current->track) return Result::WrongTrack;
+        if (targetTrack.empty() || (current->scope == Scope::SelectedTracks
+            && !std::binary_search(current->tracks.begin(), current->tracks.end(), targetTrack)))
+            return Result::WrongTrack;
         if (grantId != current->id) return Result::WrongGrant;
         if (action != Action::Arm && action != Action::Record && action != Action::Stop)
             return Result::InvalidAction;
