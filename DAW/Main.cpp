@@ -1530,6 +1530,9 @@ private:
                     &vocalFxPreset,&vocalFxMix,&synthPreset,&attackControl,&releaseControl,
                     &armControl,&inputChannel})control->setEnabled(false);
             gainLabel.setText("NO TRACK",juce::dontSendNotification);
+            gainLabel.setTooltip("Add a track to use the mixer.");
+            gainControl.setTooltip("No track selected.");
+            renameTrackButton.setTooltip("Add a track before renaming.");
             recordReadiness.setText("Add an audio track to record.",juce::dontSendNotification);
             return;
         }
@@ -1556,6 +1559,9 @@ private:
         attackControl.setValue(track.synthAttackMs,juce::dontSendNotification);
         releaseControl.setValue(track.synthReleaseMs,juce::dontSendNotification);
         gainLabel.setText(juce::String(track.name)+" VOL",juce::dontSendNotification);
+        gainLabel.setTooltip("Selected track: "+juce::String(track.name));
+        gainControl.setTooltip("Volume for "+juce::String(track.name)+". Stop transport before editing.");
+        renameTrackButton.setTooltip("Rename "+juce::String(track.name)+". Save the project to keep the name.");
         gainControl.setValue(track.gain,juce::dontSendNotification);
         panControl.setValue(track.pan,juce::dontSendNotification);
         muteControl.setToggleState(track.mute,juce::dontSendNotification);
@@ -2708,6 +2714,7 @@ private:
     std::vector<std::unique_ptr<AudioSlot>> sources;
     std::unique_ptr<juce::FileChooser> chooser,projectChooser,calibrationChooser,referenceChooser;
     juce::Slider tempo;
+    juce::TooltipWindow tooltips{this,700};
 };
 class DAWApplication final : public juce::JUCEApplication {
 public:

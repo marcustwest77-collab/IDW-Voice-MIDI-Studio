@@ -125,3 +125,7 @@ Added in-app QUICK HELP for recording, clip editing and project/audio exports. B
 ### Track names
 
 Added RENAME TRACK for the selected audio or MIDI track. Names appear in lane headers, mixer and FX target labels and use the existing project name field. Blank/control-character/overlong names are rejected. The dialog is guarded against playback, recording, export and project replacement. Model validation tests run locally; name save/reopen coverage is added to native persistence tests.
+
+### Hover guidance
+
+Enabled the workstation tooltip window so existing device, input, vocal FX, skin and command guidance appears on hover. Selected-track volume and rename tips include the full name, while empty-project tips clear the previous target. This improves access to long names without changing project data. Native compilation and visual checks are pending.

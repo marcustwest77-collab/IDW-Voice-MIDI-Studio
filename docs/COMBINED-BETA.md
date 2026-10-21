@@ -10,7 +10,9 @@ Start-menu entry **IDW Combined Studio Beta** opens the desktop V14 timeline:
 multitrack recording, ten factory skins, audio waveform and MIDI note previews,
 per-track vocal FX, lyrics notebook, built-in MIDI instruments, master mix recall,
 WAV export, IDW Connect and the local AI approval panel. **BUILD INFO** identifies
-the installed revision; **QUICK HELP** summarizes the main controls.
+the installed revision; **QUICK HELP** summarizes the main controls. Hover over
+controls for short explanations. The selected-track volume and rename controls
+show the full track name in their hover tips.
 
 Start-menu entry **Voice MIDI, Tune and Song Studio** opens the restored older
 workspace: voice-to-MIDI, beatbox, scale lock, presets, synth/harmony, Tune Studio,
