@@ -1,7 +1,7 @@
 import unittest
 from aiohttp import WSMsgType
 from aiohttp.test_utils import AioHTTPTestCase
-from server import Rooms, create_app, valid_signal
+from server import Rooms, create_app, valid_signal, valid_control
 
 KEY = "test-only-service-key-000000000000000000"
 ORIGIN = "https://studio.example.test"
@@ -30,6 +30,21 @@ class AdmissionTests(unittest.TestCase):
     def test_cross_room_ticket(self):
         rooms = Rooms(); a, b = rooms.create(), rooms.create()
         with self.assertRaises(ValueError): rooms.claim(a["room"], b["guest_ticket"], object())
+
+    def test_control_shapes(self):
+        base = {"type":"control_command", "session":"session", "grant":"1",
+                "sequence":"18446744073709551615", "action":"record"}
+        self.assertTrue(valid_control(base))
+        for patch in ({"sequence":True}, {"sequence":1}, {"sequence":"0"},
+                      {"sequence":"18446744073709551616"}, {"action":"delete"},
+                      {"from":"host"}, {"session":""}, {"grant":"01"}):
+            self.assertFalse(valid_control({**base, **patch}))
+        grant = {"type":"control_grant", "session":"s", "request":"r",
+                 "grant":"1", "track":"track-a", "ttl_seconds":900}
+        self.assertTrue(valid_control(grant))
+        for ttl in (True, 0, -1, 901, 1.5):
+            self.assertFalse(valid_control({**grant, "ttl_seconds":ttl}))
+        self.assertFalse(valid_control({"type":[]}))
 
     def test_signal_validation(self):
         self.assertTrue(valid_signal({"type":"offer","sdp":"test"}))
@@ -87,6 +102,42 @@ class ProtocolTests(AioHTTPTestCase):
         again = await self.join(invite, "guest")
         self.assertEqual((await again.receive_json())["role"], "guest")
         await again.close(); await host.close()
+
+    async def test_control_relay_and_stale_reconnect(self):
+        invite = await self.room()
+        host = await self.join(invite, "host"); await host.receive_json()
+        guest = await self.join(invite, "guest")
+        session = (await guest.receive_json())["control_session"]
+        self.assertEqual((await host.receive_json())["control_session"], session)
+        frames = [
+            {"type":"control_request", "request":"r1"},
+            {"type":"control_grant", "request":"r1", "grant":"1", "track":"a", "ttl_seconds":60},
+            {"type":"control_command", "grant":"1", "sequence":"1", "action":"record"},
+            {"type":"control_result", "grant":"1", "sequence":"1", "status":"not_ready"},
+            {"type":"control_revoke", "grant":"1"},
+        ]
+        for i, frame in enumerate(frames):
+            sender, receiver = (host, guest) if i % 2 == 0 else (guest, host)
+            payload = {**frame, "session":session}
+            await sender.send_json(payload)
+            self.assertEqual(await receiver.receive_json(),
+                             {**payload, "from":"host" if i % 2 == 0 else "guest"})
+        await guest.close(); await host.receive_json()
+        again = await self.join(invite, "guest")
+        self.assertNotEqual((await again.receive_json())["control_session"], session)
+        await host.receive_json()
+        await host.send_json({**frames[2], "session":session})
+        self.assertEqual((await host.receive()).type, WSMsgType.CLOSE)
+        self.assertEqual(host.close_code, 1008)
+        await again.close()
+
+    async def test_control_without_peer_is_not_queued(self):
+        invite = await self.room()
+        host = await self.join(invite, "host")
+        session = (await host.receive_json())["control_session"]
+        await host.send_json({"type":"control_request", "session":session, "request":"r"})
+        self.assertEqual(await host.receive_json(), {"type":"peer_unavailable"})
+        await host.close()
 
     async def test_third_connection_rejected(self):
         invite = await self.room()

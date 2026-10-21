@@ -164,3 +164,30 @@ replacement, replay, expiry, invalid commands and lifetime bounds. Local C++ tes
 pass with address/undefined-behavior sanitizers; leak detection is disabled because
 this execution environment blocks its process inspection. Native CI and actual
 remote recording remain pending.
+
+### Recording-control message transport
+
+The signalling prototype now validates and relays control_request, control_grant,
+control_revoke, control_command and control_result messages. A server-issued
+control_session changes whenever a peer joins and is cleared on departure;
+stale-session messages are rejected, and commands are never queued for absent
+peers. The server assigns sender identity. This validates transport only: receivers
+must still enforce local consent, expiry, replay checks and actual engine readiness.
+A relayed grant is not proof of consent and a relayed result is not proof that an
+audio file exists. The native adapter and browser controls remain unimplemented.
+
+All control frames carry session. Requests carry request; grants carry request,
+grant, track, ttl_seconds (1-900); revokes carry grant; commands carry grant,
+sequence, action (arm/record/stop); results carry grant, sequence, status
+(succeeded/denied/not_ready/failed). Grant and sequence are positive uint64 decimal
+strings to preserve precision in JavaScript. Identifiers use ASCII letters,
+digits, underscore or hyphen, maximum 128 characters. Extra fields are rejected.
+Receivers must invalidate grants on peer_left, disconnect and any new
+control_session, and correlate results to outstanding commands. No automatic
+retry of recording commands is permitted. Local recording remains authoritative.
+
+Validation: 13 Python tests, including real loopback WebSocket relay and stale
+reconnect rejection, and 8 mocked browser lifecycle tests pass locally.
+The current single-track grant is an initial test scope, not a permanent product
+limit. Selected-track groups or all recording tracks require a future extension
+of the gate, message schema and engine adapter; they are not implemented here.

@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 from pathlib import Path
@@ -23,6 +24,7 @@ class Room:
     expires: float
     tokens: dict
     peers: dict = field(default_factory=dict)
+    control_session: str = ""
 
 
 class Rooms:
@@ -54,20 +56,59 @@ class Rooms:
             raise ValueError("unauthorized")
         if role in room.peers:
             raise ValueError("seat_in_use")
+        room.control_session = secrets.token_urlsafe(18)
         room.peers[role] = peer
         return role
 
     def release(self, room_id, role, peer):
         room = self.rooms.get(room_id)
         if room is not None and room.peers.get(role) is peer:
+            room.control_session = ""
             del room.peers[role]
             return True
         return False
 
 
+def valid_control(payload):
+    """Wire shape only. Receiver must enforce local consent and execution checks."""
+    if not isinstance(payload, dict):
+        return False
+    kind = payload.get("type")
+    fields = {
+        "control_request": {"request"},
+        "control_grant": {"request", "grant", "track", "ttl_seconds"},
+        "control_revoke": {"grant"},
+        "control_command": {"grant", "sequence", "action"},
+        "control_result": {"grant", "sequence", "status"},
+    }
+    if not isinstance(kind, str) or kind not in fields:
+        return False
+    if set(payload) != {"type", "session"} | fields[kind]:
+        return False
+    for key in ("session", "request", "track"):
+        if key in payload and (not isinstance(payload[key], str)
+                or re.fullmatch(r"[A-Za-z0-9_-]{1,128}", payload[key]) is None):
+            return False
+    # Decimal strings preserve uint64 values across JavaScript and C++.
+    for key in ("grant", "sequence"):
+        if key in payload and (not isinstance(payload[key], str)
+                or re.fullmatch(r"[1-9][0-9]{0,19}", payload[key]) is None
+                or int(payload[key]) > 18446744073709551615):
+            return False
+    if kind == "control_grant":
+        return type(payload["ttl_seconds"]) is int and 1 <= payload["ttl_seconds"] <= 900
+    if kind == "control_command":
+        return payload["action"] in ("arm", "record", "stop")
+    if kind == "control_result":
+        return payload["status"] in ("succeeded", "denied", "not_ready", "failed")
+    return True
+
+
 def valid_signal(payload):
     if not isinstance(payload, dict):
         return False
+    if valid_control(payload):
+        return True
     if payload == {"type": "ready"}:
         return True
     if payload.get("type") in ("offer", "answer"):
@@ -129,10 +170,10 @@ def create_app(create_key, allowed_origins, rooms=None):
                 return ws
             room = registry.rooms[room_id]
             other_role = "guest" if role == "host" else "host"
-            await ws.send_json({"type": "joined", "role": role, "peer_present": other_role in room.peers})
+            await ws.send_json({"type": "joined", "role": role, "peer_present": other_role in room.peers, "control_session": room.control_session})
             other = room.peers.get(other_role)
             if other is not None:
-                await other.send_json({"type": "peer_joined", "role": role})
+                await other.send_json({"type": "peer_joined", "role": role, "control_session": room.control_session})
             window_start, count = registry.clock(), 0
             async for message in ws:
                 if message.type != WSMsgType.TEXT:
@@ -156,6 +197,9 @@ def create_app(create_key, allowed_origins, rooms=None):
                     break
                 if not valid_signal(payload):
                     await ws.close(code=1008, message=b"Invalid signal")
+                    break
+                if payload["type"].startswith("control_") and payload["session"] != room.control_session:
+                    await ws.close(code=1008, message=b"Stale control session")
                     break
                 other = room.peers.get(other_role)
                 if other is None:
