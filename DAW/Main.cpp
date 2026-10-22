@@ -2147,7 +2147,8 @@ private:
                     juce::AlertWindow::showMessageBoxAsync(
                         inputAdvice.isNotEmpty() ? juce::MessageBoxIconType::WarningIcon : juce::MessageBoxIconType::InfoIcon,
                         interrupted || missing ? "Interrupted vocal take preserved" :
-                        silent ? "Silent vocal take imported" : "Vocal take imported",
+                        silent ? "Silent vocal take imported" :
+                        truncatedWav ? "Incomplete vocal WAV imported" : "Vocal take imported",
                         (inputAdvice.isNotEmpty() ? inputAdvice+"\n\n" : juce::String())+
                         "WAV saved and added to track "+juce::String((int)selectedTrack+1)+
                         ".\nFrames received: "+juce::String(static_cast<juce::int64>(receivedFrames))+
@@ -2156,6 +2157,7 @@ private:
                         juce::String(savedRate>0.0 ? (double)savedFrames/savedRate : 0.0,2)+" seconds"+
                         "\nDropped input blocks: "+juce::String(static_cast<juce::int64>(dropped))+
                         "\nRejected writes: "+juce::String(static_cast<juce::int64>(rejected))+
+                        "\nMissing WAV frames: "+juce::String(static_cast<juce::int64>(missingSavedFrames))+
                         "\nPlay the take to confirm that microphone audio is audible.");
                 }
             }
