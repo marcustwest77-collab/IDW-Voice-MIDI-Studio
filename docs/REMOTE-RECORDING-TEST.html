@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IDW • Remote Recording Test Guide</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#111722;color:#edf0f5;font:17px/1.65 system-ui,sans-serif}main{max-width:900px;margin:auto;padding:40px 24px 70px}h1,h2{line-height:1.2}h1{font-size:clamp(28px,5vw,42px)}h2{margin-top:36px;color:#edc978;font-size:24px}.brand{letter-spacing:.12em;color:#edc978;font-size:13px}a{color:#edc978}nav{display:flex;gap:16px;flex-wrap:wrap}.note,details{padding:18px 22px;background:#1c2534;border:1px solid #364357;border-radius:12px;margin:18px 0}li{margin:12px 0}code{font:14px/1.6 ui-monospace,monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;background:#090e16;padding:16px;border-radius:8px}summary{cursor:pointer;font-weight:650}table{width:100%;border-collapse:collapse}td,th{padding:12px;text-align:left;border-bottom:1px solid #364357;vertical-align:top}th:first-child{width:38%}.muted{color:#b6c2d3}@media print{:root{color-scheme:light}body{background:white;color:black}main{padding:0}h2,a,.brand{color:#584000}.note,details,pre{background:white;color:black;border-color:#aaa}nav{display:none}details{break-inside:avoid}.muted{color:#444}}
+</style></head><body><main>
+<p class="brand">IN DA WIND ENTERTAINMENT · DESKTOP BETA</p>
+<h1>Test remote recording, step by step</h1>
+<p>Use two IDW windows on one Windows computer. Window <strong>A controls</strong> recording; window <strong>B records</strong> and stores the take.</p>
+<nav aria-label="Guide sections"><a href="#setup">Setup</a><a href="#record">First take</a><a href="#permissions">Permission checks</a><a href="#help">Troubleshooting</a></nav>
+<div class="note"><strong>Before starting:</strong> use disposable projects and a build that passed the Windows network checks. Only B needs the microphone. Avoid opening the same exclusive audio device in both windows. This feature sends Arm/Record/Stop commands; audio, video, takes, mixer changes and project edits are not transmitted.</div>
+<h2 id="setup">1. Start a private local room</h2>
+<p>Python must be installed separately. Open a terminal in the installed beta folder, normally <code>%LOCALAPPDATA%\Programs\IDW Combined Studio Beta</code>, or in the extracted portable beta folder. Run:</p>
+<pre><code>python -m pip install -r studio_sessions/requirements.txt
+python studio_sessions/local_test_room.py</code></pre>
+<p>Keep the terminal open. It prints a server address, room ID and separate A/B tickets. Tickets expire after one hour or when the server closes. Keep them out of screenshots and messages.</p>
+<ol><li>Open two copies of the <strong>IDW Combined Studio Beta</strong> timeline.</li><li>In both windows, open <strong>IDW Connect → Remote Controller</strong>.</li><li>Enter the same server address and room ID. Use the A ticket in A and the B ticket in B. Click <strong>Join</strong> in each.</li></ol>
+<h2 id="record">2. Record a short take</h2>
+<ol><li>In B, add and select an empty audio track named <strong>Remote test</strong>. Select your microphone input and confirm a local recording plays back first.</li><li>In A, click <strong>Request Control</strong>.</li><li>In B, open <strong>My Permissions</strong> and choose <strong>Allow selected track</strong>. Granting permission alone must not start recording.</li><li>In A, select <strong>Remote test</strong> and click <strong>Arm</strong>. Confirm B's track becomes armed.</li><li>Click <strong>Record</strong> in A and speak a short phrase into B's microphone. Wait for the command result, then click <strong>Stop</strong>.</li><li>In B, confirm the take is saved/imported and listen to it. For the AudioBox overdub check, load a beat and confirm you hear both beat and vocal through headphones.</li></ol>
+<div class="note"><strong>Success means audible audio.</strong> A successful command message does not prove that a usable take was captured. Buttons disable while waiting for a result. If the connection fails, check B and use its local Stop.</div>
+<h2 id="permissions">3. Check permission boundaries</h2>
+<ul><li>Before A requests control, B should show instructions instead of Allow buttons. Reopen My Permissions after a request arrives.</li><li>Each grant consumes its request. Request again to change permission or refresh the track list. A changed request requires reopening the approval dialog.</li><li>With selected-track permission, arm a second unapproved track in B. Remote Record must be denied completely.</li><li>Request again and allow all tracks. Test recording the approved armed tracks with available inputs. This permission also covers future audio tracks; request again to refresh the displayed list.</li><li>Revoke control while stopped. A's track list should clear and commands should disable.</li><li>During a disposable take, click Leave in A. In B, use local Stop and confirm the take is saved/imported.</li><li>Reconnect and confirm fresh permission is required. Opening a different project in B must also revoke permission.</li><li>Let permission expire, up to 15 minutes. A's controls should clear.</li></ul>
+<p>Closing the controller dialog does not leave the room. Use <strong>Leave</strong> to disconnect.</p>
+<h2 id="help">Troubleshooting</h2>
+<table><thead><tr><th scope="col">What you see</th><th scope="col">What to check</th></tr></thead><tbody>
+<tr><td>Python is not recognized</td>The beta does not bundle Python. Install Python separately, then reopen the terminal. If Python is already installed through the Windows launcher, try the same commands with <code>py</code> instead of <code>python</code>.</td></tr>
+<tr><td>No module named aiohttp</td>Run the requirements command using the same Python interpreter used for the launcher.</td></tr>
+<tr><td>Address already in use</td>Close a previous test-room process, or run <code>python studio_sessions/local_test_room.py --port 8788</code> and use the new address it prints.</td></tr>
+<tr><td>Waiting for the other participant</td>Join both windows with separate tickets from the same running launcher. A ticket cannot occupy two seats.</td></tr>
+<tr><td>No Allow buttons</td>In A, click Request Control. Then reopen My Permissions in B.</td></tr>
+<tr><td>Command denied or not ready</td>Check permission, selected track, other armed tracks, available microphone inputs and whether B is already playing or recording.</td></tr>
+<tr><td>Recording state unknown</td>Check B directly. Use local Stop if recording is active. Commands are not automatically retried.</td></tr>
+<tr><td>Silent take or missing beat</td>Check B's input/output routing, mute/solo and overdub setting. Verify local recording with the AudioBox before retrying remotely.</td></tr>
+</tbody></table>
+<h2>Testing from two computers</h2>
+<p>The local launcher accepts connections only on its own computer. Two-computer testing needs a configured HTTPS/WSS signalling server and separate room tickets. No hosted server is supplied with this beta. The browser video-room button is separate from this recording connection.</p>
+<h2>Report a result</h2>
+<p>Copy these details into your reply. Include the first step that differed from the guide.</p>
+<pre><code>Build revision (BUILD INFO):
+Windows version:
+Audio device and input:
+Test step:
+Expected result:
+Actual result:
+Saved take audible: yes / no
+Beat and vocal both audible: yes / no</code></pre>
+<p class="muted">Keep room tickets private. You can print this guide using your browser's Print command.</p>
+</main></body></html>

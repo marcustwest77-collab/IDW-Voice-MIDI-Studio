@@ -34,7 +34,7 @@ Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked
 [Icons]
 Name: "{group}\Voice MIDI, Tune and Song Studio"; Filename: "{app}\VoiceStudio\IDW Voice MIDI Studio.exe"
 Name: "{group}\Combined Beta Guide"; Filename: "{app}\Documentation\COMBINED-BETA.md"
-Name: "{group}\Remote Recording Test Guide"; Filename: "{app}\Documentation\REMOTE-RECORDING-TEST.md"
+Name: "{group}\Remote Recording Test Guide"; Filename: "{app}\Documentation\REMOTE-RECORDING-TEST.html"
 Name: "{group}\IDW Combined Studio Beta"; Filename: "{app}\IDW-DAW-V14-Beta.exe"
 Name: "{userdesktop}\IDW Combined Studio Beta"; Filename: "{app}\IDW-DAW-V14-Beta.exe"; Tasks: desktopicon
 
