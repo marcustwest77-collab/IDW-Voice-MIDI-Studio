@@ -2150,7 +2150,7 @@ private:
                         silent ? "Silent vocal take imported" :
                         truncatedWav ? "Incomplete vocal WAV imported" : "Vocal take imported",
                         (inputAdvice.isNotEmpty() ? inputAdvice+"\n\n" : juce::String())+
-                        "WAV saved and added to track "+juce::String((int)selectedTrack+1)+
+                        "WAV saved and added to track "+juce::String((int)recordTargetTrack+1)+
                         ".\nFrames received: "+juce::String(static_cast<juce::int64>(receivedFrames))+
                         "\nFile: "+take.getFullPathName()+
                         "\nApprox. captured duration: "+
@@ -2304,6 +2304,19 @@ private:
                     "Multitrack unavailable","Could not start all armed inputs.");
             }
         }else{
+            // Single-take imports use one audio reader per track. Reject an
+            // occupied destination before opening the WAV writer; otherwise
+            // a successful recording can end in an avoidable import failure.
+            for(const auto& slot:sources){
+                if(slot->trackIndex==recordTargetTrack && slot->reader){
+                    juce::AlertWindow::showMessageBoxAsync(
+                        juce::MessageBoxIconType::WarningIcon,
+                        "Recording track already has audio",
+                        "Select and arm an EMPTY audio track before pressing RECORD VOCAL. "
+                        "Your existing clip will not be overwritten.");
+                    return;
+                }
+            }
             monitorControl.setEnabled(false);
             auto* device=deviceManager.getCurrentAudioDevice();
             int physicalInput=session.tracks[recordTargetTrack].inputChannel;
