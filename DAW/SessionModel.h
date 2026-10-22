@@ -3,6 +3,8 @@
 #include <cmath>
 #include <cstddef>
 #include <string>
+#include <random>
+#include <optional>
 #include <vector>
 namespace idw::daw {
 enum class TrackType { audio, midi };
@@ -13,6 +15,17 @@ struct Clip {
     double sourceOffsetSeconds=0.0;
 };
 struct MidiNote { int pitch=60; double startBeat=0.0,lengthBeats=1.0; int velocity=100; };
+// Opaque identity, not an authentication credential. Persist with the track.
+inline std::string newTrackId() {
+    std::random_device random;
+    const char* hex = "0123456789abcdef";
+    std::string id;
+    for (int i=0; i<32; ++i) id += hex[random() & 15];
+    return id;
+}
+inline bool validTrackId(const std::string& id) {
+    return id.size()==32 && id.find_first_not_of("0123456789abcdef")==std::string::npos;
+}
 struct Track {
     std::string name;
     TrackType type;
@@ -21,20 +34,61 @@ struct Track {
     int inputChannel=0; // Saved audio input preference, zero-based (0..7).
     float gain=1.0f;
     float pan=0.0f;
+    float vocalFxMix=1.0f; // Dry/wet blend, 0..1.
+    int vocalFxPreset=0; // Audio insert: Off, Gentle, Warm, Forward.
     int synthPreset=0; // Keys=0, Bass=1, Lead=2, Organ=3, Pad=4
     float synthAttackMs=5.0f,synthReleaseMs=5.0f;
     std::vector<Clip> clips;
     std::vector<MidiNote> notes;
+    std::string id=newTrackId();
+};
+struct MasterMix {
+    float gain=1.0f,lowDb=0.0f,highDb=0.0f,ceilingDb=-1.0f;
+    bool valid() const {
+        return std::isfinite(gain) && gain>=0 && gain<=1.5f &&
+            std::isfinite(lowDb) && lowDb>=-12 && lowDb<=12 &&
+            std::isfinite(highDb) && highDb>=-12 && highDb<=12 &&
+            std::isfinite(ceilingDb) && ceilingDb>=-12 && ceilingDb<=-0.1f;
+    }
 };
 class Session {
 public:
+    std::string lyrics;
+    MasterMix masterMix;
     double bpm=120.0;
     int numerator=4, denominator=4;
     std::vector<Track> tracks;
     bool addTrack(TrackType type) {
         if (tracks.size() >= 128) return false;
         tracks.push_back({(type == TrackType::audio ? "Audio " : "MIDI ") + std::to_string(tracks.size()+1),type});
+        while(std::any_of(tracks.begin(),tracks.end()-1,[&](const auto& t){return t.id==tracks.back().id;}))
+            tracks.back().id=newTrackId();
         return true;
+    }
+    // Fail closed for malformed or duplicated identities, never fall back to index/name.
+    std::optional<size_t> findTrackById(const std::string& id) const {
+        if(!validTrackId(id))return std::nullopt;
+        std::optional<size_t> result;
+        for(size_t i=0;i<tracks.size();++i)if(tracks[i].id==id){
+            if(result)return std::nullopt;
+            result=i;
+        }
+        return result;
+    }
+    bool renameTrack(size_t index,const std::string& name) {
+        if(index>=tracks.size() || name.empty() || name.size()>256 ||
+           name.find_first_not_of(" \t\r\n")==std::string::npos)return false;
+        for(unsigned char c:name)if(c<32 || c==127)return false;
+        tracks[index].name=name;return true;
+    }
+    bool setTrackVocalFxMix(size_t index,float mix) {
+        if(index>=tracks.size() || tracks[index].type!=TrackType::audio ||
+           !std::isfinite(mix) || mix<0 || mix>1)return false;
+        tracks[index].vocalFxMix=mix;return true;
+    }
+    bool setTrackVocalFxPreset(size_t index,int preset) {
+        if(index>=tracks.size() || tracks[index].type!=TrackType::audio || preset<0 || preset>3)return false;
+        tracks[index].vocalFxPreset=preset;return true;
     }
     bool removeTrack(size_t index) {
         if(index>=tracks.size()) return false;

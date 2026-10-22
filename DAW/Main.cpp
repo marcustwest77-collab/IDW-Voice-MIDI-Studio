@@ -6,7 +6,16 @@
 #include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
+#include "TrackVocalEffects.h"
+#include "LyricsPanel.h"
+#include "FactorySkins.h"
 #include "TimelineMath.h"
+#include "VoiceTrackNumber.h"
+#include "RemoteRecordingControl.h"
+#include "RemoteRecordingProtocol.h"
+#include "StudioNetworkClient.h"
+#include "StudioControllerPanel.h"
+#include "RemoteStudioController.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
 #include "SessionPersistence.h"
@@ -16,6 +25,7 @@
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
 #include <atomic>
+#include <initializer_list>
 #include <memory>
 #include <thread>
 #if JUCE_WINDOWS
@@ -31,8 +41,9 @@ class IDWNeoLookAndFeel final : public juce::LookAndFeel_V4 {
 public:
     IDWNeoLookAndFeel() { applySkin(0); }
     void applySkin(int skin) {
-        const auto accent=juce::Colour(skin==1?0xffffc857:skin==2?0xff73f9ae:skin==3?0xffd4a6ff:0xff15d4ff);
-        const auto base=juce::Colour(skin==1?0xff292014:skin==2?0xff102b25:skin==3?0xff20182f:0xff152638);
+        const auto palette=idw::daw::factorySkin(skin);
+        const auto accent=juce::Colour(palette.accent);
+        const auto base=juce::Colour(palette.button);
         setColour(juce::TextButton::buttonColourId,base);
         setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff007fa9));
         setColour(juce::TextButton::textColourOffId,juce::Colour(0xffd6ebf8));
@@ -48,8 +59,22 @@ public:
         setColour(juce::ToggleButton::tickColourId,accent);
         setColour(juce::TextEditor::backgroundColourId,juce::Colour(0xff101b2b));
         setColour(juce::TextEditor::textColourId,juce::Colours::white);
+        setColour(juce::TextEditor::highlightColourId,juce::Colour(0xff176b94));
         setColour(juce::PopupMenu::backgroundColourId,juce::Colour(0xff101b2b));
         setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(0xff176b94));
+        setColour(juce::ResizableWindow::backgroundColourId,juce::Colour(palette.background));
+        if(skin>=4){
+            const auto& studio=idw::skinByIndex(skin-4);
+            setColour(juce::TextButton::buttonOnColourId,juce::Colour(studio.buttonOn));
+            setColour(juce::ComboBox::backgroundColourId,juce::Colour(studio.card));
+            setColour(juce::ComboBox::outlineColourId,juce::Colour(studio.grid));
+            setColour(juce::Slider::trackColourId,juce::Colour(studio.accent));
+            setColour(juce::Slider::backgroundColourId,juce::Colour(studio.card));
+            setColour(juce::TextEditor::backgroundColourId,juce::Colour(studio.background));
+            setColour(juce::TextEditor::highlightColourId,juce::Colour(studio.buttonOn));
+            setColour(juce::PopupMenu::backgroundColourId,juce::Colour(studio.card));
+            setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(studio.buttonOn));
+        }
     }
     juce::Colour accentColour() const {return findColour(juce::Slider::thumbColourId);}
     void setCustomAccent(juce::Colour accent){
@@ -158,7 +183,7 @@ public:
                     }
                     const auto skinProperty=object->getProperty("skin");
                     const auto skinText=skinProperty.toString();
-                    if(skinText.length()!=1 || !skinText.containsOnly("0123")){invalid();return;}
+                    if(skinText.length()!=1 || !skinText.containsOnly("0123456789")){invalid();return;}
                     for(const char* key:{"background","panel","accent"}){
                         const auto rgb=object->getProperty(key).toString();
                         if(rgb.length()!=6 || !rgb.containsOnly("0123456789abcdefABCDEF")){
@@ -272,7 +297,7 @@ public:
                     if(!object)return;
                     const auto skinValue=object->getProperty("skin");
                     const int skin=(int)skinValue;
-                    if(skin<0 || skin>3)return;
+                    if(skin<0 || skin>=idw::daw::factorySkinCount())return;
                     auto validRGB=[object](const juce::Identifier& key){
                         const auto rgb=object->getProperty(key).toString();
                         return rgb.length()==6 && rgb.containsOnly("0123456789abcdefABCDEF");
@@ -320,9 +345,9 @@ public:
                             payload->setProperty("name",name);
                             payload->setProperty("skin",safeThis->activeSkin);
                             payload->setProperty("background",(safeThis->useCustomBackground ? safeThis->customBackground :
-                                juce::Colour(safeThis->activeSkin==1?0xff17100b:safeThis->activeSkin==2?0xff091c18:safeThis->activeSkin==3?0xff160d22:0xff080f1c)).toDisplayString(false));
+                                juce::Colour(idw::daw::factorySkin(safeThis->activeSkin).background)).toDisplayString(false));
                             payload->setProperty("panel",(safeThis->useCustomPanel ? safeThis->customPanel :
-                                juce::Colour(safeThis->activeSkin==1?0xff2b2118:safeThis->activeSkin==2?0xff112d26:safeThis->activeSkin==3?0xff261d39:0xff101f32)).toDisplayString(false));
+                                juce::Colour(idw::daw::factorySkin(safeThis->activeSkin).panel)).toDisplayString(false));
                             payload->setProperty("accent",safeThis->neoTheme.accentColour().toDisplayString(false));
                             root.getChildFile(name+".json").replaceWithText(juce::JSON::toString(juce::var(payload)));
                         }
@@ -400,16 +425,14 @@ public:
                 delete dialog;
             }));
         };
-        skinSelector.addItem("Neo Cyan",1);
-        skinSelector.addItem("Royal Gold",2);
-        skinSelector.addItem("Emerald Circuit",3);
-        skinSelector.addItem("Purple Night",4);
+        for(int index=0;index<idw::daw::factorySkinCount();++index)
+            skinSelector.addItem(idw::daw::factorySkin(index).name,index+1);
         const auto preferences=juce::File::getSpecialLocation(
             juce::File::userApplicationDataDirectory)
             .getChildFile("IDW Neo Studio").getChildFile("preferences.txt");
         const int storedSkin=preferences.existsAsFile() ?
             preferences.loadFileAsString().getIntValue() : 0;
-        activeSkin=juce::jlimit(0,3,storedSkin);
+        activeSkin=idw::daw::validFactorySkinIndex(storedSkin);
         skinSelector.setSelectedId(activeSkin+1,juce::dontSendNotification);
         neoTheme.applySkin(activeSkin);
         const auto panelFile=preferences.getSiblingFile("panel.txt");
@@ -441,7 +464,7 @@ public:
         skinSelector.onChange=[this]{
             // Choosing a factory skin must clear overrides from a previously
             // loaded custom preset, otherwise the visible palette never changes.
-            activeSkin=juce::jlimit(0,3,skinSelector.getSelectedId()-1);
+            activeSkin=idw::daw::validFactorySkinIndex(skinSelector.getSelectedId()-1);
             useCustomBackground=false;
             useCustomPanel=false;
             neoTheme.applySkin(activeSkin);
@@ -476,25 +499,131 @@ public:
         voiceHistoryButton.setButtonText("HISTORY");
         voiceHistoryButton.setTooltip("Show recent voice and typed commands with their results.");
         voiceHistoryButton.onClick=[this]{executeStudioCommand("command history");};
-        commandStatus.setText("VOICE READY: click field, Win+H, speak, Enter",juce::dontSendNotification);
+        commandStatus.setText("VOICE: TALK / F9, or type a command",juce::dontSendNotification);
         commandStatus.setTooltip("Windows: focus the command field, use Win+H for speech-to-text, then Enter to run. No always-listening microphone.");
         runVoiceCommand.setButtonText("COMMAND");
         runVoiceCommand.onClick=[this]{
             voiceCommandInput.grabKeyboardFocus();
             executeStudioCommand(voiceCommandInput.getText());
         };
-        runVoiceCommand.setTooltip("Voice-ready command input: on Windows press Win+H and dictate a command, then press Enter. Native speech recognition is not yet integrated.");
+        runVoiceCommand.setTooltip("Run the command field. Type a command or use Win+H, then press Enter. TALK/F9 recognizes and runs one spoken command directly.");
         voiceCommandInput.onReturnKey=[this]{executeStudioCommand(voiceCommandInput.getText());};
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN PROJECT");
         exportProject.setButtonText("EXPORT PORTABLE");
         bounce.setButtonText("BOUNCE WAV");
         cancelBounce.setButtonText("CANCEL EXPORT");cancelBounce.setEnabled(false);
+        quickHelpButton.setButtonText("QUICK HELP");
+        quickHelpButton.setTooltip("Recording, editing, lyrics and export essentials.");
+        addAndMakeVisible(quickHelpButton);
+        quickHelpButton.onClick=[this]{
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                "IDW Desktop - Quick Help",
+                "RECORD OVER A BEAT\n"
+                "Open WAV/AIFF to load a beat. Add an audio track, select it, choose your input, "
+                "then enable ARM INPUT and PLAY BEAT WHILE RECORDING. Check READY, then RECORD VOCAL. "
+                "Press STOP RECORD to finish.\n\n"
+                "EDIT AND MIX\n"
+                "Stop transport before editing. Click a track or clip to select its mixer and FX controls. "
+                "Use RENAME TRACK to label the selected part. "
+                "Drag a clip to move it; drag its right edge to resize. Left/Right nudges a selected clip; "
+                "Shift+Left/Right changes its length. Select a MIDI track and open PIANO ROLL to edit notes.\n\n"
+                "SAVE YOUR WORK\n"
+                "SAVE PROJECT keeps arrangement, lyrics and mix settings. EXPORT PORTABLE copies the "
+                "project and its audio for transfer. BOUNCE WAV creates your finished audio mix.\n\n"
+                "Vocal FX affects playback and export; original recordings stay dry. "
+                "Waveforms show original audio. Full pitch correction and third-party plugin hosting "
+                "are not integrated into this timeline.\n\n"
+                "For a problem report, include BUILD INFO and what you clicked. "
+                "The installed Combined Beta Guide has the full desktop walkthrough.");
+        };
+        buildInfoButton.setButtonText("BUILD INFO");
+        buildInfoButton.setTooltip("Show the exact installed beta revision for troubleshooting.");
+        addAndMakeVisible(buildInfoButton);
+        buildInfoButton.onClick=[this]{
+            const juce::String details=juce::String("IDW Desktop DAW - V14 Beta\nVersion: ")+
+                ProjectInfo::versionString+"\nSource revision: "+IDW_DAW_SOURCE_REVISION+
+                "\n\nIncludes ten factory skins, vocal FX presets and amount, lyrics notebook, "
+                "built-in MIDI WAV export, master mix recall, docked tools, audio waveforms "
+                "and MIDI arrangement previews."
+                "\n\nThis is the desktop integration beta. Full pitch correction and the complete "
+                "Song Studio workflow are still separate from this timeline. "
+                "Third-party plugin hosting is not implemented."
+                "\n\nInclude this revision when reporting a problem.";
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                "IDW Build Info",details);
+        };
+        lyricsButton.setButtonText("LYRICS");
+        addAndMakeVisible(lyricsButton);
+        addAndMakeVisible(lyricsPanel);
+        lyricsPanel.onEdited=[this](const juce::String& words){session.lyrics=words.toStdString();};
+        lyricsButton.onClick=[this]{
+            lyricsPanel.setVisible(!lyricsPanel.isVisible());
+            if(lyricsPanel.isVisible()){
+                lyricsPanel.toFront(false);lyricsPanel.focusEditor();
+            }
+        };
         connectButton.setButtonText("IDW CONNECT");
         addChildComponent(connectPanel);
+        connectPanel.onRecordingControl=[this]{showRecordingPermissions();};
+        connectPanel.onStudioController=[this]{
+            if(studioWindow){studioWindow->toFront(true);return;}
+            juce::DialogWindow::LaunchOptions options;
+            options.content.setNonOwned(&studioControllerPanel);
+            options.dialogTitle="IDW Remote Recording Controller";
+            options.dialogBackgroundColour=juce::Colour(0xff181e28);
+            options.escapeKeyTriggersCloseButton=true;options.useNativeTitleBar=true;options.resizable=false;
+            studioWindow=options.launchAsync();
+        };
+        studioControllerPanel.onPermissions=[this]{showRecordingPermissions();};
+        studioControllerPanel.onJoin=[this](const auto& origin,const auto& room,const auto& ticket){
+            studioNetwork.disconnect();recordingSignalDisconnected();remoteStudioController.reset();
+            auto sender=[this](const juce::var& value){
+                if(!studioNetwork.send(value)){
+                    recordingSignalDisconnected();remoteStudioController.reset();
+                    studioControllerPanel.setStatus("Send failed. Recording state may be unknown; no retry was sent.");
+                }
+            };
+            setRecordingSignalSender(sender);remoteStudioController.send=sender;
+            studioNetwork.connect(origin,room,ticket);
+        };
+        studioControllerPanel.onLeave=[this]{
+            studioNetwork.disconnect();recordingSignalDisconnected();remoteStudioController.reset();
+            studioControllerPanel.setStatus("Disconnected. Local recording, if active, continues until you stop it.");
+        };
+        studioControllerPanel.onRequest=[this]{remoteStudioController.requestControl();};
+        studioControllerPanel.onCommand=[this](const auto& action,const auto& track){remoteStudioController.command(action,track);};
+        remoteStudioController.commandsAvailable=[this](bool ready){studioControllerPanel.enableCommands(ready);};
+        remoteStudioController.status=[this](const auto& text){studioControllerPanel.setStatus(text);};
+        remoteStudioController.tracksChanged=[this](const auto& tracks){studioControllerPanel.setTracks(tracks);};
+        studioNetwork.onStatus=[this](const auto& text){
+            if(text!="Connecting…"){recordingSignalDisconnected();remoteStudioController.reset();}
+            studioControllerPanel.setStatus(text);
+        };
+        studioNetwork.onMessage=[this](const juce::var& value){
+            const auto accepted=receiveRecordingSignal(value);
+            const auto type=value.getProperty("type",{}).toString();
+            if((type=="joined" || type=="peer_joined") && !accepted){
+                studioNetwork.disconnect();recordingSignalDisconnected();remoteStudioController.reset();
+                studioControllerPanel.setStatus("Invalid studio admission response.");return;
+            }
+            remoteStudioController.receive(value);
+            if(type=="control_request" && accepted)
+                studioControllerPanel.setStatus("The other participant requests recording control. Open My Permissions to allow or decline.");
+        };
+        remoteRecordingProtocol.peerChanged=[this](const auto& peer,const auto& connection){
+            setAuthenticatedRecordingPeer(peer,connection);
+        };
+        remoteRecordingProtocol.execute=[this](const auto& peer,const auto& connection,const auto& track,
+            uint64_t grant,uint64_t sequence,idw::RemoteRecordingControl::Action action){
+            return executeRemoteRecording(peer,connection,track,grant,sequence,action);
+        };
         connectButton.onClick=[this]{
             connectPanel.setVisible(!connectPanel.isVisible());
-            connectPanel.toFront(false);
+            if(connectPanel.isVisible()){
+                aiPanel.setVisible(false);pianoViewport.setVisible(false);
+                connectPanel.toFront(false);
+            }
         };
         synthPreset.addItem("Keys",1);
         synthPreset.addItem("Bass",2);
@@ -526,24 +655,31 @@ public:
         releaseControl.onValueChange=updateEnvelope;
         pianoButton.setButtonText("PIANO ROLL");
         addAndMakeVisible(pianoButton);
-        addChildComponent(pianoRoll);
+        addChildComponent(pianoViewport);
+        pianoViewport.setViewedComponent(&pianoRoll,false);
+        pianoViewport.setScrollBarsShown(true,false);
         pianoRoll.session=&session;
+        pianoRoll.canEdit=[this]{
+            return !playing.load() && !recorder.isRecording() &&
+                !multiRecorder.isRecording() && !exportRunning.load();
+        };
+        pianoRoll.onChanged=[this]{repaint();};
         pianoButton.onClick=[this]{
             if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
             if(selectedTrack>=session.tracks.size() ||
                session.tracks[selectedTrack].type!=idw::daw::TrackType::midi)return;
-            pianoRoll.trackIndex=selectedTrack;
-            pianoRoll.setVisible(!pianoRoll.isVisible());
-            if(pianoRoll.isVisible()){
+            pianoRoll.selectTrack(selectedTrack);
+            pianoViewport.setVisible(!pianoViewport.isVisible());
+            if(pianoViewport.isVisible()){
                 aiPanel.setVisible(false);connectPanel.setVisible(false);
-                pianoRoll.toFront(false);pianoRoll.repaint();
+                pianoViewport.toFront(false);pianoRoll.repaint();
             }
         };
         aiButton.setButtonText("IDW AI STUDIO");
         addChildComponent(aiPanel);
         aiButton.onClick=[this]{
             aiPanel.setVisible(!aiPanel.isVisible());
-            if(aiPanel.isVisible()){connectPanel.setVisible(false);aiPanel.toFront(false);}
+            if(aiPanel.isVisible()){connectPanel.setVisible(false);pianoViewport.setVisible(false);aiPanel.toFront(false);}
         };
         aiPanel.getSanitizedStatus=[this]{
             return juce::JSON::toString(idw::daw::aiSessionStatus(
@@ -586,10 +722,10 @@ public:
         overdubControl.setToggleState(false,juce::dontSendNotification);
         addAndMakeVisible(overdubControl);
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
-        play.onClick=[this]{if(playing.load() || loopbackCapture.isActive() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);
+        play.onClick=[this]{if(playing.load() || loopbackCapture.isActive() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoViewport.setVisible(false);
             std::atomic_store_explicit(&playbackSession,
                 std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
-            sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
+            sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;refreshMixer();startTimerHz(30);repaint();}};
         stop.onClick=[this]{if(exportRunning.load())return;if(loopbackCapture.isActive() || loopbackCapture.isComplete()){loopbackCapture.cancel();liveCalibration.setEnabled(true);}else if(loopbackCapture.consumeFailed()){loopbackCapture.cancel();liveCalibration.setEnabled(true);}if((recorder.isRecording() || multiRecorder.isRecording()))toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;refreshMixer();repaint();};
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
@@ -624,6 +760,57 @@ public:
         soloControl.onClick=[this]{
             if(playing.load() || session.tracks.empty())return;
             session.tracks[selectedTrack].solo=soloControl.getToggleState();repaint();
+        };
+        vocalFxPreset.addItemList({"VOCAL FX: OFF","VOCAL FX: GENTLE","VOCAL FX: WARM","VOCAL FX: FORWARD"},1);
+        vocalFxPreset.setTooltip("Selected audio track playback and WAV export. Stop transport to change. Original take and live monitoring stay dry.");
+        addAndMakeVisible(vocalFxPreset);
+        vocalFxPreset.onChange=[this]{
+            if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load()){
+                refreshMixer();return;
+            }
+            session.setTrackVocalFxPreset(selectedTrack,vocalFxPreset.getSelectedId()-1);
+            refreshMixer();
+        };
+        vocalFxMix.setRange(0.0,100.0,1.0);
+        vocalFxMix.setTextValueSuffix("% FX");
+        vocalFxMix.setTextBoxStyle(juce::Slider::TextBoxRight,false,75,26);
+        vocalFxMix.setTooltip("Vocal effect amount: 0% original take, 100% full preset. Stop transport to change.");
+        addAndMakeVisible(vocalFxMix);
+        vocalFxMix.onValueChange=[this]{
+            if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() || exportRunning.load()){
+                refreshMixer();return;
+            }
+            session.setTrackVocalFxMix(selectedTrack,(float)(vocalFxMix.getValue()/100.0));
+            refreshMixer();
+        };
+        renameTrackButton.setButtonText("RENAME TRACK");
+        renameTrackButton.setTooltip("Name the selected track; save the project to keep it.");
+        addAndMakeVisible(renameTrackButton);
+        renameTrackButton.onClick=[this]{
+            if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() ||
+               exportRunning.load() || selectedTrack>=session.tracks.size())return;
+            const auto index=selectedTrack;
+            const auto generation=projectGeneration;
+            auto* dialog=new juce::AlertWindow("Rename Track","Enter a track name (up to 64 characters).",
+                juce::MessageBoxIconType::InfoIcon);
+            dialog->addTextEditor("name",juce::String(session.tracks[index].name),"Track name");
+            dialog->getTextEditor("name")->setInputRestrictions(64);
+            dialog->addButton("Rename",1);dialog->addButton("Cancel",0);
+            juce::Component::SafePointer<Workstation> safeThis(this);
+            dialog->enterModalState(true,juce::ModalCallbackFunction::create(
+                [safeThis,dialog,index,generation](int result){
+                    if(result!=1 || safeThis==nullptr)return;
+                    if(safeThis->projectGeneration!=generation || safeThis->playing.load() ||
+                       safeThis->recorder.isRecording() || safeThis->multiRecorder.isRecording() ||
+                       safeThis->exportRunning.load())return;
+                    const auto name=dialog->getTextEditorContents("name").trim();
+                    if(!safeThis->session.renameTrack(index,name.toStdString())){
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                            "Track name unchanged","Use a nonempty name without control characters.");
+                        return;
+                    }
+                    safeThis->refreshMixer();safeThis->repaint();
+                }),true);
         };
         previousTrack.setButtonText("< TRACK");
         nextTrack.setButtonText("TRACK >");
@@ -698,7 +885,7 @@ public:
         masterGain.setValue(1.0);
         masterGain.setTextBoxStyle(juce::Slider::TextBoxRight,false,55,25);
         addAndMakeVisible(masterGain);
-        masterGain.onValueChange=[this]{masterLevel.store((float)masterGain.getValue(),std::memory_order_relaxed);};
+        masterGain.onValueChange=[this]{session.masterMix.gain=(float)masterGain.getValue();masterLevel.store(session.masterMix.gain,std::memory_order_relaxed);};
         clearClips.setButtonText("RESET CLIP");addAndMakeVisible(clearClips);
         clearClips.onClick=[this]{peakClipLeft.store(false);peakClipRight.store(false);repaint();};
         eqLabel.setText("MASTER TONE",juce::dontSendNotification);addAndMakeVisible(eqLabel);
@@ -708,20 +895,24 @@ public:
             slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,56,24);
             addAndMakeVisible(*slider);
         }
-        lowEq.onValueChange=[this]{lowDb.store((float)lowEq.getValue());};
-        highEq.onValueChange=[this]{highDb.store((float)highEq.getValue());};
+        lowEq.onValueChange=[this]{session.masterMix.lowDb=(float)lowEq.getValue();lowDb.store(session.masterMix.lowDb);};
+        highEq.onValueChange=[this]{session.masterMix.highDb=(float)highEq.getValue();highDb.store(session.masterMix.highDb);};
         limitLabel.setText("OUTPUT CEILING",juce::dontSendNotification);addAndMakeVisible(limitLabel);
         ceilingControl.setRange(-12.0,-0.1,0.1);ceilingControl.setValue(-1.0);
         ceilingControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,60,24);
         addAndMakeVisible(ceilingControl);
-        ceilingControl.onValueChange=[this]{ceilingDb.store((float)ceilingControl.getValue(),std::memory_order_relaxed);};
+        ceilingControl.onValueChange=[this]{session.masterMix.ceilingDb=(float)ceilingControl.getValue();ceilingDb.store(session.masterMix.ceilingDb,std::memory_order_relaxed);};
         refreshMixer();
     }
+    int arrangementRight() const { return getWidth()-360; }
     void resized() override {
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
-        recordReadiness.setBounds(26,249,juce::jmax(100,getWidth()-52),18);
+
+        buildInfoButton.setBounds(header.removeFromRight(110).reduced(3));
+        quickHelpButton.setBounds(header.removeFromRight(110).reduced(3));
+        lyricsButton.setBounds(header.removeFromRight(90).reduced(3));
         skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
         skinSelector.setBounds(header.removeFromRight(165).reduced(3));
         title.setBounds(header);
@@ -744,11 +935,12 @@ public:
         aiButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         pianoButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         synthPreset.setBounds(projectRow.removeFromLeft(100).reduced(3));
-        voiceCommandInput.setBounds(projectRow.removeFromLeft(145).reduced(3));
-        runVoiceCommand.setBounds(projectRow.removeFromLeft(80).reduced(3));
-        voiceHistoryButton.setBounds(projectRow.removeFromLeft(80).reduced(3));
-        pushToTalkButton.setBounds(projectRow.removeFromLeft(70).reduced(3));
-        commandStatus.setBounds(projectRow.removeFromLeft(95).reduced(3));
+        auto commandRow=juce::Rectangle<int>(20,getHeight()-40,getWidth()-280,30);
+        voiceCommandInput.setBounds(commandRow.removeFromLeft(300).reduced(3));
+        runVoiceCommand.setBounds(commandRow.removeFromLeft(80).reduced(3));
+        voiceHistoryButton.setBounds(commandRow.removeFromLeft(80).reduced(3));
+        pushToTalkButton.setBounds(commandRow.removeFromLeft(70).reduced(3));
+        commandStatus.setBounds(commandRow.reduced(3));
         auto mixRow=area.removeFromTop(42);
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(165));
@@ -760,10 +952,11 @@ public:
         nextTrack.setBounds(mixRow.removeFromLeft(100));
         armControl.setBounds(mixRow.removeFromLeft(105));
         inputChannel.setBounds(mixRow.removeFromLeft(90));
+        renameTrackButton.setBounds(mixRow.removeFromLeft(125).reduced(3));
         auto monitorRow=area.removeFromTop(28);
         monitorControl.setBounds(monitorRow.removeFromLeft(190));
         audioDevices.setBounds(monitorRow.removeFromLeft(155).reduced(2));
-        inputLevel.setBounds(area.removeFromTop(26));
+        inputLevel.setBounds(monitorRow.reduced(8,0));
         auto overdubRow=area.removeFromTop(36);
         overdubControl.setBounds(overdubRow.removeFromLeft(285));
         latencyLabel.setBounds(overdubRow.removeFromLeft(120));
@@ -772,24 +965,33 @@ public:
         generateCalibration.setBounds(overdubRow.removeFromLeft(170).reduced(3));
         liveCalibration.setBounds(overdubRow.removeFromLeft(175).reduced(3));
         auto masterRow=area.removeFromTop(38);
-        masterLabel.setBounds(masterRow.removeFromLeft(115));
-        masterGain.setBounds(masterRow.removeFromLeft(260));
-        clearClips.setBounds(masterRow.removeFromLeft(120).reduced(3));
+        masterLabel.setBounds(masterRow.removeFromLeft(90));
+        masterGain.setBounds(masterRow.removeFromLeft(175));
+        clearClips.setBounds(masterRow.removeFromLeft(100).reduced(3));
+        eqLabel.setBounds(masterRow.removeFromLeft(90));
+        lowEq.setBounds(masterRow.removeFromLeft(130));
+        highEq.setBounds(masterRow.removeFromLeft(130));
+        limitLabel.setBounds(masterRow.removeFromLeft(125));
+        ceilingControl.setBounds(masterRow.removeFromLeft(130));
         auto synthRow=area.removeFromTop(35);
         attackLabel.setBounds(synthRow.removeFromLeft(100));
         attackControl.setBounds(synthRow.removeFromLeft(175));
         releaseLabel.setBounds(synthRow.removeFromLeft(115));
         releaseControl.setBounds(synthRow.removeFromLeft(175));
-        auto eqRow=area.removeFromTop(35);
-        eqLabel.setBounds(eqRow.removeFromLeft(115));
-        lowEq.setBounds(eqRow.removeFromLeft(180));
-        highEq.setBounds(eqRow.removeFromLeft(180));
-        auto ceilingRow=area.removeFromTop(35);
-        limitLabel.setBounds(ceilingRow.removeFromLeft(145));
-        ceilingControl.setBounds(ceilingRow.removeFromLeft(220));
-        connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
-        aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
-        pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
+        recordReadiness.setBounds(synthRow.reduced(8,0));
+        const int dockX=arrangementRight()+16;
+        const int dockWidth=getWidth()-20-dockX;
+        const int mixerTop=getHeight()-(neoMixerExpanded ? 190 : 112)-48;
+        const int dockBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
+        vocalFxPreset.setBounds(dockX+10,354,dockWidth-20,28);
+        vocalFxMix.setBounds(dockX+10,386,dockWidth-20,28);
+        lyricsPanel.setBounds(dockX,430,dockWidth,juce::jmax(0,dockBottom-430));
+        const int toolWidth=juce::jmax(100,arrangementRight()-20);
+        const int toolHeight=juce::jmax(0,dockBottom-335);
+        connectPanel.setBounds(20,335,juce::jmin(toolWidth,565),juce::jmin(toolHeight,220));
+        aiPanel.setBounds(20,335,juce::jmin(toolWidth,640),juce::jmin(toolHeight,268));
+        pianoViewport.setBounds(20,335,toolWidth,toolHeight);
+        pianoRoll.setSize(juce::jmax(100,toolWidth-pianoViewport.getScrollBarThickness()),37*13);
     }
     void startDictation(){
 #if JUCE_WINDOWS
@@ -871,13 +1073,14 @@ public:
 #endif
     }
     bool keyPressed(const juce::KeyPress& key) override {
+        if(lyricsPanel.hasKeyboardFocus(true))return false; // Typing must never trigger timeline or dictation commands.
         if(key.getKeyCode()==juce::KeyPress::F9Key && !key.getModifiers().isAltDown() &&
            !key.getModifiers().isCommandDown()){
             startDictation();
             return true;
         }
         if(!selectedClipValid || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) ||
-           exportRunning.load() || aiPanel.isVisible() || connectPanel.isVisible())
+           exportRunning.load() || aiPanel.isVisible() || connectPanel.isVisible() || pianoViewport.isVisible())
             return false;
         if(selectedClipTrack>=session.tracks.size() ||
            selectedClipIndex>=session.tracks[selectedClipTrack].clips.size()){
@@ -905,7 +1108,7 @@ public:
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
         const int mixerTop=getHeight()-mixerHeight-48;
         const int arrangementBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
-        if(event.x>=20 && event.x<getWidth()-20 && event.y>=366 && event.y<arrangementBottom && !session.tracks.empty() && !aiPanel.isVisible() && !connectPanel.isVisible()){
+        if(event.x>=20 && event.x<arrangementRight() && event.y>=366 && event.y<arrangementBottom && !session.tracks.empty() && !aiPanel.isVisible() && !connectPanel.isVisible() && !pianoViewport.isVisible()){
             const int visible=juce::jmax(1,(arrangementBottom-366)/70);
             const size_t maximum=session.tracks.size()>(size_t)visible ?
                 session.tracks.size()-(size_t)visible : 0;
@@ -920,13 +1123,13 @@ public:
         draggingClip=false;
         selectedClipValid=false;
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() ||
-           aiPanel.isVisible() || connectPanel.isVisible())return;
+           aiPanel.isVisible() || connectPanel.isVisible() || pianoViewport.isVisible())return;
         // The Neo Mixer overview doubles as a channel selector when stopped.
         // Handle this before hit-testing clips beneath the overview.
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
         const int mixerTop=getHeight()-mixerHeight-48;
         if(mixerTop>420 && e.y>=mixerTop && e.y<mixerTop+mixerHeight && e.x>=30 && !session.tracks.empty()){ 
-            if(e.y<mixerTop+22 && e.x<360){neoMixerExpanded=!neoMixerExpanded;ensureSelectedTrackVisible();repaint();return;}
+            if(e.y<mixerTop+22 && e.x<360){neoMixerExpanded=!neoMixerExpanded;resized();ensureSelectedTrackVisible();repaint();return;}
             const int count=juce::jmin(10,(int)session.tracks.size());
             const int width=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
             const int index=(e.x-30)/width;
@@ -946,13 +1149,19 @@ public:
             return;
         }
         constexpr int top=366, height=70, left=205;
-        if(e.y<top || e.x<left || session.tracks.empty())return;
+        if(e.y<top || e.x<20 || e.x>=arrangementRight() || session.tracks.empty())return;
         const int visibleMixerHeight=neoMixerExpanded ? 190 : 112;
         const int visibleMixerTop=getHeight()-visibleMixerHeight-48;
         const int arrangementLimit=visibleMixerTop>420 ? visibleMixerTop-8 : getHeight()-48;
         if(e.y>=arrangementLimit)return;
         const auto ti=(size_t)((e.y-top)/height)+arrangementScrollTrack;
         if(ti>=session.tracks.size())return;
+        // Lane, header, and clip clicks must all target the same mixer/FX track.
+        selectedTrack=ti;
+        refreshMixer();
+        grabKeyboardFocus();
+        repaint();
+        if(e.x<left)return;
         const auto& clips=session.tracks[ti].clips;
         for(size_t i=clips.size();i>0;--i){
             const auto& c=clips[i-1];
@@ -999,10 +1208,10 @@ public:
     }
     void mouseUp(const juce::MouseEvent&) override { draggingClip=false; draggingMixerFader=false; draggingMixerPan=false; }
     void paint(juce::Graphics& g) override {
-        g.fillAll(useCustomBackground?customBackground:juce::Colour(activeSkin==1?0xff17100b:activeSkin==2?0xff091c18:activeSkin==3?0xff160d22:0xff080f1c));
+        g.fillAll(useCustomBackground?customBackground:juce::Colour(idw::daw::factorySkin(activeSkin).background));
         // Neo Studio control decks: visual grouping stays outside the audio callback.
         const auto deck=[&g,this](juce::Rectangle<float> bounds,const juce::String& label){
-            g.setColour(useCustomPanel ? customPanel : juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
+            g.setColour(useCustomPanel ? customPanel : juce::Colour(idw::daw::factorySkin(activeSkin).panel));
             g.fillRoundedRectangle(bounds,10.0f);
             g.setColour(neoTheme.accentColour().withAlpha(0.32f));
             g.drawRoundedRectangle(bounds,10.0f,1.0f);
@@ -1011,16 +1220,21 @@ public:
             g.drawText(label,bounds.removeFromTop(16.0f).reduced(10.0f,0.0f),juce::Justification::centredLeft);
         };
         const auto fullWidth=(float)juce::jmax(100,getWidth()-40);
-        deck({20.0f,68.0f,fullWidth,93.0f},"TRANSPORT  /  PROJECT");
-        deck({20.0f,164.0f,fullWidth,84.0f},"TRACK CONTROL  /  INPUT ROUTING");
-        deck({20.0f,251.0f,fullWidth,74.0f},"MASTER  /  SYNTH  /  PROCESSING");
+        deck({20.0f,62.0f,fullWidth,84.0f},"");
+        deck({20.0f,146.0f,fullWidth,106.0f},"");
+        deck({20.0f,252.0f,fullWidth,73.0f},"");
+        const auto fxHeading=selectedTrack<session.tracks.size()
+            ? "VOCAL FX / "+juce::String(session.tracks[selectedTrack].name)+
+                (session.tracks[selectedTrack].type==idw::daw::TrackType::midi ? " (AUDIO ONLY)" : "")
+            : juce::String("VOCAL FX / NO TRACK");
+        deck({(float)arrangementRight()+16.0f,330.0f,324.0f,92.0f},fxHeading);
         const auto rect=getLocalBounds().reduced(20);
         const int top=330, trackHeight=70, left=205;
-        g.setColour(juce::Colour(activeSkin==1?0xff352a1e:activeSkin==2?0xff173e32:activeSkin==3?0xff302340:0xff122338));g.fillRect(20,top,getWidth()-40,36);
+        g.setColour(juce::Colour(idw::daw::factorySkin(activeSkin).header));g.fillRect(20,top,arrangementRight()-20,36);
         g.setColour(juce::Colours::lightgrey);
         for(int bar=0;bar<17;++bar){
             const int x=left+bar*48;
-            if(x>=getWidth()-30)break;
+            if(x>=arrangementRight()-10)break;
             g.drawVerticalLine(x,(float)top,(float)(getHeight()-30));
             g.drawText(juce::String(bar+1),x+3,top,40,30,juce::Justification::centredLeft);
         }
@@ -1030,13 +1244,13 @@ public:
         // Clip all arrangement drawing so expanding the mixer does not obscure
         // or receive stray clicks from timeline regions below its viewport.
         g.saveState();
-        g.reduceClipRegion(20,top,getWidth()-40,juce::jmax(0,arrangementBottom-top));
+        g.reduceClipRegion(20,top,arrangementRight()-20,juce::jmax(0,arrangementBottom-top));
         int y=top+36;
         size_t renderedTrackIndex=0;
         for(const auto& track:session.tracks){
             if(renderedTrackIndex<arrangementScrollTrack){++renderedTrackIndex;continue;}
-            g.setColour(juce::Colour(activeSkin==1?((y/trackHeight)%2?0xff33291e:0xff282016):activeSkin==2?((y/trackHeight)%2?0xff173b2f:0xff112c24):activeSkin==3?((y/trackHeight)%2?0xff302342:0xff261d36):((y/trackHeight)%2?0xff16283d:0xff102033)));
-            g.fillRect(20,y,getWidth()-40,trackHeight-2);
+            g.setColour(juce::Colour((y/trackHeight)%2?idw::daw::factorySkin(activeSkin).rowOdd:idw::daw::factorySkin(activeSkin).rowEven));
+            g.fillRect(20,y,arrangementRight()-20,trackHeight-2);
             const bool selected=renderedTrackIndex==selectedTrack;
             const bool armed=track.type==idw::daw::TrackType::audio &&
                 renderedTrackIndex<armedTracks.size() && armedTracks[renderedTrackIndex];
@@ -1046,7 +1260,7 @@ public:
             g.fillRect(20,y,selected?6:4,trackHeight-2);
             if(selected){
                 g.setColour(neoTheme.accentColour().withAlpha(0.75f));
-                g.drawRect(20,y,getWidth()-40,trackHeight-2,1);
+                g.drawRect(20,y,arrangementRight()-20,trackHeight-2,1);
             }
             if(armed){
                 g.setColour(juce::Colour(0xfff44368));
@@ -1065,27 +1279,65 @@ public:
             g.drawText("VOL",36,y+32,37,12,juce::Justification::centredLeft);
             g.drawText(track.mute ? "MUTED" : (track.solo ? "SOLO" : (armed ? "REC READY" : "READY")),
                        83,y+32,100,12,juce::Justification::centredRight);
+            if(track.type==idw::daw::TrackType::midi && !track.notes.empty()){
+                int lowest=127,highest=0;
+                for(const auto& note:track.notes){
+                    lowest=juce::jmin(lowest,note.pitch);
+                    highest=juce::jmax(highest,note.pitch);
+                }
+                const int pitchSpan=juce::jmax(12,highest-lowest+1);
+                const float noteHeight=juce::jlimit(2.0f,4.0f,46.0f/(float)pitchSpan);
+                for(const auto& note:track.notes){
+                    const float noteLeft=(float)(left+note.startBeat*12.0);
+                    const float noteRight=juce::jmin((float)arrangementRight()-5.0f,
+                        noteLeft+juce::jmax(2.0f,(float)(note.lengthBeats*12.0)));
+                    if(noteLeft>=(float)arrangementRight()-5.0f || noteRight<=noteLeft)continue;
+                    const float noteY=(float)y+10.0f+
+                        (float)(highest-note.pitch)*46.0f/(float)pitchSpan;
+                    // Velocity affects preview brightness, not the MIDI data.
+                    g.setColour(laneAccent.brighter(0.3f).withAlpha(
+                        0.4f+0.6f*(float)note.velocity/127.0f));
+                    g.fillRoundedRectangle(noteLeft,noteY,noteRight-noteLeft,noteHeight,1.0f);
+                }
+            }
             size_t renderedClipIndex=0;
             for(const auto& clip:track.clips){
                 const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
                 const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*12.0));
-                if(clipX>=getWidth()-25){++renderedClipIndex;continue;}
+                if(clipX>=arrangementRight()-5){++renderedClipIndex;continue;}
                 g.setColour(track.type==idw::daw::TrackType::audio ? neoTheme.accentColour().darker(0.72f) : neoTheme.accentColour().darker(0.92f));
-                g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
+                g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,arrangementRight()-5-clipX), (float)trackHeight-18,4.0f);
+                if(track.type==idw::daw::TrackType::audio){
+                    for(const auto& slot:sources){
+                        if(slot->trackIndex!=renderedTrackIndex || !slot->waveform)continue;
+                        // Only show the file that the track's player actually loaded.
+                        if(slot->file.getFullPathName().toStdString()!=clip.sourcePath)break;
+                        const int waveformLeft=clipX+3;
+                        const int waveformRight=juce::jmin(clipX+clipWidth-3,arrangementRight()-5);
+                        if(waveformRight>waveformLeft){
+                            const double secondsPerPixel=60.0/(session.bpm*12.0);
+                            const double start=clip.sourceOffsetSeconds+3.0*secondsPerPixel;
+                            const double end=start+(waveformRight-waveformLeft)*secondsPerPixel;
+                            g.setColour(neoTheme.accentColour().brighter(0.3f));
+                            slot->waveform->drawChannels(g,{waveformLeft,y+33,waveformRight-waveformLeft,20},start,end,1.0f);
+                        }
+                        break;
+                    }
+                }
                 if(selectedClipValid && renderedTrackIndex==selectedClipTrack && renderedClipIndex==selectedClipIndex){
                     g.setColour(neoTheme.accentColour());
-                    g.drawRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX),(float)trackHeight-18,4.0f,2.0f);
+                    g.drawRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,arrangementRight()-5-clipX),(float)trackHeight-18,4.0f,2.0f);
                 }
                 ++renderedClipIndex;
                 g.setColour(juce::Colours::white);
-                g.drawFittedText(juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
+                g.drawFittedText(juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,arrangementRight()-15-clipX)),18,juce::Justification::centredLeft,1);
             }
             y+=trackHeight;
             ++renderedTrackIndex;
             if(y>getHeight()-60)break;
         }
         const int head=left+(int)(playheadBeats*12.0);
-        if(head<getWidth()-30){
+        if(head<arrangementRight()-10){
             g.setColour(juce::Colour(0xff17d9ff));
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
         }
@@ -1099,10 +1351,10 @@ public:
             g.setFont(juce::Font(juce::FontOptions(10.0f)));
             g.drawText("TRACKS "+juce::String((int)first+1)+"-"+juce::String((int)last)+
                        " / "+juce::String((int)session.tracks.size()),
-                       getWidth()-177,top+5,154,19,juce::Justification::centredRight);
+                       arrangementRight()-157,top+5,154,19,juce::Justification::centredRight);
         }
         // Peak bars are updated from atomics, never directly from the audio thread.
-        const int meterLeft=getWidth()-220,meterTop=215,meterWidth=80;
+        const int meterLeft=getWidth()-220,meterTop=getHeight()-42,meterWidth=80;
         for(int ch=0;ch<2;++ch){
             const auto peak=ch==0?peakLeft.load():peakRight.load();
             const auto clipped=ch==0?peakClipLeft.load():peakClipRight.load();
@@ -1118,7 +1370,7 @@ public:
         if(mixTop>420){
             const int count=juce::jmin(10,(int)session.tracks.size());
             const int stripWidth=juce::jmax(65,juce::jmin(120,(getWidth()-180)/juce::jmax(1,count+1)));
-            g.setColour(juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
+            g.setColour(juce::Colour(idw::daw::factorySkin(activeSkin).panel));
             g.fillRoundedRectangle(20.0f,(float)mixTop,(float)getWidth()-40.0f,(float)mixHeight,8.0f);
             g.setColour(neoTheme.accentColour());
             g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
@@ -1181,7 +1433,158 @@ public:
         g.setColour(juce::Colours::grey);
         g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline playback prototype; drag clips to move or resize their right edge." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
     }
+// Install only a sender owned by the authenticated studio-room connection.
+    void setRecordingSignalSender(std::function<void(const juce::var&)> sender){
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return;
+        remoteRecordingProtocol.disconnect();
+        remoteRecordingProtocol.send=std::move(sender);
+        onRemoteRecordingGrant=[this](const auto& grant){
+            if(!remoteRecordingProtocol.publishGrant(grant)){
+                remoteRecordingGate.revoke();
+                studioControllerPanel.setStatus("Permission could not be sent. Ask the participant to request control again.");
+                return;
+            }
+            juce::Array<juce::var> tracks;
+            for(const auto& track:session.tracks){
+                if(track.type!=idw::daw::TrackType::audio)continue;
+                if(grant.scope==idw::RemoteRecordingControl::Scope::SelectedTracks &&
+                   std::find(grant.tracks.begin(),grant.tracks.end(),track.id)==grant.tracks.end())continue;
+                auto* item=new juce::DynamicObject();item->setProperty("id",juce::String(track.id));
+                item->setProperty("name",juce::String(track.name.empty()?"Audio track":track.name));
+                tracks.add(juce::var(item));
+            }
+            remoteRecordingProtocol.publishTracks(grant,juce::var(tracks));
+        };
+        onRemoteRecordingRevoke=[this]{remoteRecordingProtocol.publishRevoke();};
+    }
+    bool receiveRecordingSignal(const juce::var& signal){
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return false;
+        if(!remoteRecordingProtocol.send)return false;
+        return remoteRecordingProtocol.receive(signal);
+    }
+    void recordingSignalDisconnected(){
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return;
+        remoteRecordingProtocol.disconnect();
+        remoteRecordingProtocol.send={};
+    }
+    // Trusted transport integration points. Invoke on the JUCE message thread only.
+    // Transport must authenticate identity/session before calling; never expose
+    // these methods directly to arbitrary browser scripts or incoming JSON.
+    void setAuthenticatedRecordingPeer(const std::string& peer, const std::string& connection) {
+        jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return;
+        remoteRecordingGate.revoke();
+        remotePeer=connection.empty() ? std::string{} : peer;
+        remoteConnection=peer.empty() ? std::string{} : connection;
+        ++remoteConnectionGeneration;
+    }
+    std::string executeRemoteRecording(const std::string& peer, const std::string& connection,
+        const std::string& trackId, uint64_t grantId, uint64_t sequence,
+        idw::RemoteRecordingControl::Action action) {
+        jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+        using Gate=idw::RemoteRecordingControl;
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())return "denied";
+        if(peer.empty() || peer!=remotePeer || connection.empty() || connection!=remoteConnection)
+            return "denied";
+        const auto target=session.findTrackById(trackId);
+        if(!target || *target>=armedTracks.size() ||
+           session.tracks[*target].type!=idw::daw::TrackType::audio)return "denied";
+        const bool capturing=recorder.isRecording() || multiRecorder.isRecording();
+        std::vector<std::string> affected;
+        if(action==Gate::Action::Arm)affected.push_back(trackId);
+        else if(action==Gate::Action::Stop && capturing){
+            if(multiRecorder.isRecording()){
+                for(const auto& take:multiTakes){
+                    if(take.first>=session.tracks.size())return "denied";
+                    affected.push_back(session.tracks[take.first].id);
+                }
+            }else if(recordTargetTrack<session.tracks.size())
+                affected.push_back(session.tracks[recordTargetTrack].id);
+        }else if(action==Gate::Action::Record){
+            for(size_t i=0;i<session.tracks.size() && i<armedTracks.size();++i)
+                if(armedTracks[i] && session.tracks[i].type==idw::daw::TrackType::audio)
+                    affected.push_back(session.tracks[i].id);
+        }
+        // No remote auto-arm or selected-track fallback. Validate the actual
+        // complete capture set, including the command's named target.
+        if(std::find(affected.begin(),affected.end(),trackId)==affected.end())return "not_ready";
+        if(remoteRecordingGate.authorizeTargets(peer,projectGeneration,affected,grantId,sequence,
+            action,Gate::Clock::now())!=Gate::Result::Allowed)return "denied";
+        if(exportRunning.load() || loopbackCapture.isActive())return "not_ready";
+        if(action==Gate::Action::Stop){
+            if(!capturing)return "not_ready";
+            toggleRecording();
+            return recorder.isRecording() || multiRecorder.isRecording() ? "failed" : "succeeded";
+        }
+        if(capturing || playing.load())return "not_ready";
+        auto* device=deviceManager.getCurrentAudioDevice();
+        if(!device)return "not_ready";
+        for(const auto& id:affected){
+            const auto index=session.findTrackById(id);
+            if(!index)return "denied";
+            const int input=session.tracks[*index].inputChannel;
+            if(input<0 || input>=device->getInputChannelNames().size() ||
+               !device->getActiveInputChannels()[input])return "not_ready";
+        }
+        if(action==Gate::Action::Arm){
+            armedTracks[*target]=true;refreshMixer();return "succeeded";
+        }
+        if(action!=Gate::Action::Record)return "denied";
+        toggleRecording();
+        return recorder.isRecording() || multiRecorder.isRecording() ? "succeeded" : "failed";
+    }
+    // Native consent emits the resulting grant for the future authenticated
+    // transport to serialize. No network transport is installed by this change.
+    std::function<void(const idw::RemoteRecordingControl::Grant&)> onRemoteRecordingGrant;
+    std::function<void()> onRemoteRecordingRevoke;
 private:
+    idw::RemoteRecordingControl remoteRecordingGate;
+    idw::RemoteRecordingProtocol remoteRecordingProtocol;
+    StudioNetworkClient studioNetwork;
+    StudioControllerPanel studioControllerPanel;
+    idw::RemoteStudioController remoteStudioController;
+    juce::Component::SafePointer<juce::DialogWindow> studioWindow;
+    std::string remotePeer,remoteConnection;
+    uint64_t remoteConnectionGeneration=0;
+    void showRecordingPermissions(){
+        const auto request=remoteRecordingProtocol.pendingRequest();
+        auto* dialog=new juce::AlertWindow("Recording permissions",
+            remotePeer.empty() ? "No authenticated IDW recording peer is connected. Browser video calls do not grant DAW control."
+                : request.empty() ? "Ask the other participant to click Request Control, then reopen My Permissions. Existing control can be revoked here."
+                : "Allow the connected IDW peer to Arm, Record and Stop for 15 minutes. All tracks includes future audio tracks. Local Stop remains available.",
+            juce::MessageBoxIconType::InfoIcon);
+        dialog->addButton("Close",0,juce::KeyPress(juce::KeyPress::escapeKey));
+        dialog->addButton("Revoke control",3);
+        std::vector<std::string> selected;
+        if(selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::audio)
+            selected.push_back(session.tracks[selectedTrack].id);
+        if(!request.empty() && onRemoteRecordingGrant){
+            if(!selected.empty())dialog->addButton("Allow selected track",1);
+            dialog->addButton("Allow all tracks",2);
+        }
+        const auto project=projectGeneration, connection=remoteConnectionGeneration;
+        juce::Component::SafePointer<Workstation> safeThis(this);
+        dialog->enterModalState(true,juce::ModalCallbackFunction::create(
+            [safeThis,project,connection,selected,request](int result){
+                if(!safeThis || result==0)return;
+                if(result==3){
+                    safeThis->remoteRecordingGate.revoke();
+                    if(safeThis->onRemoteRecordingRevoke)safeThis->onRemoteRecordingRevoke();
+                    return;
+                }
+                if(project!=safeThis->projectGeneration || connection!=safeThis->remoteConnectionGeneration ||
+                   safeThis->remotePeer.empty() || !safeThis->onRemoteRecordingGrant ||
+                   request.empty() || safeThis->remoteRecordingProtocol.pendingRequest()!=request){
+                    safeThis->studioControllerPanel.setStatus("Permission request changed. Reopen My Permissions to review the current request.");
+                    return;
+                }
+                using Gate=idw::RemoteRecordingControl;
+                const auto grant=safeThis->remoteRecordingGate.grant(safeThis->remotePeer,
+                    result==2 ? Gate::Scope::AllTracks : Gate::Scope::SelectedTracks,
+                    result==2 ? std::vector<std::string>{} : selected, project, Gate::Clock::now(),std::chrono::seconds(900));
+                if(grant)safeThis->onRemoteRecordingGrant(*grant);
+            }),true);
+    }
     bool neoMixerExpanded=false;
     size_t arrangementScrollTrack=0;
     bool draggingMixerFader=false,draggingMixerPan=false;
@@ -1230,8 +1633,10 @@ private:
         const auto& playback=*snapshot;
         for(auto& peak:channelPeaks)peak.store(0.0f,std::memory_order_relaxed);
         const auto blockStart=sessionFrames.load(std::memory_order_relaxed);
+        if(blockStart==0)for(auto& state:eqState)state=0.0f; // Reset on audio thread for repeatable starts.
         const bool anySolo=std::any_of(playback.tracks.begin(),playback.tracks.end(),[](const auto& t){return t.solo;});
         for(auto& slot:sources) {
+            if(blockStart==0)slot->vocalFx.reset(); // Audio-thread reset on every playback/overdub start.
             if(!slot->reader || slot->trackIndex>=playback.tracks.size())continue;
             const auto& track=playback.tracks[slot->trackIndex];
             if(track.mute || (anySolo && !track.solo) || track.clips.empty())continue;
@@ -1242,6 +1647,12 @@ private:
             slot->scratch.clear(0,window.frames);
             juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
             slot->transport.getNextAudioBlock(readInfo);
+            auto* left=slot->scratch.getWritePointer(0);
+            auto* right=slot->scratch.getWritePointer(1);
+            for(int i=0;i<window.frames;++i){
+                const auto wet=slot->vocalFx.process(left[i],right[i],track.vocalFxPreset,track.vocalFxMix);
+                left[i]=wet.left;right[i]=wet.right;
+            }
             const float gain=juce::jlimit(0.0f,2.0f,track.gain);
             const float pan=juce::jlimit(-1.0f,1.0f,track.pan);
             const float leftGain=gain*(pan>0.0f?1.0f-pan:1.0f);
@@ -1307,6 +1718,7 @@ private:
         for(auto& slot:sources)slot->transport.releaseResources();
     }
     void changeListenerCallback(juce::ChangeBroadcaster* source) override {
+        if(source!=&deviceManager){repaint();return;} // Async waveform scan progress.
         if(source==&deviceManager){
             // Device selector changes are delivered on the message thread.
             // Do not rewrite routes while audio recording is in progress.
@@ -1317,9 +1729,36 @@ private:
         }
     }
     void refreshMixer(){
-        if(session.tracks.empty())return;
+        const bool hasTracks=!session.tracks.empty();
+        for(auto* control : std::initializer_list<juce::Component*>{
+                &gainControl,&panControl,&muteControl,&soloControl,&previousTrack,&nextTrack,&renameTrackButton})
+            control->setEnabled(hasTracks);
+        if(!hasTracks){
+            selectedClipValid=false;
+            pianoViewport.setVisible(false);
+            for(auto* control : std::initializer_list<juce::Component*>{
+                    &vocalFxPreset,&vocalFxMix,&synthPreset,&attackControl,&releaseControl,
+                    &armControl,&inputChannel})control->setEnabled(false);
+            gainLabel.setText("NO TRACK",juce::dontSendNotification);
+            gainLabel.setTooltip("Add a track to use the mixer.");
+            gainControl.setTooltip("No track selected.");
+            renameTrackButton.setTooltip("Add a track before renaming.");
+            recordReadiness.setText("Add an audio track to record.",juce::dontSendNotification);
+            return;
+        }
         if(selectedTrack>=session.tracks.size())selectedTrack=0;
         const auto& track=session.tracks[selectedTrack];
+        if(selectedClipValid && selectedClipTrack!=selectedTrack)selectedClipValid=false;
+        if(pianoViewport.isVisible() &&
+           (pianoRoll.trackIndex!=selectedTrack || track.type!=idw::daw::TrackType::midi)){
+            pianoViewport.setVisible(false);
+            pianoRoll.selectTrack(selectedTrack);
+        }
+        vocalFxPreset.setEnabled(track.type==idw::daw::TrackType::audio &&
+            !playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() && !exportRunning.load());
+        vocalFxPreset.setSelectedId(track.vocalFxPreset+1,juce::dontSendNotification);
+        vocalFxMix.setEnabled(vocalFxPreset.isEnabled() && track.vocalFxPreset!=0);
+        vocalFxMix.setValue(track.vocalFxMix*100.0f,juce::dontSendNotification);
         synthPreset.setEnabled(track.type==idw::daw::TrackType::midi &&
             !playing.load() && !(recorder.isRecording() || multiRecorder.isRecording()) && !exportRunning.load());
         synthPreset.setSelectedId(track.synthPreset+1,juce::dontSendNotification);
@@ -1330,6 +1769,9 @@ private:
         attackControl.setValue(track.synthAttackMs,juce::dontSendNotification);
         releaseControl.setValue(track.synthReleaseMs,juce::dontSendNotification);
         gainLabel.setText(juce::String(track.name)+" VOL",juce::dontSendNotification);
+        gainLabel.setTooltip("Selected track: "+juce::String(track.name));
+        gainControl.setTooltip("Volume for "+juce::String(track.name)+". Stop transport before editing.");
+        renameTrackButton.setTooltip("Rename "+juce::String(track.name)+". Save the project to keep the name.");
         gainControl.setValue(track.gain,juce::dontSendNotification);
         panControl.setValue(track.pan,juce::dontSendNotification);
         muteControl.setToggleState(track.mute,juce::dontSendNotification);
@@ -1405,7 +1847,7 @@ private:
             arrangementScrollTrack=juce::jmin(maxScroll,selectedTrack-visible+1);
     }
     void executeStudioCommand(juce::String spoken){
-        auto command=spoken.trim().toLowerCase().replaceCharacter('-', ' ');
+        auto command=spoken.trim().toLowerCase();
         command=command.trimCharactersAtEnd(".!?");
         if(command.startsWith("idw "))command=command.fromFirstOccurrenceOf("idw ",false,false);
         if(command.startsWith("studio "))command=command.fromFirstOccurrenceOf("studio ",false,false);
@@ -1432,13 +1874,16 @@ private:
         }else if(command=="voice help" || command=="help" || command=="list commands"){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                 "IDW Voice Commands",
-                "Click the command field, press Win+H, dictate a phrase, then press Enter.\n"
+                "Windows: TALK or F9 listens for one command (up to 8 seconds).\n"
+                "Click TALK again to cancel. Alternatively type, or use Win+H, then Enter.\n"
                 "Transport: play, stop, record vocals, stop recording.\n"
                 "Recording: arm track, disarm track, input status, overdub on/off.\n"
                 "Tracks: next track, previous track, select track 3, add audio track.\n"
                 "Mixing: mute/unmute, solo/unsolo, expand/collapse mixer.\n"
-                "Projects: save project.\n"
-                "Voice recognition uses Windows dictation; the DAW is not always listening.");
+                "Projects: save project (opens the save dialog).\n"
+                "Recording: say record vocals, then use TALK again and say confirm recording within 15 seconds.\n"
+                "Track numbers accept digits or words, such as select track three.\n"
+                "TALK uses Windows Speech recognition. It is not always listening.");
             feedback="Voice command list displayed";
         }else if(command=="record status" || command=="input status" || command=="microphone status"){
             auto* device=deviceManager.getCurrentAudioDevice();
@@ -1522,9 +1967,8 @@ private:
             }else feedback="Stop playback or recording before saving the project";
         }else if(command.startsWith("select track ") || command.startsWith("go to track ")){
             const auto numberText=command.fromLastOccurrenceOf("track ",false,false).trim();
-            const int number=numberText.getIntValue();
-            if(numberText.isEmpty() || !numberText.containsOnly("0123456789") ||
-               number<1 || (size_t)number>session.tracks.size()){
+            const int number=idw::daw::voiceTrackNumber(numberText.toStdString());
+            if(number<1 || (size_t)number>session.tracks.size()){
                 feedback="Invalid track number. Choose 1 to "+
                     juce::String((int)session.tracks.size());
             }else if(busy || playing.load()){
@@ -1543,9 +1987,9 @@ private:
             if(!busy){selectTrack(-1);feedback="Selected previous track";}
             else feedback="Track selection unavailable while busy";
         }else if(command=="expand mixer" || command=="open mixer"){
-            neoMixerExpanded=true;ensureSelectedTrackVisible();repaint();feedback="Mixer expanded";
+            neoMixerExpanded=true;resized();ensureSelectedTrackVisible();repaint();feedback="Mixer expanded";
         }else if(command=="collapse mixer" || command=="close mixer"){
-            neoMixerExpanded=false;ensureSelectedTrackVisible();repaint();feedback="Mixer collapsed";
+            neoMixerExpanded=false;resized();ensureSelectedTrackVisible();repaint();feedback="Mixer collapsed";
         }else if(command=="mute" || command=="mute track" || command=="unmute" ||
                  command=="unmute track" || command=="solo" || command=="solo track" ||
                  command=="unsolo" || command=="unsolo track"){
@@ -1566,7 +2010,8 @@ private:
         voiceCommandInput.selectAll();
     }
     void selectTrack(int direction){
-        if(playing.load() || session.tracks.empty())return;
+        if(playing.load() || recorder.isRecording() || multiRecorder.isRecording() ||
+           exportRunning.load() || session.tracks.empty())return;
         const auto current=(int)selectedTrack;
         selectedTrack=(size_t)juce::jlimit(0,(int)session.tracks.size()-1,current+direction);
         ensureSelectedTrackVisible();
@@ -1673,7 +2118,15 @@ private:
         size_t trackIndex=0;
         double sourceOffsetSeconds=0.0;
         juce::AudioBuffer<float> scratch;
+        idw::daw::TrackVocalEffects vocalFx;
+        std::unique_ptr<juce::AudioThumbnail> waveform;
     };
+    void prepareWaveform(AudioSlot& slot){
+        // A separate reader scans on the thumbnail cache thread, never the audio callback.
+        slot.waveform=std::make_unique<juce::AudioThumbnail>(512,formats,waveformCache);
+        slot.waveform->addChangeListener(this);
+        slot.waveform->setSource(new juce::FileInputSource(slot.file));
+    }
     void addAudioTrack(){
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return; // Avoid mutating the audio graph during playback.
         if(!session.addTrack(idw::daw::TrackType::audio))return;
@@ -1721,6 +2174,7 @@ private:
                     slot->transport.setSource(source.get(),0,nullptr,rate);
                     slot->reader=std::move(source);
                     slot->file=file;
+                    prepareWaveform(*slot);
                     // Update restored reference so the next save uses the discovered location.
                     restored.tracks[index].clips.front().sourcePath=file.getFullPathName().toStdString();
                 }else ++missing;
@@ -1734,6 +2188,26 @@ private:
         for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
         sources.clear();
         session=std::move(restored);
+        ++projectGeneration;
+        remoteRecordingGate.revoke();
+        remoteRecordingProtocol.publishRevoke();
+        // Editor selections belong to the old project, even if track indices match.
+        selectedClipValid=false;
+        draggingClip=false;draggingMixerFader=false;draggingMixerPan=false;
+        arrangementScrollTrack=0;
+        pianoViewport.setVisible(false);
+        pianoViewport.setViewPosition(0,0);
+        pianoRoll.selectTrack(0);
+        aiPanel.resetForProject();
+        pendingVoiceRecord=false;
+        masterGain.setValue(session.masterMix.gain,juce::dontSendNotification);
+        lowEq.setValue(session.masterMix.lowDb,juce::dontSendNotification);
+        highEq.setValue(session.masterMix.highDb,juce::dontSendNotification);
+        ceilingControl.setValue(session.masterMix.ceilingDb,juce::dontSendNotification);
+        masterLevel.store(session.masterMix.gain);
+        lowDb.store(session.masterMix.lowDb);highDb.store(session.masterMix.highDb);
+        ceilingDb.store(session.masterMix.ceilingDb);
+        lyricsPanel.setLyrics(juce::String::fromUTF8(session.lyrics.c_str()));
         sources=std::move(staged);
         armedTracks.fill(false); // Reopening a project must never arm recording automatically.
         selectedTrack=0;sessionFrames.store(0);playheadBeats=0;
@@ -1767,7 +2241,8 @@ private:
                 output=output.withFileExtension(".wav");
                 if(exportThread.joinable())exportThread.join();
                 const auto snapshot=session;
-                const float gain=masterLevel.load(),ceiling=ceilingDb.load(),bass=lowDb.load(),treble=highDb.load();
+                const float gain=snapshot.masterMix.gain,ceiling=snapshot.masterMix.ceilingDb,
+                    bass=snapshot.masterMix.lowDb,treble=snapshot.masterMix.highDb;
                 bounce.setEnabled(false);
                 cancelBounce.setEnabled(true);
                 exportCancel.store(false);
@@ -1843,6 +2318,7 @@ private:
         if(!session.addClip(target->trackIndex,{take.getFullPathName().toStdString(),takeStartBeat,beatLength,trim}))return false;
         target->transport.setSource(source.get(),0,nullptr,rate);
         target->file=take;target->reader=std::move(source);
+        prepareWaveform(*target);
         selectedTrack=target->trackIndex;
         ensureSelectedTrackVisible();
         juce::Logger::writeToLog("IDW vocal take imported: "+take.getFullPathName()+
@@ -2006,6 +2482,7 @@ private:
             slot->transport.start();
         }
         playing.store(true);
+        refreshMixer();
         startTimerHz(30);
     }
     void toggleRecording(){
@@ -2368,12 +2845,13 @@ private:
             const auto sourceRate=source->getAudioFormatReader()->sampleRate;
             target->transport.setSource(source.get(),0,nullptr,sourceRate);
             target->file=file;target->reader=std::move(source);
+            prepareWaveform(*target);
             session.addClip(target->trackIndex,{file.getFullPathName().toStdString(),0.0,
                 sourceRate>0 ? (double)target->reader->getAudioFormatReader()->lengthInSamples/sourceRate*session.bpm/60.0 : 0.0,0.0});
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {studioNetwork.disconnect();if(studioWindow)delete studioWindow.getComponent();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
     juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton,skinToolsButton;
@@ -2398,6 +2876,8 @@ private:
     double takeInputLatencySeconds=0.0;
     double takeManualTrimSeconds=0.0;
     juce::Label title,tempoLabel,gainLabel,panLabel,inputLevel,latencyLabel,recordReadiness;
+    juce::ComboBox vocalFxPreset;
+    juce::Slider vocalFxMix;
     juce::Slider gainControl,panControl,masterGain,latencyAdjust;
     juce::Label masterLabel,eqLabel,limitLabel;
     juce::Slider ceilingControl;
@@ -2421,20 +2901,25 @@ private:
     std::thread voiceListenThread;
     bool pendingVoiceRecord=false; // Spoken record requires a second explicit command.
     juce::uint32 voiceRecordRequestedAt=0; // Confirmation expires after 15 seconds.
-    juce::TextButton previousTrack,nextTrack;
+    juce::TextButton previousTrack,nextTrack,renameTrackButton;
+    uint64_t projectGeneration=0;
     size_t selectedTrack=0;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration,liveCalibration;
     juce::ComboBox synthPreset;
     juce::Label attackLabel,releaseLabel;
     juce::Slider attackControl,releaseControl;
     IDWPianoRoll pianoRoll;
+    juce::Viewport pianoViewport;
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
+    IDWLyricsPanel lyricsPanel;
+    juce::TextButton lyricsButton,buildInfoButton,quickHelpButton;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
     IDWLoopbackCapture loopbackCapture;
     std::vector<std::pair<std::size_t,juce::File>> multiTakes;
     juce::AudioFormatManager formats;
+    juce::AudioThumbnailCache waveformCache{32};
     std::atomic<int64_t> sessionFrames{0};
     // Allocated on the message thread before transport starts; audio only reads.
     std::shared_ptr<const idw::daw::Session> playbackSession;
@@ -2443,6 +2928,7 @@ private:
     std::vector<std::unique_ptr<AudioSlot>> sources;
     std::unique_ptr<juce::FileChooser> chooser,projectChooser,calibrationChooser,referenceChooser;
     juce::Slider tempo;
+    juce::TooltipWindow tooltips{this,700};
 };
 class DAWApplication final : public juce::JUCEApplication {
 public:

@@ -1,0 +1,319 @@
+# Unified DAW progress
+
+The first integration step adds the existing vocal rack's de-esser, compressor,
+and saturation to audio tracks inside the V14 timeline.
+
+Select an audio track, stop playback, and choose **VOCAL FX** beside the master
+volume controls. Off is the default; Gentle uses light compression and de-essing,
+Warm adds saturation, and Forward uses stronger compression and de-essing.
+Use the adjacent **% FX** slider to blend the original take (0%) with the full
+preset (100%). The amount is saved per track; switching Off retains it.
+The insert runs before track volume/pan in playback and WAV export. Settings
+save in `.idwproj` files and portable project copies. Original recordings and
+live input monitoring remain dry. MIDI tracks do not use this insert.
+
+This is the first subset of the existing rack, not the full Tune Studio:
+pitch correction, harmony, reverb/delay, and Song Studio integration are still
+pending. Effects are set while stopped, rather than automated during playback.
+Old projects open with effects off. Older builds ignore the new preset field;
+saving in an older build will discard the preset. Use the newer build to hear
+and retain these inserts. The current playback UI supports one audio clip per
+track; multi-clip track chains remain future work.
+
+Verification includes exact stereo bypass, stereo channel isolation, deterministic
+restart, preset validation, project round trips, legacy defaults, and rendered
+WAV comparison against the same processor used by playback. Hardware listening
+and Windows UI checks are still required after a successful native build.
+
+## Lyrics notebook
+
+The LYRICS button in the top header opens a notebook inside V14. Paste or type
+hooks, verses and song notes; it stays available during playback and recording.
+Use SAVE PROJECT while stopped to save the words. Portable projects carry them
+along with the session. Opening a different project replaces the notebook with
+that project's words; projects without lyrics open with a blank notebook.
+
+This is a manually edited notebook, not automatic transcription, timed lyrics,
+or import of the separate Song Studio project format. It allows 32,768
+characters. Older V14 builds ignore this field and discard it on re-save.
+
+## Built-in MIDI instrument WAV export
+
+BOUNCE WAV now includes piano-roll notes with the same built-in Keys, Bass,
+Lead, Organ and Pad instruments used in playback. MIDI-only projects can export,
+and notes after the last audio clip extend the export. Track volume, pan,
+mute/solo and the master tone/volume/ceiling apply. Muted material still retains
+its timeline duration, matching the existing audio export behavior.
+
+This renders the built-in instruments; it does not capture external MIDI
+hardware or host third-party instrument plugins.
+
+## Consistent MIDI levels across audio buffers
+
+Polyphony normalization now counts notes at each sample. Previously, every note
+that touched a callback buffer affected the volume of that entire buffer, so
+staggered notes could sound quieter in a large-buffer WAV export than in playback.
+The correction preserves the existing audio mix and uses fixed stack buffers.
+Regression checks cover staggered notes, fractional start times, five instruments,
+stereo pan, mute, and buffer sizes 1, 64, 127, 256, 1024 and 4096.
+
+## Master mix project recall
+
+SAVE PROJECT and EXPORT PORTABLE now retain master volume, bass/treble tone,
+and output ceiling. Opening a project restores both the controls and the audio
+settings. WAV export takes the complete mix from one session snapshot.
+
+Older projects have no saved master values, so they open at unity volume,
+flat tone, and a -1 dB ceiling instead of inheriting the previous song's mix.
+Older app builds ignore the new fields and discard them if the project is
+re-saved there. This stores mix settings, not automation over time.
+
+## Ten factory skins in the V14 workspace
+
+The skin dropdown now includes the six Voice MIDI Studio palettes: IDW Gold,
+Midnight Studio, Electric Blue, Vocal Heat, Platinum, and High Contrast, alongside
+Neo Cyan, Royal Gold, Emerald Circuit, and Purple Night. These adapt the original
+palette colors to V14's existing layout; they do not change recording or routing.
+The four original preset IDs remain stable. New selections persist across app
+restarts and work with V14's custom skin save/load/import/export tools.
+
+Older V14 builds do not understand the six added factory IDs. Custom skin files
+from the separate Voice MIDI Studio app still use a different format; this update
+brings over its factory palettes, not its custom-skin file importer.
+
+## Identifying the installed desktop beta
+
+Use BUILD INFO in the top header to see the app version and full source revision.
+That revision distinguishes updates which still share the V14 version number.
+It is embedded when the app is configured for compilation, including CI merge
+builds. Source archives without Git metadata display an unknown revision, and
+tracked local changes are marked. Reconfigure local CMake builds after changing
+revisions. No network connection or diagnostic upload is involved.
+
+### Docked desktop layout
+
+Vocal FX and lyrics now sit beside the arrangement, with the existing mixer below. Arrangement painting and pointer selection stop at the dock boundary. Lyrics open by default; timeline shortcuts are suppressed only while the notebook has keyboard focus. Expanding the mixer also resizes the notebook. Master controls now fit above the arrangement, and voice commands and peak meters sit in the footer. This is the first structural pass toward the approved concept, not a claim of complete visual parity. Native compilation and Windows visual review remain pending.
+
+### Track selection and dock coexistence
+
+Clicking a lane header, empty lane, or clip selects that track and refreshes mixer, input, and vocal FX controls before clip editing begins. The FX card names its target track and identifies MIDI tracks as unsupported for these audio effects. Lyrics remain visible alongside Connect, AI Studio, and the piano roll; the piano roll scrolls vertically to retain its full pitch range in the shorter docked view. Those tools share the arrangement region and no longer cover the dock or bottom mixer. Parent timeline selection and scrolling are blocked while an arrangement tool is open. These changes await native CI compilation and interactive Windows validation.
+
+### Editing selection guards
+
+Changing the selected track clears a clip selection belonging to another track and closes a piano roll targeting the old track. Reopening the piano roll resets its note selection, so Delete cannot reuse an index from another track. Piano-roll note creation, dragging, and deletion now check transport, recording, and export state at the point of editing. Arrangement keyboard nudges are blocked while the piano roll is open. Previous/next track buttons also respect recording and export activity. Native build validation is pending.
+
+### Project-switch editor reset
+
+A successful project load now clears clip and note selections, active drag state, timeline and piano-roll scrolling, pending voice-record confirmation, and the previous AI proposal review. Failed project loads leave the current editor state intact. Empty projects disable track-specific controls instead of showing an editable mixer for a nonexistent track. Native CI validation is pending.
+
+### Tool panel fit
+
+AI Studio now reserves 640 x 268 pixels so its complete approval button and feedback fit. Connect reserves 565 x 220 pixels so its explanatory notice fits. Both remain inside the arrangement at the default 1450 x 850 window size, including with the mixer expanded. Geometry was checked against the component row sizes; native on-screen validation remains pending.
+
+### Audio waveform previews
+
+Arrangement audio clips now draw cached waveform previews beneath their filenames. Imports, completed takes, and restored project audio initialize separate JUCE thumbnail readers, scanned on the thumbnail cache thread. Drawing follows source offsets and tempo and uses only the visible clip width, avoiding stretched waveforms at the dock boundary. Missing audio stays without a waveform. The previews show original source audio, before track effects and mix processing. Native compilation and Windows visual validation are pending.
+
+### MIDI arrangement preview
+
+MIDI lanes now show note bars at the same beat scale as audio clips. Bar lengths follow note durations; pitch determines vertical position within the lane, and velocity affects brightness. Notes are clipped at the side dock boundary. This is an arrangement overview; note editing remains in the piano roll. MIDI data and rendering are unchanged. Native build and visual validation are pending.
+
+### Desktop help and documentation
+
+Added in-app QUICK HELP for recording, clip editing and project/audio exports. BUILD INFO now lists arrangement previews and explicitly distinguishes unfinished plugin hosting. Updated the packaged Combined Beta Guide with the desktop workflow, workspace boundaries and a focused return-to-desktop check. The older workspace manual links to this guide. Desktop hardware testing remains deferred until the user returns.
+
+### Track names
+
+Added RENAME TRACK for the selected audio or MIDI track. Names appear in lane headers, mixer and FX target labels and use the existing project name field. Blank/control-character/overlong names are rejected. The dialog is guarded against playback, recording, export and project replacement. Model validation tests run locally; name save/reopen coverage is added to native persistence tests.
+
+### Hover guidance
+
+Enabled the workstation tooltip window so existing device, input, vocal FX, skin and command guidance appears on hover. Selected-track volume and rename tips include the full name, while empty-project tips clear the previous target. This improves access to long names without changing project data. Native compilation and visual checks are pending.
+
+### Voice command readiness
+
+Track selection accepts English number words as well as digits (1-128). Added regression coverage for spoken numbers, bounds and malformed phrases. Corrected outdated command hints to describe existing TALK/F9 native Windows recognition, the text/Win+H fallback and two-step recording confirmation. Added a voice-testing walkthrough to the bundled guide. Real speech and AudioBox testing remain pending.
+
+### Two-person studio-session foundation
+
+User selected the integrated two-person session direction. Added an undeployed signalling service prototype under studio_sessions with host/guest tickets, two-seat admission, message validation, peer reconnect/leave, room expiry and a separate CI workflow. Nine local admission/protocol tests pass. The desktop Connect button is unchanged; embedded camera UI, media permissions, authenticated room hosting, TURN and AudioBox mix sharing remain to implement. No live service or call is claimed.
+
+### Two-person call-screen prototype
+
+Added a black/gold IDW call page served by the signalling prototype: invitation join, host/guest camera areas, microphone-only mode, mute, camera toggle, status and Leave. Browser media access starts after Join and successful seat admission. Client cleanup handles late permission results, device loss, disconnect and leave. SDP precedes queued ICE candidates, and the host negotiates after media-ready signalling. Ten Python protocol tests and eight mocked JavaScript lifecycle tests pass locally. The page has not been visually or real-media tested and is not yet embedded in the native DAW. No internet relay, hosted service or DAW-mix audio route is configured.
+
+### Remote recording permission foundation
+
+Added a standalone C++ permission gate for Arm, Record and Stop. Explicit local
+consent grants one authenticated peer access to one stable track ID in one project
+generation, for at most 15 minutes. Regranting invalidates old command generations;
+sequence checks reject duplicates and out-of-order requests. Expiry and project
+changes revoke access. Both roles can grant permission independently.
+
+This is not yet wired to the DAW or signalling service. The future adapter must
+serialize access on the message thread, derive peer identity from the authenticated
+connection, supply local project generation and steady-clock time, revoke on
+peer disconnect/track deletion/project replacement, and keep local Stop independent.
+Grant IDs are process-local counters, not authentication tokens: reconnecting must
+require fresh consent and messages must be bound to the current connection. Before
+executing an allowed command, validate track/input/transport readiness and report
+actual success or failure. Do not auto-delete or discard a take on revocation.
+
+Standalone permission tests cover default denial, peer/track/project binding,
+replacement, replay, expiry, invalid commands and lifetime bounds. Local C++ tests
+pass with address/undefined-behavior sanitizers; leak detection is disabled because
+this execution environment blocks its process inspection. Native CI and actual
+remote recording remain pending.
+
+### Recording-control message transport
+
+The signalling prototype now validates and relays control_request, control_grant,
+control_revoke, control_command and control_result messages. A server-issued
+control_session changes whenever a peer joins and is cleared on departure;
+stale-session messages are rejected, and commands are never queued for absent
+peers. The server assigns sender identity. This validates transport only: receivers
+must still enforce local consent, expiry, replay checks and actual engine readiness.
+A relayed grant is not proof of consent and a relayed result is not proof that an
+audio file exists. The native adapter and browser controls remain unimplemented.
+
+All control frames carry session. Requests carry request; grants carry request,
+grant, track, ttl_seconds (1-900); revokes carry grant; commands carry grant,
+sequence, action (arm/record/stop); results carry grant, sequence, status
+(succeeded/denied/not_ready/failed). Grant and sequence are positive uint64 decimal
+strings to preserve precision in JavaScript. Identifiers use ASCII letters,
+digits, underscore or hyphen, maximum 128 characters. Extra fields are rejected.
+Receivers must invalidate grants on peer_left, disconnect and any new
+control_session, and correlate results to outstanding commands. No automatic
+retry of recording commands is permitted. Local recording remains authoritative.
+
+Validation: 13 Python tests, including real loopback WebSocket relay and stale
+reconnect rejection, and 8 mocked browser lifecycle tests pass locally.
+The current single-track grant is an initial test scope, not a permanent product
+limit. Selected-track groups or all recording tracks require a future extension
+of the gate, message schema and engine adapter; they are not implemented here.
+
+### Selected-track and all-track recording scopes
+
+Supersedes the earlier single-track scope. The C++ gate supports SelectedTracks
+(1-128 unique stable IDs) or AllTracks (including future tracks in the same project).
+The single-track helper remains available. Replacing or narrowing a grant creates
+a fresh grant ID and invalidates old commands. Project changes revoke either scope.
+Empty targets, duplicate selections and ambiguous scopes are rejected. The adapter
+must validate target existence/type/input readiness before execution; AllTracks is
+not permission to create/delete tracks or change mixer, effects or clips.
+
+Wire change: control_grant now uses scope (selected/all) and tracks (ID array),
+replacing track. All scope requires an empty array. control_command now requires
+the explicit track target. Each command targets one track; simultaneous multitrack
+capture is a separate engine feature. Existing undeployed prototypes must upgrade
+together. Local native consent UI and recording integration remain pending.
+C++ permission tests and all 13 Python tests pass locally, including multiple
+selected targets, all-track grants, narrowing and malformed scope messages.
+
+### Atomic permission checks for armed track sets
+
+Native recording inspection confirmed that toggleRecording can start multiple
+armed tracks and stops the whole active capture. Added authorizeTargets to check
+all engine-derived affected track IDs before consuming one command sequence.
+Any unapproved target rejects the entire operation, including remote Stop; local
+Stop continues to bypass remote permission. Empty/duplicate/oversized sets fail.
+Selected scope cannot start or stop an unapproved companion track. AllTracks
+can authorize the complete set. Regression tests pass locally.
+
+This gate is still not wired to Main.cpp: the native adapter must resolve stable
+track IDs, derive actual armed/active targets, call this check on the message
+thread, and invoke explicit start/stop semantics (never blindly toggle). Native
+track identity mapping, consent UI and authenticated connection remain pending.
+
+### Persistent track identity
+
+Tracks now carry opaque 32-character lowercase hexadecimal IDs. Rename and reorder
+preserve identity; newly added tracks receive a new ID. findTrackById rejects
+missing, malformed or ambiguous identities rather than falling back to a name or
+position. IDs are not credentials and remain scoped by project generation.
+Session JSON persists IDs. Older projects without IDs receive them on load and
+retain them after saving; explicit malformed or duplicate IDs reject the load
+without modifying the output session. Existing version-1 files remain readable.
+Model identity/removal/reorder tests pass locally. Native persistence tests were
+added for round trip, legacy migration and duplicate rejection; CI execution is
+pending. The remote recording adapter and permission UI remain unconnected.
+
+### Native recording adapter and consent dialog
+
+IDW Connect now opens a recording-permissions dialog. It offers revoke at any
+time, and selected-track/all-track grants only when a trusted recording peer and
+a grant transport callback have been installed. Async consent captures project
+and connection generations, preventing an old dialog from granting a new peer.
+The default build reports no authenticated recording peer: Jitsi browser calls do
+not install this connection. There is no simulated connection or automatic grant.
+
+Workstation exposes message-thread trusted transport entry points for connection
+changes and Arm/Record/Stop execution. Connection changes and project load revoke
+permission. Commands resolve stable IDs, derive complete armed/active sets,
+validate scope and replay, check input availability, and use the existing native
+recording path. Remote Record never falls back to auto-arming and cannot toggle
+an existing recording off. Remote Stop cannot start a recording. Result succeeded
+means recorder state changed as requested, not that audio quality/import passed.
+Local recording controls are unchanged; revocation preserves any running take.
+
+Local permission and model tests pass. Native compilation, UI layout and real
+recording still require CI and desktop testing. The authenticated network client,
+message serialization/dispatch, visible connection/expiry status, multiple-selected
+track UI, and remote controller screen remain unfinished. This is native adapter
+integration, not a completed two-computer recording session.
+
+### Native studio-message adapter
+
+RemoteRecordingProtocol converts trusted studio signalling events to native
+connection changes and recording calls. Commands require the active server-issued
+session and opposite peer role, exact command fields, valid action and lossless
+positive uint64 strings. It serializes actual handler results, local grants and
+revokes. Peer departure/disconnect clears native permission. Workstation wires
+these callbacks, publishes revocation on project changes, and exposes sender,
+receive and disconnect entry points for a future authenticated network client.
+Only authenticated server events may enter this adapter; it does not authenticate
+arbitrary JSON or provide a socket. A control request never grants consent.
+
+Added a native JUCE test target for dispatch, result propagation, malformed numbers,
+spoofed sender, stale session, grant/revoke and departure. Native CI is required to
+execute it; source diff checks pass locally. Prior Windows/macOS builds were still
+running when checked. No end-to-end network or recording test is claimed. Live
+socket connection, controller screen, hosting and embedded video remain pending.
+
+### Windows network client and remote controller
+
+Added a Windows WinHTTP WebSocket client and native controller dialog, opened from
+IDW Connect > Remote Controller. Join takes a server origin, room ID and private
+seat ticket. WSS uses normal Windows certificate validation; plain HTTP is allowed
+only for localhost/127.0.0.1 development. Redirects are disabled. Tickets are masked,
+cleared from the editor on join and not persisted/logged. Incoming messages are
+bounded to 64 KiB with at most 128 queued dispatches. Network callbacks dispatch
+to the message thread; leave/destruction invalidates queued callbacks. No automatic
+reconnection or recording-command retries. macOS reports networking unavailable.
+
+Both participants join the same room using their own seat tickets. The engineer
+clicks Request Control; the performer opens My Permissions and grants selected
+track or all-track access. The performer publishes only approved audio IDs/names.
+The engineer chooses a track, arms it, and starts/stops recording. Record still
+affects all armed tracks and the receiving DAW validates the entire affected set.
+The controller permits one outstanding command, correlates results, clears controls
+on expiry/revoke/disconnect, and requires fresh permission after a 10-second result
+timeout. A missing result means unknown recording state, never automatic retry.
+Closing the controller window leaves the connection active; use Leave to disconnect.
+Local recording continues on disconnect/revoke and remains stoppable locally.
+
+Track lists are snapshots at grant time. Request fresh permission to refresh newly
+added/renamed tracks. All-track permission includes newly added tracks at the gate,
+but they do not appear in the remote selector until refreshed. Mixer/effects/editing,
+video embedding, audio streaming and take transfer are not implemented by this step.
+There is no hosted room service or in-app room broker yet: this is a developer-test
+connection to a separately started signalling server. Remote computers require a
+configured HTTPS endpoint with the matching allowed origin; no server is deployed.
+
+Validation: native controller tests compiled and passed locally against JUCE 9.0.2;
+workstation syntax check passed on Linux. Fourteen Python server tests pass, including
+track catalog validation/relay; eight existing browser tests pass. Windows CI now
+builds a native two-client loopback integration test against the actual Python server
+and a fake recording engine, covering command/result round trip and peer departure.
+Windows compile, live network test, WSS certificate behavior, UI visual inspection
+and real recording on two Windows machines remain pending until those checks run.

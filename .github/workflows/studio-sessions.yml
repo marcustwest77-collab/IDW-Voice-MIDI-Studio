@@ -1,0 +1,25 @@
+name: IDW Two-Person Session Protocol
+on:
+  push:
+    branches: [feature/all-versions-integration]
+    paths: ['studio_sessions/**', '.github/workflows/studio-sessions.yml']
+  pull_request:
+    branches: [release/v14-windows-packaging]
+    paths: ['studio_sessions/**', '.github/workflows/studio-sessions.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r studio_sessions/requirements.txt
+      - run: python -m unittest discover -s studio_sessions -p 'test_*.py' -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test studio_sessions/web/session.test.mjs

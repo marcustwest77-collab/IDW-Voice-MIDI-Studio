@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IDW Studio Session</title><link rel="stylesheet" href="/session.css">
+</head>
+<body>
+<main>
+<header><div><p class="eyebrow">IN DA WIND ENTERTAINMENT</p><h1>IDW <span>Studio Session</span></h1></div><span class="badge">2 PEOPLE</span></header>
+<section class="entry" aria-label="Join your session">
+<label for="invitation">Your studio invitation</label>
+<div class="join-row"><input id="invitation" type="password" autocomplete="off" placeholder="Paste your IDW invitation link" aria-describedby="privacy"><select id="mode" aria-label="Join mode"><option value="video">Camera + microphone</option><option value="audio">Microphone only</option></select><button id="join">Join session</button></div>
+<p id="privacy">Your invitation grants access to one seat. Only share the guest invitation with your collaborator.</p>
+</section>
+<div class="status" id="status" role="status" aria-live="polite">Ready when you are. Camera and microphone are off.</div>
+<section class="videos" aria-label="Studio participants">
+<article><div class="video-wrap"><video id="local" autoplay playsinline muted aria-label="Your camera preview"></video><p id="local-empty">Your camera preview</p></div><footer><strong id="local-name">You</strong><span id="local-state">Not connected</span></footer></article>
+<article><div class="video-wrap"><video id="remote" autoplay playsinline aria-label="Other participant"></video><p id="remote-empty">Waiting for your collaborator</p></div><footer><strong>Collaborator</strong><span id="remote-state">No media received</span></footer></article>
+</section>
+<nav class="controls" aria-label="Call controls"><button id="mic" disabled aria-pressed="false">Mute microphone</button><button id="camera" disabled aria-pressed="false">Turn camera off</button><button id="hear" hidden>Enable call audio</button><button id="leave" class="leave" disabled>Leave session</button></nav>
+<p class="notice">Call audio only. Your DAW mix, projects, and recorded takes are not shared. Nothing is recorded by this call screen.</p>
+<p class="preview">Development preview · Desktop embedding and internet relay setup are still pending.</p>
+</main><script type="module" src="/app.mjs"></script>
+</body></html>

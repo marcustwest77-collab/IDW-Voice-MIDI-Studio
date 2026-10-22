@@ -1,0 +1,21 @@
+#include "SongStudio.h"
+#include <iostream>
+#include <stdexcept>
+static void check(bool ok,const char* message){if(!ok)throw std::runtime_error(message);}
+static bool near(double a,double b){return std::abs(a-b)<.000002;}
+static juce::AudioBuffer<float> input(int count,int channels,float value){juce::AudioBuffer<float> data(channels,count);for(int ch=0;ch<channels;++ch)for(int i=0;i<count;++i)data.setSample(ch,i,value);return data;}
+int main(){const auto root=juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("idw-overdub-"+juce::Uuid().toString());root.createDirectory();try{
+    for(int lane=0;lane<4;++lane){SongStudio song;song.prepare(48000);auto pattern=song.pattern();pattern.bpm=240;pattern.bars=2;pattern.rows.fill(0);song.setPattern(pattern);song.armLane(lane);
+        check(song.start(true),"Initial take");auto first=input(96000,2,.1f);song.process(first);song.stop();const auto original=song.clips(lane)[0];
+        check(!song.start(true),"Legacy overwrite protection lost");song.setCountInBars(1);const auto revision=song.audioRevision();check(song.recordAtCursor(.5)&&song.isCountingIn(),"Cursor count-in");auto count=input(1000,1,.3f);song.process(count);song.stop();check(song.clips(lane).size()==1&&song.audioRevision()==revision,"Cancelled count-in left clip or changed audio");
+        song.setCountInBars(0);std::uint64_t stamp=0;auto snapshot=song.recoverySnapshot(stamp);check(snapshot!=nullptr,"Snapshot");check(song.recordAtCursor(.5)&&!song.seekPlayback(1)&&!song.armLane((lane+1)%4),"Overdub start/transport lock");auto incoming=input(24000,lane%2?1:2,.2f);song.process(incoming);song.stop();
+        const auto clips=song.clips(lane);check(clips.size()==2&&clips[0].audio==original.audio&&clips[1].frames==24000&&near(clips[1].settings.start,.5),"Existing clip changed or new offset/length wrong");check(near(clips[1].audio->getSample(0,100),.2)&&near(clips[1].audio->getSample(1,100),.2),"Backing captured or mono duplication lost");check(near(incoming.getSample(0,100),.3),"Same-track backing not monitored");check(snapshot->clips(lane).size()==1&&near(snapshot->clips(lane)[0].audio->getSample(0,100),.1),"Snapshot mutated");
+        check(song.undoTrackEdit()&&song.clips(lane).size()==1&&song.redoTrackEdit()&&song.clips(lane).size()==2,"Overdub undo/redo");
+        const auto project=root.getChildFile("song.idwsong");check(song.save(project).wasOk(),"Overdub save");SongStudio restored;restored.prepare(48000);check(restored.load(project).wasOk()&&restored.clips(lane).size()==2&&near(restored.clips(lane)[1].settings.start,.5),"Overdub roundtrip");check(restored.start(false),"Overdub playback");auto mix=input(96000,2,0);restored.process(mix);restored.stop();check(near(mix.getSample(0,100),.1)&&near(mix.getSample(0,30000),.3)&&near(mix.getSample(0,70000),.1),"Overdub mix placement");
+        check(song.recordAtCursor(1.999),"Near-end take");auto tail=input(128,2,.4f);song.process(tail);check(!song.isPlaying()&&song.clips(lane).back().frames==48&&tail.getSample(0,48)==0,"Song-end capture bounds");
+        check(!song.recordAtCursor(2)&&!song.recordAtCursor(-1)&&!song.recordAtCursor(std::nan("")),"Invalid cursor accepted");
+    }
+    SongStudio empty;empty.prepare(48000);auto pattern=empty.pattern();pattern.bpm=240;pattern.bars=2;pattern.rows.fill(0);empty.setPattern(pattern);empty.setCountInBars(1);check(empty.recordAtCursor(.75),"Empty cursor record");auto before=input(48000,2,.5f);empty.process(before);check(!empty.hasTake()&&empty.clips(0).empty(),"Count-in was published as take");auto voice=input(64,2,.2f);empty.process(voice);empty.stop();check(empty.clips(0).size()==1&&empty.clips(0)[0].frames==64&&near(empty.clips(0)[0].settings.start,.75),"Empty-track cursor placement");
+    for(int i=1;i<64;++i)check(empty.duplicateClip(0,0,0),"Fill clips");check(!empty.recordAtCursor(.5),"Recording bypassed clip cap");
+    std::cout<<"PASS all-lane append recording, count-in cancellation, old take/snapshot preservation, same-track monitoring, clean stereo/mono capture, placement, undo, persistence, song-end and clip-limit protection\n";root.deleteRecursively();return 0;
+}catch(const std::exception& e){std::cerr<<e.what()<<'\n';root.deleteRecursively();return 1;}}

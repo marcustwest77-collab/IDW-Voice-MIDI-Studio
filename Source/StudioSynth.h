@@ -10,7 +10,7 @@ class StudioSynth {
 public:
     struct Settings { int lead=1,chord=3,bass=0; float gain=.55f,tone=.65f,attack=.008f,release=.25f,delay=.12f; bool mpe=false; };
     void prepare(double rate) { sr=std::max(8000.0,rate); delayLine.assign((size_t)(sr*.25),0); reset(); }
-    void reset() { voices={}; bends.fill(0); ranges.fill(2); rpnMSB.fill(127);rpnLSB.fill(127);sustain.fill(false); std::fill(delayLine.begin(),delayLine.end(),0); delayPos=0; }
+    void reset(bool resetNoise=false) { if(resetNoise)rng=1234567;voices={}; bends.fill(0); ranges.fill(2); rpnMSB.fill(127);rpnLSB.fill(127);sustain.fill(false); std::fill(delayLine.begin(),delayLine.end(),0); delayPos=0; }
     void configure(Settings s) { settings=s; filterAlpha=1.0-std::exp(-6.28318530718*(150+std::clamp(s.tone,0.f,1.f)*10000)/sr); }
     void message(int status,int a,int b) {
         const int ch=status&15,type=status&240;
@@ -19,7 +19,8 @@ public:
         if(type==0x80 || (type==0x90 && b==0)) { for(auto& v:voices)if(v.on&&v.ch==ch&&v.note==a){v.key=false;if(!sustain[ch]&&ch!=9)release(v);}return; }
         if(type==0xe0){bends[ch]=(a+128*b-8192)/8192.0;retune(ch);return;}
         if(type!=0xb0)return;
-        if(a==101)rpnMSB[ch]=b; if(a==100)rpnLSB[ch]=b;
+        if(a==101)rpnMSB[ch]=b;
+        if(a==100)rpnLSB[ch]=b;
         if(a==6&&rpnMSB[ch]==0&&rpnLSB[ch]==0){ranges[ch]=b;retune(ch);}
         if(a==64){sustain[ch]=b>=64;if(!sustain[ch])for(auto& v:voices)if(v.on&&v.ch==ch&&!v.key)release(v);}
         if(a==123)for(auto& v:voices)if(v.on&&v.ch==ch){v.key=false;release(v);}

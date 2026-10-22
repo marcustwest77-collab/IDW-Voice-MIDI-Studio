@@ -16,6 +16,57 @@
 #include <iostream>
 int main(){
  using namespace idw::daw;
+ {
+    Session source;source.addTrack(TrackType::audio);source.addTrack(TrackType::midi);
+    source.renameTrack(0,"Lead Vocal");source.renameTrack(1,"Keys / Chorus");
+    Session restored;
+    if(!sessionFromJson(sessionToJson(source),restored) ||
+       restored.tracks[0].name!="Lead Vocal" || restored.tracks[1].name!="Keys / Chorus")
+        throw std::runtime_error("renamed track round trip");
+ }
+ {
+    Session source;source.addTrack(TrackType::audio);source.addTrack(TrackType::audio);
+    Session restored;
+    auto json=sessionToJson(source);
+    if(!sessionFromJson(json,restored) || restored.tracks[0].id!=source.tracks[0].id ||
+       restored.tracks[1].id!=source.tracks[1].id)throw std::runtime_error("identity round trip");
+    auto* tracks=json.getDynamicObject()->getProperty("tracks").getArray();
+    auto* first=tracks->getReference(0).getDynamicObject();
+    auto* second=tracks->getReference(1).getDynamicObject();
+    second->setProperty("id",first->getProperty("id"));
+    if(sessionFromJson(json,restored) || restored.tracks[1].id!=source.tracks[1].id)
+        throw std::runtime_error("duplicate identity must fail atomically");
+    second->removeProperty("id");first->removeProperty("id");
+    if(!sessionFromJson(json,restored) || restored.tracks[0].id==restored.tracks[1].id)
+        throw std::runtime_error("legacy identity migration");
+    const auto migrated=restored.tracks[0].id;
+    Session reopened;
+    if(!sessionFromJson(sessionToJson(restored),reopened) || reopened.tracks[0].id!=migrated)
+        throw std::runtime_error("migrated identity persistence");
+    first->setProperty("id","bad/id");
+    if(sessionFromJson(json,restored))throw std::runtime_error("malformed identity accepted");
+ }
+ for(int fx=0;fx<=3;++fx){
+    Session source;source.addTrack(TrackType::audio);source.setTrackVocalFxPreset(0,fx);
+    source.setTrackVocalFxMix(0,0.4f);
+    Session restored;
+    auto json=sessionToJson(source);
+    if(!sessionFromJson(json,restored) || restored.tracks[0].vocalFxPreset!=fx || restored.tracks[0].vocalFxMix!=0.4f)
+        throw std::runtime_error("vocal FX round trip");
+    auto* track=json.getDynamicObject()->getProperty("tracks").getArray()->getReference(0).getDynamicObject();
+    for(const juce::var invalid:{juce::var(-0.1),juce::var(1.1),juce::var("0.5"),juce::var(true)}){
+        track->setProperty("vocalFxMix",invalid);
+        if(sessionFromJson(json,restored))throw std::runtime_error("invalid vocal mix accepted");
+    }
+    track->removeProperty("vocalFxMix");
+    track->removeProperty("vocalFxPreset");
+    if(!sessionFromJson(json,restored) || restored.tracks[0].vocalFxPreset!=0 || restored.tracks[0].vocalFxMix!=1.0f)
+        throw std::runtime_error("old project must default FX off");
+    for(const juce::var invalid:{juce::var(-1),juce::var(4),juce::var("1"),juce::var(1.5)}){
+        track->setProperty("vocalFxPreset",invalid);
+        if(sessionFromJson(json,restored))throw std::runtime_error("invalid vocal FX accepted");
+    }
+ }
  AIProposal action{AIProposal::Kind::tempo};
  if(!parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":145}})"),action)
     || action.kind!=AIProposal::Kind::tempo || action.bpm!=145)

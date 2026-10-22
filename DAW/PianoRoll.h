@@ -4,12 +4,19 @@
 #include <functional>
 
 // First graphical MIDI editor: notes can be drawn with a click and selected.
-// MIDI playback/virtual instruments are not yet connected.
+// MIDI notes feed the built-in instruments during playback and WAV export.
 class IDWPianoRoll final : public juce::Component {
 public:
     idw::daw::Session* session=nullptr;
     size_t trackIndex=0;
     std::function<void()> onChanged;
+    std::function<bool()> canEdit;
+    void selectTrack(size_t index) {
+        trackIndex=index;
+        selectedValid=false;
+        dragging=false;
+        repaint();
+    }
     IDWPianoRoll(){setWantsKeyboardFocus(true);}
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff141b24));
@@ -45,6 +52,7 @@ public:
     void mouseDown(const juce::MouseEvent& e) override {
         dragging=false;
         selectedValid=false;
+        if(canEdit && !canEdit())return;
         if(!session || trackIndex>=session->tracks.size() ||
            session->tracks[trackIndex].type!=idw::daw::TrackType::midi ||
            e.x<54 || e.y<0 || e.y>=37*13)return;
@@ -69,6 +77,7 @@ public:
         }
     }
     void mouseDrag(const juce::MouseEvent& e) override {
+        if(canEdit && !canEdit()){dragging=false;return;}
         if(!dragging || !session || trackIndex>=session->tracks.size())return;
         const double delta=std::round((e.x-originX)/4.0)/4.0;
         bool changed=false;
@@ -82,6 +91,7 @@ public:
     }
     void mouseUp(const juce::MouseEvent&) override {dragging=false;}
     bool keyPressed(const juce::KeyPress& key) override {
+        if(canEdit && !canEdit())return false;
         if(!selectedValid || !session || trackIndex>=session->tracks.size())return false;
         if(key.getKeyCode()!=juce::KeyPress::deleteKey && key.getKeyCode()!=juce::KeyPress::backspaceKey)return false;
         const bool removed=session->removeMidiNote(trackIndex,selectedIndex);

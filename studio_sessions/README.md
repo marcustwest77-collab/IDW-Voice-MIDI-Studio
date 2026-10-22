@@ -1,0 +1,217 @@
+# IDW two-person studio sessions: connection service prototype
+
+Status: local call-screen and signalling prototypes, not deployed and not embedded
+in the desktop Connect panel. The existing installed Connect button still opens
+Jitsi in a browser. The new web client implements camera/microphone capture and
+WebRTC negotiation, but real-device video/audio has not been verified. DAW mix
+sharing, remote recording and synchronized playback are not implemented.
+
+## Intended in-DAW experience
+
+- The host creates a session; a separate guest invitation admits one collaborator.
+- The IDW Connect view contains both cameras, microphone/camera toggles and Leave.
+- Talk microphone and DAW mix routing are separate. The guest's returned audio is
+  excluded from the outgoing studio mix to prevent feedback.
+- Closing a call releases its media devices. Leaving the video panel must have a
+  clear, visible call-state indicator so a hidden view never obscures an active mic.
+- Remote takes are a later phase: retain original local recordings and transfer
+  them for alignment. Video-call audio is not the original recording.
+
+## What is implemented
+
+The service creates a room with separate random host/guest tickets. It stores
+only ticket hashes and permits one connected socket per role. Tickets are sent
+in the first WebSocket frame, not URL query strings. A disconnected role can
+rejoin with the same ticket until room expiry; a copied ticket cannot occupy a
+second simultaneous seat. Room IDs are not credentials. Invitations are bearer
+credentials, not verified identities. Rooms expire after one hour by default.
+
+Messages contain only offers, answers and connection candidates for WebRTC.
+The service validates their shapes, limits frame size and signalling rate, assigns
+sender identity itself and relays only to the other seat in that room. It never
+receives recorded audio or camera frames. Signalling data can contain network
+addresses, so transport security remains necessary.
+
+## Local developer checks
+
+Use Python 3.12 or newer in a virtual environment:
+
+```sh
+python -m pip install -r studio_sessions/requirements.txt
+python -m unittest discover -s studio_sessions -p 'test_*.py' -v
+node --test studio_sessions/web/session.test.mjs
+```
+
+For a local service, set `IDW_STUDIO_CREATE_KEY` to a random service secret of at
+least 32 characters and `IDW_STUDIO_ORIGINS` to comma-separated exact client origins,
+then run `python studio_sessions/server.py`. It binds only to 127.0.0.1:8787.
+Never embed the service creation key in a shipped desktop app or public web page.
+
+The service serves the call screen at `/`. For a local test, allow the exact origin
+`http://localhost:8787` and open the page at that origin. The trusted room broker
+must construct each role's link as `/#room=<room>&ticket=<role-ticket>` on that
+same origin. The client removes the fragment from history after reading it and
+never stores invitations in localStorage. No public room-creation UI exists yet.
+Media is requested only after explicit Join and server admission. Leave releases
+all local tracks; another participant leaving keeps your own devices active and
+shows a notice. If permissions are granted after Leave, those late tracks are
+immediately stopped. A manual rejoin requires pressing Join again.
+
+The current client uses no STUN/TURN servers and is intended for controlled local
+network testing. Internet connectivity must not be claimed until the authenticated
+relay configuration is added and exercised. Camera-off disables the video track;
+Leave releases the device. The automated JS tests use fake media/peer objects and
+do not validate real browser permissions, camera images or audio quality.
+
+## Protocol
+
+1. A trusted room broker calls POST `/v1/rooms` with the creation service key in
+   the Bearer Authorization header. The response contains `room`, `host_ticket`,
+   `guest_ticket` and `expires_in_seconds`. It must distribute only the appropriate
+   role's ticket to each participant; the host ticket is not a guest invitation.
+2. Each participant connects to `/v1/connect` with an allowed Origin and sends
+   `{ "type": "join", "room": "...", "ticket": "..." }` within ten seconds.
+3. The server replies `joined` with assigned `role` and `peer_present`, and notifies
+   the other seat with `peer_joined`. The host initiates negotiation when both are
+   present and both have sent `{ "type": "ready" }` after media setup. The ready
+   message is relayed to the other seat. On peer reconnection the client must discard the old peer connection
+   and negotiate a new one; the server does not buffer old offers or candidates.
+4. Relay `{ "type": "offer"|"answer", "sdp": "..." }` or
+   `{ "type": "candidate", "candidate": <RTCIceCandidate.toJSON() or null> }`.
+   The server adds `from`. Do not send a client-controlled `from` or destination.
+5. Send `{ "type": "leave" }` or close the socket. The remaining participant
+   receives `peer_left` and must close the old media connection.
+
+## Next integration gates
+
+1. Embed the new IDW-owned call page with Windows WebView2. Verify camera
+   and microphone permission prompts, device selection, mute, camera-off, Leave,
+   application shutdown, network loss and reconnect. No automatic media capture.
+2. Add an authenticated room broker, HTTPS/WSS hosting, credential rotation,
+   creation rate limits and short-lived TURN credentials. Creation service keys
+   stay on the server. Origin validation is not a substitute for ticket auth.
+3. Validate two real devices across different networks, including TURN relay,
+   third-seat rejection, expired invitations and host/guest reconnects.
+4. Add AudioBox-aware talk/mix routing with bounded audio queues outside the DAW
+   callback and a mix-minus return path. Test headphones and speaker echo behavior.
+5. Add remote take transfer/alignment separately. Do not promise latency-free
+   shared recording from a working video call.
+
+No hosting account, paid service, public endpoint or external invitation is
+created by this prototype. Server capacity and production deployment remain open
+engineering work. Local protocol tests are not a completed video-session test.
+
+### Remote recording permission foundation
+
+Added a standalone C++ permission gate for Arm, Record and Stop. Explicit local
+consent grants one authenticated peer access to one stable track ID in one project
+generation, for at most 15 minutes. Regranting invalidates old command generations;
+sequence checks reject duplicates and out-of-order requests. Expiry and project
+changes revoke access. Both roles can grant permission independently.
+
+This is not yet wired to the DAW or signalling service. The future adapter must
+serialize access on the message thread, derive peer identity from the authenticated
+connection, supply local project generation and steady-clock time, revoke on
+peer disconnect/track deletion/project replacement, and keep local Stop independent.
+Grant IDs are process-local counters, not authentication tokens: reconnecting must
+require fresh consent and messages must be bound to the current connection. Before
+executing an allowed command, validate track/input/transport readiness and report
+actual success or failure. Do not auto-delete or discard a take on revocation.
+
+Standalone permission tests cover default denial, peer/track/project binding,
+replacement, replay, expiry, invalid commands and lifetime bounds. Local C++ tests
+pass with address/undefined-behavior sanitizers; leak detection is disabled because
+this execution environment blocks its process inspection. Native CI and actual
+remote recording remain pending.
+
+### Recording-control message transport
+
+The signalling prototype now validates and relays control_request, control_grant,
+control_revoke, control_command and control_result messages. A server-issued
+control_session changes whenever a peer joins and is cleared on departure;
+stale-session messages are rejected, and commands are never queued for absent
+peers. The server assigns sender identity. This validates transport only: receivers
+must still enforce local consent, expiry, replay checks and actual engine readiness.
+A relayed grant is not proof of consent and a relayed result is not proof that an
+audio file exists. The native adapter and browser controls remain unimplemented.
+
+All control frames carry session. Requests carry request; grants carry request,
+grant, track, ttl_seconds (1-900); revokes carry grant; commands carry grant,
+sequence, action (arm/record/stop); results carry grant, sequence, status
+(succeeded/denied/not_ready/failed). Grant and sequence are positive uint64 decimal
+strings to preserve precision in JavaScript. Identifiers use ASCII letters,
+digits, underscore or hyphen, maximum 128 characters. Extra fields are rejected.
+Receivers must invalidate grants on peer_left, disconnect and any new
+control_session, and correlate results to outstanding commands. No automatic
+retry of recording commands is permitted. Local recording remains authoritative.
+
+Validation: 13 Python tests, including real loopback WebSocket relay and stale
+reconnect rejection, and 8 mocked browser lifecycle tests pass locally.
+The current single-track grant is an initial test scope, not a permanent product
+limit. Selected-track groups or all recording tracks require a future extension
+of the gate, message schema and engine adapter; they are not implemented here.
+
+### Selected-track and all-track recording scopes
+
+Supersedes the earlier single-track scope. The C++ gate supports SelectedTracks
+(1-128 unique stable IDs) or AllTracks (including future tracks in the same project).
+The single-track helper remains available. Replacing or narrowing a grant creates
+a fresh grant ID and invalidates old commands. Project changes revoke either scope.
+Empty targets, duplicate selections and ambiguous scopes are rejected. The adapter
+must validate target existence/type/input readiness before execution; AllTracks is
+not permission to create/delete tracks or change mixer, effects or clips.
+
+Wire change: control_grant now uses scope (selected/all) and tracks (ID array),
+replacing track. All scope requires an empty array. control_command now requires
+the explicit track target. Each command targets one track; simultaneous multitrack
+capture is a separate engine feature. Existing undeployed prototypes must upgrade
+together. Local native consent UI and recording integration remain pending.
+C++ permission tests and all 13 Python tests pass locally, including multiple
+selected targets, all-track grants, narrowing and malformed scope messages.
+
+### Windows network client and remote controller
+
+Added a Windows WinHTTP WebSocket client and native controller dialog, opened from
+IDW Connect > Remote Controller. Join takes a server origin, room ID and private
+seat ticket. WSS uses normal Windows certificate validation; plain HTTP is allowed
+only for localhost/127.0.0.1 development. Redirects are disabled. Tickets are masked,
+cleared from the editor on join and not persisted/logged. Incoming messages are
+bounded to 64 KiB with at most 128 queued dispatches. Network callbacks dispatch
+to the message thread; leave/destruction invalidates queued callbacks. No automatic
+reconnection or recording-command retries. macOS reports networking unavailable.
+
+Both participants join the same room using their own seat tickets. The engineer
+clicks Request Control; the performer opens My Permissions and grants selected
+track or all-track access. The performer publishes only approved audio IDs/names.
+The engineer chooses a track, arms it, and starts/stops recording. Record still
+affects all armed tracks and the receiving DAW validates the entire affected set.
+The controller permits one outstanding command, correlates results, clears controls
+on expiry/revoke/disconnect, and requires fresh permission after a 10-second result
+timeout. A missing result means unknown recording state, never automatic retry.
+Closing the controller window leaves the connection active; use Leave to disconnect.
+Local recording continues on disconnect/revoke and remains stoppable locally.
+
+Track lists are snapshots at grant time. Request fresh permission to refresh newly
+added/renamed tracks. All-track permission includes newly added tracks at the gate,
+but they do not appear in the remote selector until refreshed. Mixer/effects/editing,
+video embedding, audio streaming and take transfer are not implemented by this step.
+There is no hosted room service or in-app room broker yet: this is a developer-test
+connection to a separately started signalling server. Remote computers require a
+configured HTTPS endpoint with the matching allowed origin; no server is deployed.
+
+Validation: native controller tests compiled and passed locally against JUCE 9.0.2;
+workstation syntax check passed on Linux. Fourteen Python server tests pass, including
+track catalog validation/relay; eight existing browser tests pass. Windows CI now
+builds a native two-client loopback integration test against the actual Python server
+and a fake recording engine, covering command/result round trip and peer departure.
+Windows compile, live network test, WSS certificate behavior, UI visual inspection
+and real recording on two Windows machines remain pending until those checks run.
+
+### Local test room launcher
+
+For two native IDW windows on one Windows computer, run
+`python studio_sessions/local_test_room.py` after installing requirements.
+The helper binds only 127.0.0.1 and prints separate host/guest tickets. See
+`docs/REMOTE-RECORDING-TEST.md` for the step-by-step recording and permission checks.
+The launcher was exercised locally with two authenticated WebSocket clients;
+that check is not a native Windows recording test.

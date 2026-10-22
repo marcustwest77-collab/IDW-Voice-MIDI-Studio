@@ -20,7 +20,8 @@ public:
         advance(clock);
     }
     void advance(double now){
-        if(!std::isfinite(now))return;clock=std::max(clock,now);
+        if(!std::isfinite(now))return;
+        clock=std::max(clock,now);
         const double cutoff=begin();
         while(!events.empty()&&events.front().seconds<cutoff){base.apply(events.front());events.pop_front();}
     }
@@ -54,7 +55,8 @@ private:
         std::array<Channel,16>channels;
         void apply(const HistoryEvent& e){
             const int type=e.data[0]&0xf0,ch=e.data[0]&15,a=e.data[1]&127,b=e.data[2]&127;
-            if(e.data[0]<0x80||e.data[0]>=0xf0)return;auto& c=channels[(size_t)ch];c.touched=true;
+            if(e.data[0]<0x80||e.data[0]>=0xf0)return;
+            auto& c=channels[(size_t)ch];c.touched=true;
             if(type==0xc0&&e.size>=2)c.program=a;
             if(e.size<3)return;
             if(type==0x90&&b>0){c.key[(size_t)a]=true;c.velocity[(size_t)a]=b;}
@@ -66,7 +68,8 @@ private:
             if(a==121){c.cc.fill(-1);c.wheel=8192;c.rpnMSB=c.rpnLSB=127;for(int n=0;n<128;++n)if(!c.key[(size_t)n])c.velocity[(size_t)n]=0;return;}
             c.cc[(size_t)a]=b;
             if(a==64&&b<64)for(int n=0;n<128;++n)if(!c.key[(size_t)n])c.velocity[(size_t)n]=0;
-            if(a==101)c.rpnMSB=b;if(a==100)c.rpnLSB=b;
+            if(a==101)c.rpnMSB=b;
+            if(a==100)c.rpnLSB=b;
             if(c.rpnMSB==0&&c.rpnLSB==0){if(a==6)c.range=b;if(a==38)c.cents=b;}
         }
     };
