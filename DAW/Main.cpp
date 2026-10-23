@@ -1764,36 +1764,51 @@ private:
         int missing=0;
         for(size_t index=0;index<restored.tracks.size();++index){
             if(restored.tracks[index].type!=idw::daw::TrackType::audio)continue;
-            auto slot=std::make_unique<AudioSlot>();
-            slot->trackIndex=index;
-            if(!restored.tracks[index].clips.empty()){
-                const auto& clip=restored.tracks[index].clips.front();
+            auto& clips=restored.tracks[index].clips;
+            // Build one reader/transport per distinct audio file on this track.
+            // Multiple splits of the same WAV share a source; different WAVs do not.
+            std::vector<juce::File> opened;
+            for(auto& clip:clips){
                 const auto savedPath=juce::String(clip.sourcePath);
-                auto file=juce::File::isAbsolutePath(savedPath) ? juce::File(savedPath) : project.getParentDirectory().getChildFile(savedPath);
-                // Portable-project fallback: look beside the project and in its Audio subfolder.
+                auto file=juce::File::isAbsolutePath(savedPath)
+                    ? juce::File(savedPath)
+                    : project.getParentDirectory().getChildFile(savedPath);
                 if(!file.existsAsFile()){
                     const auto name=file.getFileName();
                     const auto adjacent=project.getParentDirectory().getChildFile(name);
-                    const auto audioFolder=project.getParentDirectory().getChildFile("Audio").getChildFile(name);
+                    const auto packaged=project.getParentDirectory().getChildFile("Audio").getChildFile(name);
                     if(adjacent.existsAsFile())file=adjacent;
-                    else if(audioFolder.existsAsFile())file=audioFolder;
+                    else if(packaged.existsAsFile())file=packaged;
                 }
+                if(!file.existsAsFile()){++missing;continue;}
+                clip.sourcePath=file.getFullPathName().toStdString();
+                if(std::find(opened.begin(),opened.end(),file)!=opened.end())continue;
                 std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
-                if(reader && reader->sampleRate>0){
-                    auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
-                    const double rate=source->getAudioFormatReader()->sampleRate;
-                    slot->transport.setSource(source.get(),0,nullptr,rate);
-                    slot->reader=std::move(source);
-                    slot->file=file;
-                    // Update restored reference so the next save uses the discovered location.
-                    restored.tracks[index].clips.front().sourcePath=file.getFullPathName().toStdString();
-                }else ++missing;
+                if(!reader || reader->sampleRate<=0){++missing;continue;}
+                auto slot=std::make_unique<AudioSlot>();
+                slot->trackIndex=index;
+                auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
+                const double rate=source->getAudioFormatReader()->sampleRate;
+                slot->transport.setSource(source.get(),0,nullptr,rate);
+                slot->reader=std::move(source);
+                slot->file=file;
+                if(preparedBlockSize>0){
+                    slot->scratch.setSize(2,preparedBlockSize,false,true,false);
+                    slot->transport.prepareToPlay(preparedBlockSize,deviceRate);
+                }
+                opened.push_back(file);
+                staged.push_back(std::move(slot));
             }
-            if(preparedBlockSize>0){
-                slot->scratch.setSize(2,preparedBlockSize,false,true,false);
-                slot->transport.prepareToPlay(preparedBlockSize,deviceRate);
+            if(opened.empty()){
+                // Retain an empty destination slot for record/import workflows.
+                auto slot=std::make_unique<AudioSlot>();
+                slot->trackIndex=index;
+                if(preparedBlockSize>0){
+                    slot->scratch.setSize(2,preparedBlockSize,false,true,false);
+                    slot->transport.prepareToPlay(preparedBlockSize,deviceRate);
+                }
+                staged.push_back(std::move(slot));
             }
-            staged.push_back(std::move(slot));
         }
         for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
         sources.clear();
