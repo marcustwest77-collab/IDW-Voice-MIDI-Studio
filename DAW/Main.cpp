@@ -911,6 +911,15 @@ public:
             startDictation();
             return true;
         }
+        if(key.getModifiers().isCommandDown() && key.getKeyCode()=='Z'){
+            restoreClipHistory(!key.getModifiers().isShiftDown());return true;
+        }
+        if(key.getModifiers().isCommandDown() && key.getKeyCode()=='Y'){
+            restoreClipHistory(false);return true;
+        }
+        if(key.getKeyCode()=='S' && !key.getModifiers().isCommandDown()){
+            splitSelectedClip();return true;
+        }
         if(!selectedClipValid || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) ||
            exportRunning.load() || aiPanel.isVisible() || connectPanel.isVisible())
             return false;
@@ -920,6 +929,16 @@ public:
             return false;
         }
         const auto& clip=session.tracks[selectedClipTrack].clips[selectedClipIndex];
+        if(key.getKeyCode()=='[' || key.getKeyCode()==']'){
+            const auto before=session;
+            const bool changed=key.getKeyCode()=='['
+                ? session.trimClipLeft(selectedClipTrack,selectedClipIndex,clip.startBeat+0.25)
+                : session.trimClipRight(selectedClipTrack,selectedClipIndex,
+                    clip.startBeat+clip.lengthBeats-0.25);
+            if(changed){if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
+                clipUndo.push_back(before);clipRedo.clear();repaint();}
+            return changed;
+        }
         const bool shift=key.getModifiers().isShiftDown();
         bool changed=false;
         if(key.getKeyCode()==juce::KeyPress::leftKey)
