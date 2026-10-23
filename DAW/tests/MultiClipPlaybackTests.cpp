@@ -1,5 +1,6 @@
 #include "SessionModel.h"
 #include "TimelineMath.h"
+#include "ClipEnvelope.h"
 // Keep regression assertions active in Release, including setup calls.
 #ifdef NDEBUG
 #undef NDEBUG
@@ -17,7 +18,7 @@ static std::vector<float> render(const Session& s,const std::vector<float>& wav,
         auto w=overlap(0,frames,rate,s.bpm,c.startBeat,c.lengthBeats,c.sourceOffsetSeconds);
         for(int i=0;i<w.frames;++i){
             const auto src=w.sourceFrame+i;
-            if(src>=0 && src<(int64_t)wav.size())output[w.offset+i]+=wav[(size_t)src];
+            if(src>=0 && src<(int64_t)wav.size())output[w.offset+i]+=wav[(size_t)src]*ClipEnvelope(c,s.bpm,rate).gain(w.offset+i);
         }
     }
     return output;

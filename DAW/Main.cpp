@@ -6,6 +6,8 @@
 #include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
+#include "ClipEnvelope.h"
+#include "SessionHistory.h"
 #include <optional>
 #include "TimelineMath.h"
 #include "TakeRecorder.h"
@@ -889,10 +891,7 @@ public:
         if(!clipEditAvailable())return;
         auto& from=undo?clipUndo:clipRedo;
         auto& to=undo?clipRedo:clipUndo;
-        if(from.empty())return;
-        to.push_back(session);
-        session=std::move(from.back());
-        from.pop_back();
+        if(!idw::daw::restoreSessionHistory(session,from,to))return;
         selectedClipValid=false;
         repaint();
     }
@@ -905,6 +904,54 @@ public:
             if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
             clipUndo.push_back(before);clipRedo.clear();repaint();
         }
+    }
+    void showClipFadeMenu(size_t track,size_t index) {
+        if(!clipEditAvailable())return;
+        juce::PopupMenu menu;
+        menu.addSectionHeader("Clip fades (beats)");
+        menu.addItem(1,"Clear fades");
+        menu.addItem(2,"Fade in: 1/4 beat");
+        menu.addItem(3,"Fade out: 1/4 beat");
+        menu.addItem(4,"Both edges: 1/4 beat");
+        menu.addItem(5,"Linear curves");
+        menu.addItem(6,"Equal-power curves");
+        std::vector<size_t> partners;
+        for(size_t i=0;i<session.tracks[track].clips.size();++i){
+            auto trial=session;
+            if(trial.crossfadeClips(track,index,i,idw::daw::FadeCurve::linear)){
+                partners.push_back(i);
+                juce::PopupMenu curves;
+                curves.addItem(100+(int)partners.size()*2,"Linear (correlated audio)");
+                curves.addItem(101+(int)partners.size()*2,"Equal power (different audio)");
+                menu.addSubMenu("Crossfade with clip "+juce::String((int)i+1),curves);
+            }
+        }
+        const auto beforeJson=juce::JSON::toString(idw::daw::sessionToJson(session));
+        menu.showMenuAsync(juce::PopupMenu::Options(),
+            [safe=juce::Component::SafePointer<Workstation>(this),track,index,partners,beforeJson](int result){
+                if(safe==nullptr || result==0 || !safe->clipEditAvailable() ||
+                   juce::JSON::toString(idw::daw::sessionToJson(safe->session))!=beforeJson)return;
+                const auto before=safe->session;
+                const auto c=before.tracks[track].clips[index];
+                bool changed=false;
+                using Curve=idw::daw::FadeCurve;
+                if(result>=102){
+                    const size_t partner=(size_t)((result-102)/2);
+                    if(partner<partners.size())changed=safe->session.crossfadeClips(track,index,partners[partner],
+                        result%2 ? Curve::equalPower : Curve::linear);
+                }else{
+                    const double duration=std::min(0.25,c.lengthBeats);
+                    changed=safe->session.setClipFades(track,index,
+                        result==1?0:(result==2 || result==4?duration:c.fadeInBeats),
+                        result==1?0:(result==3 || result==4?duration:c.fadeOutBeats),
+                        result==5?Curve::linear:result==6?Curve::equalPower:c.fadeInCurve,
+                        result==5?Curve::linear:result==6?Curve::equalPower:c.fadeOutCurve);
+                }
+                if(changed && juce::JSON::toString(idw::daw::sessionToJson(safe->session))!=beforeJson){
+                    if(safe->clipUndo.size()>=64)safe->clipUndo.erase(safe->clipUndo.begin());
+                    safe->clipUndo.push_back(before);safe->clipRedo.clear();safe->repaint();
+                }
+            });
     }
     bool keyPressed(const juce::KeyPress& key) override {
         if(key.getKeyCode()==juce::KeyPress::F9Key && !key.getModifiers().isAltDown() &&
@@ -1034,7 +1081,18 @@ public:
                e.y<top+((int)ti-(int)arrangementScrollTrack+1)*height-10){
                 dragTrack=ti;dragIndex=i-1;dragOriginX=e.x;
                 selectedClipTrack=ti;selectedClipIndex=i-1;selectedClipValid=true;
+                if(e.mods.isPopupMenu()){
+                    showClipFadeMenu(ti,i-1);repaint();return;
+                }
                 dragOriginalStart=c.startBeat;dragOriginalLength=c.lengthBeats;
+                dragFade=0;
+                const int rowTop=top+((int)ti-(int)arrangementScrollTrack)*height;
+                if(e.y<rowTop+22){
+                    const int inX=x+juce::roundToInt(c.fadeInBeats*12.0);
+                    const int outX=x+w-juce::roundToInt(c.fadeOutBeats*12.0);
+                    if(std::abs(e.x-inX)<=7 || std::abs(e.x-outX)<=7)
+                        dragFade=std::abs(e.x-inX)<=std::abs(e.x-outX)?1:2;
+                }
                 dragResize=e.x>=x+w-10;
                 draggingClip=true;
                 dragHistorySnapshot=session;
@@ -1064,7 +1122,14 @@ public:
         const auto delta=(double)(e.x-dragOriginX)/12.0;
         // Quarter-beat snapping on the visible timeline.
         const auto snap=[](double beats){return std::max(0.0,std::round(beats*4.0)/4.0);};
-        if(dragResize)
+        if(dragFade && dragHistorySnapshot){
+            const auto& original=dragHistorySnapshot->tracks[dragTrack].clips[dragIndex];
+            const double duration=std::clamp((dragFade==1?original.fadeInBeats:original.fadeOutBeats)+
+                (dragFade==1?delta:-delta),0.0,original.lengthBeats);
+            session.setClipFades(dragTrack,dragIndex,
+                dragFade==1?duration:original.fadeInBeats,dragFade==2?duration:original.fadeOutBeats,
+                original.fadeInCurve,original.fadeOutCurve);
+        }else if(dragResize)
             session.resizeClip(dragTrack,dragIndex,std::max(0.25,snap(dragOriginalLength+delta)));
         else
             session.moveClip(dragTrack,dragIndex,snap(dragOriginalStart+delta));
@@ -1078,7 +1143,8 @@ public:
            dragIndex<dragHistorySnapshot->tracks[dragTrack].clips.size()){
             const auto& oldClip=dragHistorySnapshot->tracks[dragTrack].clips[dragIndex];
             const auto& newClip=session.tracks[dragTrack].clips[dragIndex];
-            if(oldClip.startBeat!=newClip.startBeat || oldClip.lengthBeats!=newClip.lengthBeats){
+            if(oldClip.startBeat!=newClip.startBeat || oldClip.lengthBeats!=newClip.lengthBeats ||
+               oldClip.fadeInBeats!=newClip.fadeInBeats || oldClip.fadeOutBeats!=newClip.fadeOutBeats){
                 if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
                 clipUndo.push_back(std::move(*dragHistorySnapshot));
                 clipRedo.clear();
@@ -1165,6 +1231,24 @@ public:
                     g.setColour(neoTheme.accentColour());
                     g.drawRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX),(float)trackHeight-18,4.0f,2.0f);
                 }
+                g.setColour(juce::Colours::white.withAlpha(0.8f));
+                const auto drawFade=[&](bool fadeIn){
+                    const double beats=fadeIn?clip.fadeInBeats:clip.fadeOutBeats;
+                    const auto curve=fadeIn?clip.fadeInCurve:clip.fadeOutCurve;
+                    const float width=(float)(beats*12.0);
+                    const float edge=(float)(fadeIn?clipX:clipX+clipWidth);
+                    juce::Path path;
+                    for(int point=0;point<=24;++point){
+                        const float t=(float)point/24;
+                        const float px=edge+(fadeIn?1.0f:-1.0f)*width*t;
+                        const float py=(float)y+trackHeight-10-
+                            idw::daw::ClipEnvelope::curve(t,curve)*(trackHeight-18);
+                        if(point==0)path.startNewSubPath(px,py);else path.lineTo(px,py);
+                    }
+                    if(beats>0)g.strokePath(path,juce::PathStrokeType(1.5f));
+                    g.fillRect(edge+(fadeIn?width:-width)-3,(float)y+8,6.0f,6.0f);
+                };
+                drawFade(true);drawFade(false);
                 ++renderedClipIndex;
                 g.setColour(juce::Colours::white);
                 g.drawFittedText(juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
@@ -1294,6 +1378,7 @@ private:
     }
     std::optional<idw::daw::Session> dragHistorySnapshot;
     bool draggingClip=false,dragResize=false;
+    int dragFade=0;
     bool selectedClipValid=false;
     size_t selectedClipTrack=0,selectedClipIndex=0;
     size_t dragTrack=0,dragIndex=0;
@@ -1344,6 +1429,9 @@ private:
                 slot->nextSourceFrame=window.sourceFrame+window.frames;
                 juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
                 slot->transport.getNextAudioBlock(readInfo);
+                const idw::daw::ClipEnvelope envelope(clip,playback.bpm,deviceRate);
+                for(int ch=0;ch<slot->scratch.getNumChannels();++ch)
+                    envelope.apply(slot->scratch.getWritePointer(ch),window.frames,blockStart+window.offset);
                 for(int ch=0;ch<juce::jmin(2,slot->scratch.getNumChannels());++ch){
                     const float level=slot->scratch.getMagnitude(ch,0,window.frames) *
                         (ch==0?leftGain:rightGain);

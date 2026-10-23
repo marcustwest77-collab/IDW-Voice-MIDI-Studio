@@ -122,7 +122,7 @@ The session model now exposes validated `moveClip(trackIndex, clipIndex, newStar
 
 ### Interactive audio clip timeline (experimental)
 
-With transport stopped, drag the body of an existing audio clip to move it horizontally, or drag its rightmost 10 pixels to resize the duration. Positions and duration snap to quarter-beat increments. Edits are disabled during playback, recording or export. Dragging edits the in-memory session; use **SAVE PROJECT** to persist it. Clip overlap and crossfades are not yet managed by this interface.
+With transport stopped, drag the body of an existing audio clip to move it horizontally, or drag its rightmost 10 pixels to resize the duration. Positions and duration snap to quarter-beat increments. Edits are disabled during playback, recording or export. Dragging edits the in-memory session; use **SAVE PROJECT** to persist it. Overlaps sum by default. Use the clip context menu to apply a crossfade to a partially overlapping pair; see clip fades below.
 
 ### Selected clip keyboard editing
 
@@ -393,3 +393,41 @@ Click **CREATE PULSE WAV** while transport and recording are stopped, choose a n
 ## Recording beta hardware release gate
 
 Before distributing a recording beta, complete the device-specific acceptance checklist in [`RECORDING_BETA_QA.md`](RECORDING_BETA_QA.md). CI compilation and synthetic loopback tests do not replace physical interface latency, headphone monitoring, overdub alignment and 30-minute stress testing on Windows and macOS.
+
+
+### Clip fades and crossfades
+
+While stopped, drag a clip's small top fade handles to set its fade-in or fade-out
+duration continuously. Right-click a clip for quarter-beat edge presets, clear
+fades, linear/equal-power curve selection, or a crossfade with an overlapping clip
+on the same track. The menu names the partner by its one-based clip index.
+Ctrl/Cmd+Z undoes the entire operation (both crossfade edges); Ctrl/Cmd+Shift+Z
+or Ctrl/Cmd+Y redoes it. Save Project persists duration and curve metadata; source
+audio is never rewritten. Older sessions load with zero fades.
+
+Linear crossfades maintain unity gain for identical correlated audio. Equal-power
+crossfades maintain the sum of squared gains for different/uncorrelated audio;
+identical signals can rise by about 3 dB at the midpoint, so leave mix headroom.
+Overlapping fade-in/out regions within one clip multiply. The last audible
+fade-out sample is zero. A one-sample crossfade selects the incoming sample.
+Playback and WAV export use the same sample-aligned envelope, including seeks,
+source offsets and processing-block boundaries.
+
+Crossfade creates editable edge fades over the current partial overlap. It does
+not link clips: after moving/resizing either clip, reapply the crossfade for the
+new overlap. Contained/coincident clips, a third clip in the transition, or an
+outside fade intruding on the transition are rejected. Trim/shorten clamps fades
+to the new duration; extend keeps their duration. Split preserves outer fades and
+creates unfaded internal edges, and refuses a split inside an existing fade to
+avoid changing its envelope. Edits are disabled during playback/recording/export.
+
+Automated coverage: `IDWDAWClipFades` tests production envelope gain, block/seek
+invariance, fractional beats, crossfade laws, edit validation, split/trim and the
+undo/redo restore path. `IDWDAWPersistence` covers metadata round trips, malformed
+fades and legacy defaults. `IDWDAWBounce` checks actual stereo WAV samples across
+fades/crossfades, mixed source rates, offsets and track mix, and verifies unchanged
+source bytes. These tests do not establish hardware listening quality or UI
+interaction correctness. Windows manual acceptance: drag both handles, apply each
+curve, undo/redo a pair, save/reopen, listen while seeking into an overlap, and
+compare the exported WAV. Previous basic multitrack tests were user-reported as
+passed; new fade-specific Windows testing remains separate.

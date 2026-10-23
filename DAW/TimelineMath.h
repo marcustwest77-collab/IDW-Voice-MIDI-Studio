@@ -21,7 +21,7 @@ inline ClipWindow overlap(int64_t blockStart, int blockFrames, double rate,
         return static_cast<int64_t>(std::llround(seconds*rate));
     };
     const int64_t clipStart=toFrames(startBeat*60.0/bpm);
-    const int64_t clipEnd=clipStart+toFrames(lengthBeats*60.0/bpm);
+    const int64_t clipEnd=toFrames((startBeat+lengthBeats)*60.0/bpm);
     const int64_t from=std::max(blockStart,clipStart);
     const int64_t until=std::min(blockStart+blockFrames,clipEnd);
     if(until<=from)return {};

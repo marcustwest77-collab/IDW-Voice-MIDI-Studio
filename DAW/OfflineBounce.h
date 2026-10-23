@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "SessionModel.h"
+#include "ClipEnvelope.h"
 #include <algorithm>
 #include <cmath>
 #include <atomic>
@@ -42,6 +43,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
         int64_t start=0,end=0,offset=0;
         double sourceRate=44100.0;
         float left=1,right=1;
+        ClipEnvelope envelope;
     };
     std::vector<ActiveClip> clips;
     for(const auto& track:session.tracks){
@@ -52,12 +54,12 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             if(!reader){error="Missing or unsupported audio: "+juce::String(clip.sourcePath);writer.reset();destination.deleteFile();return false;}
 
             const int64_t start=(int64_t)std::llround(clip.startBeat*60.0/session.bpm*sampleRate);
-            const int64_t length=(int64_t)std::llround(clip.lengthBeats*60.0/session.bpm*sampleRate);
+            const int64_t length=(int64_t)std::llround((clip.startBeat+clip.lengthBeats)*60.0/session.bpm*sampleRate)-start;
             const float pan=std::clamp(track.pan,-1.0f,1.0f),gain=std::clamp(track.gain,0.0f,2.0f);
             const double sourceRate=reader->sampleRate;
             clips.push_back({std::move(reader),start,start+length,
                 (int64_t)std::llround(clip.sourceOffsetSeconds*sourceRate),sourceRate,
-                gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1)});
+                gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1),ClipEnvelope(clip,session.bpm,sampleRate)});
         }
     }
     const float outputCeiling=std::pow(10.0f,std::clamp(ceilingDb,-12.0f,-0.1f)/20.0f);
@@ -144,8 +146,9 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                         r=(float)(rightValue/weight);
                     }
                 }
-                mix.addSample(0,offset+i,l*clip.left);
-                mix.addSample(1,offset+i,r*clip.right);
+                const float envelopeGain=clip.envelope.gain(begin+i);
+                mix.addSample(0,offset+i,l*clip.left*envelopeGain);
+                mix.addSample(1,offset+i,r*clip.right*envelopeGain);
             }
         }
         for(int ch=0;ch<2;++ch){

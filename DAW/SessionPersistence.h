@@ -27,6 +27,10 @@ inline juce::var sessionToJson(const Session& s) {
             clip->setProperty("startBeat",c.startBeat);
             clip->setProperty("lengthBeats",c.lengthBeats);
             clip->setProperty("sourceOffsetSeconds",c.sourceOffsetSeconds);
+            clip->setProperty("fadeInBeats",c.fadeInBeats);
+            clip->setProperty("fadeOutBeats",c.fadeOutBeats);
+            clip->setProperty("fadeInCurve",(int)c.fadeInCurve);
+            clip->setProperty("fadeOutCurve",(int)c.fadeOutCurve);
             clips.add(juce::var(clip.release()));
         }
         track->setProperty("clips",juce::var(clips));
@@ -87,10 +91,28 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
         for(const auto& c:*clips.getArray()){
             auto* co=c.getDynamicObject();
             if(!co)return false;
+            double fadeIn=0,fadeOut=0;
+            int inCurve=0,outCurve=0;
+            const auto readDuration=[&](const char* name,double& value){
+                const auto v=co->getProperty(name);
+                if(v.isVoid())return true;
+                if(!v.isDouble() && !v.isInt() && !v.isInt64())return false;
+                value=(double)v;return std::isfinite(value) && value>=0;
+            };
+            const auto readCurve=[&](const char* name,int& value){
+                const auto v=co->getProperty(name);
+                if(v.isVoid())return true;
+                if(!v.isInt() && !v.isInt64())return false;
+                if((double)v<0 || (double)v>1)return false;
+                value=(int)v;return true;
+            };
+            if(!readDuration("fadeInBeats",fadeIn) || !readDuration("fadeOutBeats",fadeOut) ||
+               !readCurve("fadeInCurve",inCurve) || !readCurve("fadeOutCurve",outCurve))return false;
             if(!next.addClip(next.tracks.size()-1,{
                 co->getProperty("sourcePath").toString().toStdString(),
                 (double)co->getProperty("startBeat"),(double)co->getProperty("lengthBeats"),
-                (double)co->getProperty("sourceOffsetSeconds")}))return false;
+                (double)co->getProperty("sourceOffsetSeconds"),fadeIn,fadeOut,
+                (FadeCurve)inCurve,(FadeCurve)outCurve}))return false;
         }
         // Older v1 sessions may omit the new MIDI notes property.
         const auto notes=obj->getProperty("notes");

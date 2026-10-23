@@ -83,6 +83,38 @@ int main(){
     std::abs(stereoResult.getSample(1,100)+0.2f)>0.01f)
     throw std::runtime_error("stereo channel mismatch");
  stereoReader.reset();
+ juce::MemoryBlock originalStereo,originalMono;
+ if(!stereo.loadFileAsData(originalStereo) || !input.loadFileAsData(originalMono))
+    throw std::runtime_error("source snapshot");
+ // Real WAV export regression: stereo, mixed source rates, offsets, fades and overlap.
+ for(const auto curve:{FadeCurve::linear,FadeCurve::equalPower}){
+    Session faded;faded.bpm=60;faded.addTrack(TrackType::audio);
+    faded.addClip(0,{stereo.getFullPathName().toStdString(),0.01,0.06,0.01});
+    faded.addClip(0,{input.getFullPathName().toStdString(),0.05,0.06,0.01});
+    if(!faded.setClipFades(0,0,0.01,0) || !faded.setClipFades(0,1,0,0.01) ||
+       !faded.crossfadeClips(0,0,1,curve))throw std::runtime_error("bounce fades setup");
+    faded.tracks[0].gain=0.8f;faded.tracks[0].pan=0.25f;
+    const auto fadeOutput=root.getChildFile(curve==FadeCurve::linear?"fade-linear.wav":"fade-power.wav");
+    if(!renderSessionWav(faded,fadeOutput,error))throw std::runtime_error(error.toStdString());
+    auto fadeReader=std::unique_ptr<juce::AudioFormatReader>(wav.createReaderFor(fadeOutput.createInputStream().release(),true));
+    if(!fadeReader)throw std::runtime_error("fade export reader");
+    const int frames=(int)fadeReader->lengthInSamples;
+    juce::AudioBuffer<float> actual(2,frames);
+    if(!fadeReader->read(&actual,0,frames,0,true,true))throw std::runtime_error("fade export read");
+    const ClipEnvelope a(faded.tracks[0].clips[0],60,44100),b(faded.tracks[0].clips[1],60,44100);
+    for(int frame=0;frame<frames;++frame){
+        const float expectedL=(0.2f*a.gain(frame)+0.25f*b.gain(frame))*0.6f;
+        const float expectedR=(-0.2f*a.gain(frame)+0.25f*b.gain(frame))*0.8f;
+        if(std::abs(actual.getSample(0,frame)-expectedL)>0.0001f ||
+           std::abs(actual.getSample(1,frame)-expectedR)>0.0001f)
+            throw std::runtime_error("fade playback/export envelope mismatch");
+    }
+    // Source contents are unchanged by fades and rendering.
+    juce::MemoryBlock afterStereo,afterMono;
+    if(!stereo.loadFileAsData(afterStereo) || !input.loadFileAsData(afterMono) ||
+       originalStereo!=afterStereo || originalMono!=afterMono)
+        throw std::runtime_error("source changed");
+ }
  // Check the last sample before a clip and the first sample of the clip,
  // including a transition that lands inside an export processing block.
  const auto boundaryOutput=root.getChildFile("boundary.wav");

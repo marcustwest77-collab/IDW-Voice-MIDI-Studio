@@ -16,6 +16,29 @@
 #include <iostream>
 int main(){
  using namespace idw::daw;
+ Session fadeSession;fadeSession.addTrack(TrackType::audio);
+ fadeSession.addClip(0,{"fade.wav",1,4,0.5});
+ if(!fadeSession.setClipFades(0,0,0.5,1.25,FadeCurve::equalPower,FadeCurve::linear))
+    throw std::runtime_error("fade setup");
+ auto fadeJson=sessionToJson(fadeSession);Session fadeRestored;
+ if(!sessionFromJson(fadeJson,fadeRestored) || fadeRestored.tracks[0].clips[0].fadeInBeats!=0.5 ||
+    fadeRestored.tracks[0].clips[0].fadeOutBeats!=1.25 ||
+    fadeRestored.tracks[0].clips[0].fadeInCurve!=FadeCurve::equalPower)
+    throw std::runtime_error("fade round trip");
+ auto* fadeObject=fadeJson.getDynamicObject()->getProperty("tracks").getArray()->getReference(0)
+    .getDynamicObject()->getProperty("clips").getArray()->getReference(0).getDynamicObject();
+ for(const auto& invalid: {juce::var(-1.0),juce::var(9.0),juce::var("bad"),juce::var(true)}){
+    fadeObject->setProperty("fadeInBeats",invalid);
+    if(sessionFromJson(fadeJson,fadeRestored) || fadeRestored.tracks[0].clips[0].fadeInBeats!=0.5)
+        throw std::runtime_error("invalid fade mutated session");
+ }
+ for(const char* property:{"fadeInBeats","fadeOutBeats","fadeInCurve","fadeOutCurve"})
+    fadeObject->removeProperty(property);
+ if(!sessionFromJson(fadeJson,fadeRestored) || fadeRestored.tracks[0].clips[0].fadeInBeats!=0 ||
+    fadeRestored.tracks[0].clips[0].fadeOutBeats!=0)
+    throw std::runtime_error("legacy fade defaults");
+ fadeObject->setProperty("fadeInCurve",7);
+ if(sessionFromJson(fadeJson,fadeRestored))throw std::runtime_error("invalid fade curve accepted");
  AIProposal action{AIProposal::Kind::tempo};
  if(!parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":145}})"),action)
     || action.kind!=AIProposal::Kind::tempo || action.bpm!=145)

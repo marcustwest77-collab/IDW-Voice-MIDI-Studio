@@ -6,11 +6,21 @@
 #include <vector>
 namespace idw::daw {
 enum class TrackType { audio, midi };
+enum class FadeCurve { linear, equalPower };
+inline bool validFadeCurve(FadeCurve curve) {
+    return curve==FadeCurve::linear || curve==FadeCurve::equalPower;
+}
 struct Clip {
     std::string sourcePath;
     double startBeat=0.0;
     double lengthBeats=0.0;
     double sourceOffsetSeconds=0.0;
+    double fadeInBeats=0.0,fadeOutBeats=0.0;
+    FadeCurve fadeInCurve=FadeCurve::linear,fadeOutCurve=FadeCurve::linear;
+    void clampFades() {
+        fadeInBeats=std::min(fadeInBeats,lengthBeats);
+        fadeOutBeats=std::min(fadeOutBeats,lengthBeats);
+    }
 };
 struct MidiNote { int pitch=60; double startBeat=0.0,lengthBeats=1.0; int velocity=100; };
 struct Track {
@@ -45,8 +55,44 @@ public:
         if (trackIndex>=tracks.size() || tracks[trackIndex].type!=TrackType::audio ||
             clip.sourcePath.empty() || !std::isfinite(clip.startBeat) ||
             !std::isfinite(clip.lengthBeats) || !std::isfinite(clip.sourceOffsetSeconds) ||
-            clip.startBeat<0 || clip.lengthBeats<=0 || clip.sourceOffsetSeconds<0) return false;
+            clip.startBeat<0 || clip.lengthBeats<=0 || clip.sourceOffsetSeconds<0 ||
+            !std::isfinite(clip.fadeInBeats) || !std::isfinite(clip.fadeOutBeats) ||
+            clip.fadeInBeats<0 || clip.fadeOutBeats<0 ||
+            clip.fadeInBeats>clip.lengthBeats || clip.fadeOutBeats>clip.lengthBeats ||
+            !validFadeCurve(clip.fadeInCurve) || !validFadeCurve(clip.fadeOutCurve)) return false;
         tracks[trackIndex].clips.push_back(std::move(clip));
+        return true;
+    }
+    bool setClipFades(size_t track,size_t index,double in,double out,
+                      FadeCurve inCurve=FadeCurve::linear,FadeCurve outCurve=FadeCurve::linear) {
+        if(track>=tracks.size() || tracks[track].type!=TrackType::audio ||
+           index>=tracks[track].clips.size() || !std::isfinite(in) || !std::isfinite(out) ||
+           in<0 || out<0 || !validFadeCurve(inCurve) || !validFadeCurve(outCurve))return false;
+        auto& clip=tracks[track].clips[index];
+        if(in>clip.lengthBeats || out>clip.lengthBeats)return false;
+        clip.fadeInBeats=in;clip.fadeOutBeats=out;
+        clip.fadeInCurve=inCurve;clip.fadeOutCurve=outCurve;
+        return true;
+    }
+    // Explicit edge fades, not an automatic overlap policy. Ordinary overlaps still sum.
+    // Reject containment and third clips in the transition: no ambiguous pair selection.
+    bool crossfadeClips(size_t track,size_t first,size_t second,FadeCurve curve) {
+        if(track>=tracks.size() || tracks[track].type!=TrackType::audio || first==second ||
+           first>=tracks[track].clips.size() || second>=tracks[track].clips.size() ||
+           !validFadeCurve(curve))return false;
+        auto& clips=tracks[track].clips;
+        if(clips[first].startBeat>clips[second].startBeat)std::swap(first,second);
+        auto& a=clips[first];auto& b=clips[second];
+        const double end=a.startBeat+a.lengthBeats;
+        const double overlapBeats=end-b.startBeat;
+        if(!(a.startBeat<b.startBeat && overlapBeats>0 && end<b.startBeat+b.lengthBeats))return false;
+        // Preserve outside fades without multiplying them into the transition.
+        if(a.fadeInBeats>b.startBeat-a.startBeat || b.fadeOutBeats>b.lengthBeats-overlapBeats)return false;
+        for(size_t i=0;i<clips.size();++i)
+            if(i!=first && i!=second && clips[i].startBeat<end &&
+               clips[i].startBeat+clips[i].lengthBeats>b.startBeat)return false;
+        a.fadeOutBeats=overlapBeats;b.fadeInBeats=overlapBeats;
+        a.fadeOutCurve=curve;b.fadeInCurve=curve;
         return true;
     }
     // Timeline edit primitive used by future drag/snap controls.
@@ -61,6 +107,7 @@ public:
         if(trackIndex>=tracks.size() || clipIndex>=tracks[trackIndex].clips.size() ||
            !std::isfinite(newLengthBeats) || newLengthBeats<=0.0)return false;
         tracks[trackIndex].clips[clipIndex].lengthBeats=newLengthBeats;
+        tracks[trackIndex].clips[clipIndex].clampFades();
         return true;
     }
     // Clip metadata only: source WAVs are never modified.
@@ -69,11 +116,14 @@ public:
         auto& clips=tracks[track].clips;
         const auto original=clips[index];
         const double first=beat-original.startBeat;
-        if(first<=1.0e-6 || first>=original.lengthBeats-1.0e-6)return false;
+        if(first<=1.0e-6 || first>=original.lengthBeats-1.0e-6 ||
+           first<original.fadeInBeats || first>original.lengthBeats-original.fadeOutBeats)return false;
         auto second=original;
         second.startBeat=beat;
         second.lengthBeats-=first;
         second.sourceOffsetSeconds+=first*secondsPerBeat();
+        second.fadeInBeats=0;
+        clips[index].fadeOutBeats=0;
         clips[index].lengthBeats=first;
         clips.insert(clips.begin()+static_cast<std::ptrdiff_t>(index+1),second);
         return true;
@@ -85,6 +135,7 @@ public:
         if(delta<0 || delta>=clip.lengthBeats-1.0e-6)return false;
         clip.startBeat=beat;clip.lengthBeats-=delta;
         clip.sourceOffsetSeconds+=delta*secondsPerBeat();
+        clip.clampFades();
         return true;
     }
     bool trimClipRight(size_t track,size_t index,double beat) {
@@ -93,6 +144,7 @@ public:
         const double newLength=beat-clip.startBeat;
         if(newLength<=1.0e-6 || newLength>clip.lengthBeats)return false;
         clip.lengthBeats=newLength;
+        clip.clampFades();
         return true;
     }
     bool addMidiNote(size_t trackIndex,MidiNote note) {
