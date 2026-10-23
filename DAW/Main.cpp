@@ -1294,30 +1294,35 @@ private:
             if(!slot->reader || slot->trackIndex>=playback.tracks.size())continue;
             const auto& track=playback.tracks[slot->trackIndex];
             if(track.mute || (anySolo && !track.solo) || track.clips.empty())continue;
-            const auto& clip=track.clips.front();
-            const auto window=idw::daw::overlap(blockStart,info.numSamples,deviceRate,
-                    playback.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
-            if(window.frames<=0)continue;
-            slot->scratch.clear(0,window.frames);
-            juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
-            slot->transport.getNextAudioBlock(readInfo);
             const float gain=juce::jlimit(0.0f,2.0f,track.gain);
             const float pan=juce::jlimit(-1.0f,1.0f,track.pan);
             const float leftGain=gain*(pan>0.0f?1.0f-pan:1.0f);
             const float rightGain=gain*(pan<0.0f?1.0f+pan:1.0f);
-            // Peak of this track's rendered audio, after track gain/pan, before master FX.
-            // Fixed atomic slots avoid allocations and locks on the audio thread.
-            if(slot->trackIndex<channelPeaks.size()){
-                float peak=0.0f;
+            float trackPeak=0.0f;
+            // Each clip owns an independent timeline window and source offset.
+            // Seek the existing transport before each read, so gaps stay silent
+            // and overlapping clips sum rather than replacing one another.
+            for(const auto& clip:track.clips){
+                if(clip.sourcePath!=slot->file.getFullPathName().toStdString())continue;
+                const auto window=idw::daw::overlap(blockStart,info.numSamples,deviceRate,
+                    playback.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
+                if(window.frames<=0)continue;
+                slot->scratch.clear(0,window.frames);
+                slot->transport.setPosition((double)window.sourceFrame/deviceRate);
+                juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
+                slot->transport.getNextAudioBlock(readInfo);
                 for(int ch=0;ch<juce::jmin(2,slot->scratch.getNumChannels());++ch){
                     const float level=slot->scratch.getMagnitude(ch,0,window.frames) *
                         (ch==0?leftGain:rightGain);
-                    peak=juce::jmax(peak,level);
+                    trackPeak=juce::jmax(trackPeak,level);
                 }
-                channelPeaks[slot->trackIndex].store(peak,std::memory_order_relaxed);
+                for(int channel=0;channel<info.buffer->getNumChannels();++channel)
+                    info.buffer->addFrom(channel,info.startSample+window.offset,
+                        slot->scratch,channel,0,window.frames,
+                        channel==0?leftGain:rightGain);
             }
-            for(int channel=0;channel<info.buffer->getNumChannels();++channel)
-                info.buffer->addFrom(channel,info.startSample+window.offset,slot->scratch,channel,0,window.frames,channel==0?leftGain:rightGain);
+            if(slot->trackIndex<channelPeaks.size())
+                channelPeaks[slot->trackIndex].store(trackPeak,std::memory_order_relaxed);
         }
         // Basic audible piano-roll preview. No MIDI device or VST routing yet.
         if(info.buffer->getNumChannels()>0){
