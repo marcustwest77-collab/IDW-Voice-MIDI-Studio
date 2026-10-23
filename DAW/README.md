@@ -475,3 +475,12 @@ and malformed clips on Windows/macOS CI. Rendering appearance, large-file
 loading, thumbnail timing and resize behavior still need a Windows GUI check.
 This milestone does not yet include horizontal timeline zoom, waveform sample
 editing or sample-accurate mouse snapping.
+
+### Fine keyboard timeline edits
+
+With a clip selected and playback stopped, **Alt+Left/Right** moves it by
+1/16 beat; **Alt+Shift+Left/Right** resizes its right edge by 1/16 beat.
+**Alt+[** trims the left edge and **Alt+]** trims the right edge by 1/16 beat.
+Without Alt, the existing shortcuts still use quarter-beat increments.
+These are metadata-only edits with the existing undo/redo history; they are
+not sample-level waveform edits. Mouse dragging still uses quarter-beat snapping.
