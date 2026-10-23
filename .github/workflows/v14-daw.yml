@@ -26,12 +26,15 @@ jobs:
           path: build-v14/Testing/Temporary/
           if-no-files-found: warn
           retention-days: 14
+      - name: Package macOS application
+        if: matrix.os == 'macos-latest'
+        run: tar -czf IDW-DAW-V14-macOS.tar.gz -C build-v14/IDWDAW_artefacts .
       - name: Upload macOS application
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: IDW-DAW-V14-macOS
-          path: build-v14/IDWDAW_artefacts/
+          path: IDW-DAW-V14-macOS.tar.gz
           if-no-files-found: error
           retention-days: 14
       - name: Report MIDI rendering timings

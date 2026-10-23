@@ -1129,9 +1129,13 @@ public:
             session.setClipFades(dragTrack,dragIndex,
                 dragFade==1?duration:original.fadeInBeats,dragFade==2?duration:original.fadeOutBeats,
                 original.fadeInCurve,original.fadeOutCurve);
-        }else if(dragResize)
+        }else if(dragResize){
+            // Re-evaluate from the gesture's original clip, so shortening then
+            // dragging back does not permanently clamp its fade durations.
+            if(dragHistorySnapshot)
+                session.tracks[dragTrack].clips[dragIndex]=dragHistorySnapshot->tracks[dragTrack].clips[dragIndex];
             session.resizeClip(dragTrack,dragIndex,std::max(0.25,snap(dragOriginalLength+delta)));
-        else
+        }else
             session.moveClip(dragTrack,dragIndex,snap(dragOriginalStart+delta));
         repaint();
     }
