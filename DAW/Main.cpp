@@ -1334,7 +1334,7 @@ private:
             // Seek the existing transport before each read, so gaps stay silent
             // and overlapping clips sum rather than replacing one another.
             for(const auto& clip:track.clips){
-                if(clip.sourcePath!=slot->file.getFullPathName().toStdString())continue;
+                if(clip.sourcePath!=slot->sourcePath)continue;
                 const auto window=idw::daw::overlap(blockStart,info.numSamples,deviceRate,
                     playback.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
                 if(window.frames<=0)continue;
@@ -1765,6 +1765,7 @@ private:
         juce::AudioTransportSource transport;
         std::unique_ptr<juce::AudioFormatReaderSource> reader;
         juce::File file;
+        std::string sourcePath; // Prepared off the audio thread for allocation-free clip matching.
         size_t trackIndex=0;
         double sourceOffsetSeconds=0.0;
         juce::AudioBuffer<float> scratch;
@@ -1823,6 +1824,7 @@ private:
                 slot->transport.setSource(source.get(),0,nullptr,rate);
                 slot->reader=std::move(source);
                 slot->file=file;
+                slot->sourcePath=file.getFullPathName().toStdString();
                 if(preparedBlockSize>0){
                     slot->scratch.setSize(2,preparedBlockSize,false,true,false);
                     slot->transport.prepareToPlay(preparedBlockSize,deviceRate);
@@ -1955,7 +1957,7 @@ private:
         const double beatLength=(duration-trim)*session.bpm/60.0;
         if(!session.addClip(target->trackIndex,{take.getFullPathName().toStdString(),takeStartBeat,beatLength,trim}))return false;
         target->transport.setSource(source.get(),0,nullptr,rate);
-        target->file=take;target->reader=std::move(source);
+        target->file=take;target->sourcePath=take.getFullPathName().toStdString();target->reader=std::move(source);
         selectedTrack=target->trackIndex;
         ensureSelectedTrackVisible();
         juce::Logger::writeToLog("IDW vocal take imported: "+take.getFullPathName()+
@@ -2550,7 +2552,7 @@ private:
             auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
             const auto sourceRate=source->getAudioFormatReader()->sampleRate;
             target->transport.setSource(source.get(),0,nullptr,sourceRate);
-            target->file=file;target->reader=std::move(source);
+            target->file=file;target->sourcePath=file.getFullPathName().toStdString();target->reader=std::move(source);
             session.addClip(target->trackIndex,{file.getFullPathName().toStdString(),0.0,
                 sourceRate>0 ? (double)target->reader->getAudioFormatReader()->lengthInSamples/sourceRate*session.bpm/60.0 : 0.0,0.0});
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
