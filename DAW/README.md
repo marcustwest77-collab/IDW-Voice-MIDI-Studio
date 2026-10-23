@@ -444,3 +444,17 @@ is rejected before integer conversion; invalid playback windows are silent, and
 invalid exports return an error without retaining a partial WAV. Tests also cover
 cursor overflow, invalid fades/tempo/mix and preservation of an existing output.
 These automated cases do not replace hardware audio or UI interaction testing.
+
+
+### Actual transport regression for reused audio files
+
+The callback now shares its clip-reading function with `IDWDAWClipTransport`.
+This test opens real stereo WAV files with JUCE's reader and transport, exercises
+repeated clips after source EOF, same-file crossfades, source offsets and seeking,
+and compares equal-rate playback samples against actual WAV export at several
+block sizes. It also checks repeated playback with a 48 kHz source at 44.1 kHz.
+The helper restarts an EOF-stopped reader before a new active read and uses integer
+frame seeking instead of a seconds round-trip. Continuous resampler tails are not
+flushed just because the underlying reader has prefetched through EOF.
+No audio device is opened by these tests. Hardware listening/latency and GUI
+interaction validation remain separate.

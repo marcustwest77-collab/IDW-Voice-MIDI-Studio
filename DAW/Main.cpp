@@ -7,6 +7,7 @@
 #include <JuceHeader.h>
 #include "SessionModel.h"
 #include "ClipEnvelope.h"
+#include "ClipPlayback.h"
 #include "SessionHistory.h"
 #include <optional>
 #include "TimelineMath.h"
@@ -1424,18 +1425,9 @@ private:
             // and overlapping clips sum rather than replacing one another.
             for(const auto& clip:track.clips){
                 if(clip.sourcePath!=slot->sourcePath)continue;
-                const auto window=idw::daw::overlap(blockStart,info.numSamples,deviceRate,
-                    playback.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
+                const auto window=idw::daw::readClipWindow(slot->transport,slot->scratch,
+                    slot->nextSourceFrame,clip,playback.bpm,deviceRate,blockStart,info.numSamples);
                 if(window.frames<=0)continue;
-                slot->scratch.clear(0,window.frames);
-                if(slot->nextSourceFrame!=window.sourceFrame)
-                    slot->transport.setPosition((double)window.sourceFrame/deviceRate);
-                slot->nextSourceFrame=window.sourceFrame+window.frames;
-                juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
-                slot->transport.getNextAudioBlock(readInfo);
-                const idw::daw::ClipEnvelope envelope(clip,playback.bpm,deviceRate);
-                for(int ch=0;ch<slot->scratch.getNumChannels();++ch)
-                    envelope.apply(slot->scratch.getWritePointer(ch),window.frames,blockStart+window.offset);
                 for(int ch=0;ch<juce::jmin(2,slot->scratch.getNumChannels());++ch){
                     const float level=slot->scratch.getMagnitude(ch,0,window.frames) *
                         (ch==0?leftGain:rightGain);
