@@ -973,6 +973,7 @@ public:
     }
     void mouseDown(const juce::MouseEvent& e) override {
         draggingClip=false;
+        dragHistorySnapshot.reset();
         // Keep the selected clip when clicking the ruler to position a split.
         if(!(e.y>=330 && e.y<366 && e.x>=205))selectedClipValid=false;
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() ||
@@ -1832,6 +1833,9 @@ private:
         for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
         sources.clear();
         session=std::move(restored);
+        // Undo snapshots refer to the prior project; never restore them into a new one.
+        clipUndo.clear();clipRedo.clear();dragHistorySnapshot.reset();
+        draggingClip=false;selectedClipValid=false;
         sources=std::move(staged);
         armedTracks.fill(false); // Reopening a project must never arm recording automatically.
         selectedTrack=0;sessionFrames.store(0);playheadBeats=0;
