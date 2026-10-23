@@ -590,7 +590,7 @@ public:
         play.onClick=[this]{if(playing.load() || loopbackCapture.isActive() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);
             std::atomic_store_explicit(&playbackSession,
                 std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
-            sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
+            sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->nextSourceFrame=-1;slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
         stop.onClick=[this]{if(exportRunning.load())return;if(loopbackCapture.isActive() || loopbackCapture.isComplete()){loopbackCapture.cancel();liveCalibration.setEnabled(true);}else if(loopbackCapture.consumeFailed()){loopbackCapture.cancel();liveCalibration.setEnabled(true);}if((recorder.isRecording() || multiRecorder.isRecording()))toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;refreshMixer();repaint();};
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
@@ -1339,7 +1339,9 @@ private:
                     playback.bpm,clip.startBeat,clip.lengthBeats,clip.sourceOffsetSeconds);
                 if(window.frames<=0)continue;
                 slot->scratch.clear(0,window.frames);
-                slot->transport.setPosition((double)window.sourceFrame/deviceRate);
+                if(slot->nextSourceFrame!=window.sourceFrame)
+                    slot->transport.setPosition((double)window.sourceFrame/deviceRate);
+                slot->nextSourceFrame=window.sourceFrame+window.frames;
                 juce::AudioSourceChannelInfo readInfo(&slot->scratch,0,window.frames);
                 slot->transport.getNextAudioBlock(readInfo);
                 for(int ch=0;ch<juce::jmin(2,slot->scratch.getNumChannels());++ch){
@@ -1766,6 +1768,7 @@ private:
         std::unique_ptr<juce::AudioFormatReaderSource> reader;
         juce::File file;
         std::string sourcePath; // Prepared off the audio thread for allocation-free clip matching.
+        juce::int64 nextSourceFrame=-1; // Audio-callback-owned cursor, reset before playback.
         size_t trackIndex=0;
         double sourceOffsetSeconds=0.0;
         juce::AudioBuffer<float> scratch;
