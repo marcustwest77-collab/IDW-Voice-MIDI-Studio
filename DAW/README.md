@@ -458,3 +458,20 @@ frame seeking instead of a seconds round-trip. Continuous resampler tails are no
 flushed just because the underlying reader has prefetched through EOF.
 No audio device is opened by these tests. Hardware listening/latency and GUI
 interaction validation remain separate.
+
+### Cached waveform previews (experimental)
+
+Imported WAV/AIFF audio clips now display a reduced-resolution waveform inside the
+timeline. The peak cache is generated asynchronously by JUCE AudioThumbnail, so
+long recordings are not decoded on the audio callback or every repaint. Split
+clips, left trims and recorded-take latency offsets display the corresponding
+source interval; moving a clip leaves its source waveform unchanged. Reopened
+projects rebuild the preview cache from available source files. Missing audio
+still appears as a clip without a waveform. The cache is visual only: no
+recordings or source WAV bytes are modified.
+
+`IDWDAWWaveform` checks source-time mapping for moved, split, trimmed, extended,
+and malformed clips on Windows/macOS CI. Rendering appearance, large-file
+loading, thumbnail timing and resize behavior still need a Windows GUI check.
+This milestone does not yet include horizontal timeline zoom, waveform sample
+editing or sample-accurate mouse snapping.
