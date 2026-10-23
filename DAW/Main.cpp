@@ -1354,8 +1354,15 @@ private:
                         slot->scratch,channel,0,window.frames,
                         channel==0?leftGain:rightGain);
             }
-            if(slot->trackIndex<channelPeaks.size())
-                channelPeaks[slot->trackIndex].store(trackPeak,std::memory_order_relaxed);
+            if(slot->trackIndex<channelPeaks.size()){
+                // Multiple source slots can belong to one track. Preserve the
+                // highest peak across all slots in this callback block.
+                auto& meter=channelPeaks[slot->trackIndex];
+                float observed=meter.load(std::memory_order_relaxed);
+                while(observed<trackPeak &&
+                      !meter.compare_exchange_weak(observed,trackPeak,
+                          std::memory_order_relaxed,std::memory_order_relaxed)){}
+            }
         }
         // Basic audible piano-roll preview. No MIDI device or VST routing yet.
         if(info.buffer->getNumChannels()>0){
