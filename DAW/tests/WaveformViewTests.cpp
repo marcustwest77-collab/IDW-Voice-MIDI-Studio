@@ -37,7 +37,7 @@ int main(){
         invalid=beyond;invalid.lengthBeats=bad;
         assert(!clipWaveformWindow(invalid,120));
     }
-    Clip huge=beyond;huge.sourceOffsetSeconds=1e308;huge.lengthBeats=1e308;
+    Clip huge=beyond;huge.sourceOffsetSeconds=1.7e308;huge.lengthBeats=1e308;
     assert(!clipWaveformWindow(huge,120));
     std::cout<<"Waveform source-window mapping tests passed\n";
 }
