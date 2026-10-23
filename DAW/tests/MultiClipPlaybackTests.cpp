@@ -1,5 +1,9 @@
 #include "SessionModel.h"
 #include "TimelineMath.h"
+// Keep regression assertions active in Release, including setup calls.
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <cmath>
 #include <vector>
