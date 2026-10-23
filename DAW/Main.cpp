@@ -1000,6 +1000,10 @@ public:
             return;
         }
         constexpr int top=366, height=70, left=205;
+        if(e.y>=330 && e.y<366 && e.x>=left){
+            playheadBeats=std::max(0.0,std::round(((double)e.x-left)/12.0*4.0)/4.0);
+            repaint();return;
+        }
         if(e.y<top || e.x<left || session.tracks.empty())return;
         const int visibleMixerHeight=neoMixerExpanded ? 190 : 112;
         const int visibleMixerTop=getHeight()-visibleMixerHeight-48;
