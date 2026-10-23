@@ -651,6 +651,10 @@ public:
         monitorControl.setToggleState(false,juce::dontSendNotification);
         monitorControl.setEnabled(false);
         addAndMakeVisible(monitorControl);
+        preflightButton.setButtonText("PREFLIGHT");
+        preflightButton.setTooltip("Check audio input, track routing, output, and recording folder before a session.");
+        addAndMakeVisible(preflightButton);
+        preflightButton.onClick=[this]{showRecordingPreflight();};
         audioDevices.setButtonText("AUDIO DEVICES");
         audioDevices.setTooltip("Select a Windows ASIO driver and enable your PreSonus AudioBox microphone input.");
         addAndMakeVisible(audioDevices);
@@ -763,6 +767,7 @@ public:
         auto monitorRow=area.removeFromTop(28);
         monitorControl.setBounds(monitorRow.removeFromLeft(190));
         audioDevices.setBounds(monitorRow.removeFromLeft(155).reduced(2));
+        preflightButton.setBounds(monitorRow.removeFromLeft(130).reduced(2));
         inputLevel.setBounds(area.removeFromTop(26));
         auto overdubRow=area.removeFromTop(36);
         overdubControl.setBounds(overdubRow.removeFromLeft(285));
@@ -2008,6 +2013,61 @@ private:
         playing.store(true);
         startTimerHz(30);
     }
+    void showRecordingPreflight(){
+        if(recorder.isRecording() || multiRecorder.isRecording() || playing.load() ||
+           exportRunning.load() || loopbackCapture.isActive()){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Recording preflight unavailable",
+                "Stop recording, playback, exporting, or calibration before running preflight.");
+            return;
+        }
+        auto* device=deviceManager.getCurrentAudioDevice();
+        const bool validTrack=selectedTrack<session.tracks.size();
+        const bool audioTrack=validTrack &&
+            session.tracks[selectedTrack].type==idw::daw::TrackType::audio;
+        const bool armed=audioTrack && selectedTrack<armedTracks.size() &&
+            armedTracks[selectedTrack];
+        const int physical=audioTrack ? session.tracks[selectedTrack].inputChannel : -1;
+        const auto inputNames=device ? device->getInputChannelNames() : juce::StringArray{};
+        const int callbackIndex=device && physical>=0
+            ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physical)
+            : -1;
+        bool occupied=false;
+        if(audioTrack)
+            for(const auto& slot:sources)
+                if(slot->trackIndex==selectedTrack && slot->reader)occupied=true;
+        const bool rateOk=std::isfinite(deviceRate) && deviceRate>0.0;
+        const bool inputOk=device && callbackIndex>=0 && physical<inputNames.size() && rateOk;
+        const bool outputOk=device && device->getActiveOutputChannels().countNumberOfSetBits()>0;
+        const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+            .getChildFile("IDW DAW").getChildFile("Recordings");
+        const auto folderResult=folder.createDirectory();
+        const bool folderOk=folderResult.wasOk() && folder.isDirectory();
+        const auto freeBytes=folderOk ? folder.getBytesFreeOnVolume() : juce::int64{-1};
+        // 100 MiB is a conservative warning threshold, not a recording guarantee.
+        const bool spaceOk=folderOk && freeBytes>=100LL*1024LL*1024LL;
+        const bool ok=audioTrack && armed && !occupied && inputOk && outputOk && spaceOk;
+        const auto result=ok ? juce::String("PASS - ready to record") :
+                               juce::String("ACTION NEEDED before recording");
+        const auto details=
+            "Overall: "+result+
+            "\\nTrack: "+(validTrack ? juce::String(session.tracks[selectedTrack].name) : juce::String("none"))+
+            "\\nAudio track: "+(audioTrack ? juce::String("PASS") : juce::String("FAIL - select audio track"))+
+            "\\nArmed: "+(armed ? juce::String("PASS") : juce::String("FAIL - ARM INPUT"))+
+            "\\nEmpty destination: "+(!occupied ? juce::String("PASS") : juce::String("FAIL - select empty track"))+
+            "\\nAudio device: "+(device ? device->getName() : juce::String("none"))+
+            "\\nInput: "+(inputOk ? inputNames[physical]+juce::String(" (PASS)") : juce::String("FAIL - enable/select mic input"))+
+            "\\nOutput: "+(outputOk ? juce::String("PASS") : juce::String("FAIL - enable audio output"))+
+            "\\nSample rate: "+(rateOk ? juce::String(deviceRate,0)+juce::String(" Hz") : juce::String("invalid"))+
+            "\\nRecording folder: "+folder.getFullPathName()+
+            "\\nFolder writable location: "+(folderOk ? juce::String("exists (write not tested)") : juce::String("FAIL - cannot create folder"))+
+            "\\nFree disk space: "+(freeBytes>=0 ? juce::String((double)freeBytes/(1024.0*1024.0),0)+juce::String(" MiB") : juce::String("unknown"))+
+            "\\nDisk capacity: "+(spaceOk ? juce::String("PASS") : juce::String("WARNING - 100 MiB minimum recommended"))+
+            "\\n\\nThis checks configuration, not live mic audio or audible playback.";
+        juce::AlertWindow::showMessageBoxAsync(
+            ok ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon,
+            "IDW Recording Preflight",details);
+    }
     void toggleRecording(){
         // Calibration owns a physical input/output while active. Do not let
         // recording start and contaminate either the pulse capture or a take.
@@ -2438,6 +2498,7 @@ private:
     juce::uint32 voiceRecordRequestedAt=0; // Confirmation expires after 15 seconds.
     juce::TextButton previousTrack,nextTrack;
     size_t selectedTrack=0;
+    juce::TextButton preflightButton;
     juce::TextButton play,stop,audio,midi,open,record,saveProject,openProject,exportProject,bounce,cancelBounce,connectButton,aiButton,pianoButton,analyzeCalibration,generateCalibration,liveCalibration;
     juce::ComboBox synthPreset;
     juce::Label attackLabel,releaseLabel;
