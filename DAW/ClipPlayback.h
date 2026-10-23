@@ -15,12 +15,15 @@ inline ClipWindow readClipWindow(juce::AudioTransportSource& transport,
     const ClipEnvelope envelope(clip,bpm,rate);
     if(!envelope.valid)return {};
     scratch.clear(0,window.frames);
+    // Capture EOF before seeking, since the seek changes hasStreamFinished().
+    // An explicit user stop must never be mistaken for an EOF restart.
+    const bool restartAfterEOF=!transport.isPlaying() && transport.hasStreamFinished();
     if(nextSourceFrame!=window.sourceFrame)
         transport.setNextReadPosition(window.sourceFrame);
     // EOF stops AudioTransportSource. Seeking alone does not restart it.
     // Do not flush a continuous cursor here: its resampler may still hold the
     // tail that was prefetched when the underlying reader reached EOF.
-    if(!transport.isPlaying())transport.start();
+    if(restartAfterEOF)transport.start();
     nextSourceFrame=window.sourceFrame+window.frames;
     juce::AudioSourceChannelInfo readInfo(&scratch,0,window.frames);
     transport.getNextAudioBlock(readInfo);

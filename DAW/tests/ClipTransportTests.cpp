@@ -25,7 +25,7 @@ static juce::AudioBuffer<float> playback(const Session& session,const juce::File
     juce::AudioFormatReaderSource readerSource(reader.release(),true);
     juce::AudioTransportSource transport;
     transport.setSource(&readerSource,0,nullptr,sourceRate);
-    transport.prepareToPlay(blockSize,44100);
+    transport.prepareToPlay(blockSize,44100);transport.start();
     juce::AudioBuffer<float> scratch(2,blockSize),result(2,frames);result.clear();
     juce::int64 next=-1;
     for(int pos=0;pos<frames;pos+=blockSize){
@@ -64,6 +64,25 @@ int main(){
             }
             for(int i=128;i<192;++i)require(actual.getSample(ch,i)==0,"gap not silent");
         }
+    }
+    // Explicit stop is distinct from EOF: a subsequent callback must not
+    // restart the reader behind the user's back. No device callback runs here,
+    // so JUCE stop may wait for its bounded timeout before this final read.
+    {
+        juce::AudioFormatManager formats;formats.registerBasicFormats();
+        juce::AudioFormatReaderSource reader(formats.createReaderFor(source),true);
+        juce::AudioTransportSource transport;
+        transport.setSource(&reader,0,nullptr,44100);transport.prepareToPlay(8,44100);transport.start();
+        juce::AudioBuffer<float> scratch(2,8);juce::int64 next=-1;
+        const auto clip=repeated.tracks[0].clips[0];
+        readClipWindow(transport,scratch,next,clip,60,44100,0,8);
+        require(!transport.hasStreamFinished(),"stop test must precede EOF");
+        transport.stop();
+        readClipWindow(transport,scratch,next,clip,60,44100,8,8);
+        require(!transport.isPlaying(),"explicit stop restarted");
+        readClipWindow(transport,scratch,next,clip,60,44100,16,8);
+        require(scratch.getMagnitude(0,8)==0,"stopped reader not silent");
+        transport.setSource(nullptr);transport.releaseResources();
     }
     // Both clips share one transport. The outgoing clip reaches EOF during the
     // crossfade; the incoming clip must still seek/restart/read its own offset.
