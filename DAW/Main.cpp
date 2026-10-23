@@ -980,12 +980,15 @@ public:
             return false;
         }
         const auto& clip=session.tracks[selectedClipTrack].clips[selectedClipIndex];
+        // Alt gives keyboard edits sixteenth-beat precision without changing
+        // the existing quarter-beat shortcuts or audio source files.
+        const double editStep=key.getModifiers().isAltDown()?0.0625:0.25;
         if(key.getKeyCode()=='[' || key.getKeyCode()==']'){
             const auto before=session;
             const bool changed=key.getKeyCode()=='['
-                ? session.trimClipLeft(selectedClipTrack,selectedClipIndex,clip.startBeat+0.25)
+                ? session.trimClipLeft(selectedClipTrack,selectedClipIndex,clip.startBeat+editStep)
                 : session.trimClipRight(selectedClipTrack,selectedClipIndex,
-                    clip.startBeat+clip.lengthBeats-0.25);
+                    clip.startBeat+clip.lengthBeats-editStep);
             if(changed){if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
                 clipUndo.push_back(before);clipRedo.clear();repaint();}
             return changed;
@@ -995,14 +998,14 @@ public:
         bool changed=false;
         if(key.getKeyCode()==juce::KeyPress::leftKey)
             changed=shift ? session.resizeClip(selectedClipTrack,selectedClipIndex,
-                         std::max(0.25,clip.lengthBeats-0.25))
+                         std::max(editStep,clip.lengthBeats-editStep))
                           : session.moveClip(selectedClipTrack,selectedClipIndex,
-                         std::max(0.0,clip.startBeat-0.25));
+                         std::max(0.0,clip.startBeat-editStep));
         else if(key.getKeyCode()==juce::KeyPress::rightKey)
             changed=shift ? session.resizeClip(selectedClipTrack,selectedClipIndex,
-                         clip.lengthBeats+0.25)
+                         clip.lengthBeats+editStep)
                           : session.moveClip(selectedClipTrack,selectedClipIndex,
-                         clip.startBeat+0.25);
+                         clip.startBeat+editStep);
         if(changed){
             const auto& previous=before.tracks[selectedClipTrack].clips[selectedClipIndex];
             const auto& current=session.tracks[selectedClipTrack].clips[selectedClipIndex];
