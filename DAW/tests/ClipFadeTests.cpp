@@ -69,5 +69,29 @@ int main(){
     }
     Clip a{"a",0,2,0,0,1},b{"b",1,2,0,1,0};
     assert(ClipEnvelope(a,60,1).gain(1)+ClipEnvelope(b,60,1).gain(1)==1);
+    // At half-sample positions, unfaded windows and envelopes must agree on
+    // every audible sample. The former reordered envelope math lost the entry
+    // sample at e.g. 7.5 * 137 / (60 * 44100) beats.
+    for(double rate:{8000.0,44100.0,48000.0,96000.0}){
+        for(int n=0;n<128;++n){
+            Clip clip{"clock.wav",(n+0.5)*137.0/(60.0*rate),20.0*137.0/(60.0*rate),0};
+            const auto window=overlap(0,160,rate,137,clip.startBeat,clip.lengthBeats);
+            const ClipEnvelope envelope(clip,137,rate);
+            assert(envelope.valid && envelope.start==window.offset && envelope.length==window.frames);
+            for(int frame=0;frame<160;++frame)
+                assert(envelope.gain(frame)==(frame>=window.offset && frame<window.offset+window.frames?1.0f:0.0f));
+        }
+    }
+    for(double invalid:{-1.0,std::numeric_limits<double>::quiet_NaN(),
+                        std::numeric_limits<double>::infinity(),1.0e300}){
+        Clip invalidClip{"bad",invalid,1,0};
+        const ClipEnvelope invalidEnvelope(invalidClip,120,48000);
+        assert(!invalidEnvelope.valid && invalidEnvelope.gain(0)==0);
+        invalidClip={"bad",0,1,0};invalidClip.fadeInBeats=invalid;
+        assert(!ClipEnvelope(invalidClip,120,48000).valid);
+    }
+    assert(!ClipEnvelope(a,0,48000).valid);
+    assert(!ClipEnvelope(a,120,std::numeric_limits<double>::infinity()).valid);
+    assert(e.gain(std::numeric_limits<int64_t>::min())==0);
     std::cout<<"Clip fade model, history and playback envelope regressions passed\n";
 }

@@ -12,17 +12,28 @@ namespace idw::daw {
 inline bool renderSessionWav(const Session& session,const juce::File& destination,
                             juce::String& error,int sampleRate=44100,float masterGain=1.0f,float ceilingDb=-1.0f,float lowDb=0.0f,float highDb=0.0f,
                             std::atomic<float>* progress=nullptr,std::atomic<bool>* cancel=nullptr){
-    if(session.bpm<=0 || sampleRate<8000 || sampleRate>192000 || !std::isfinite(masterGain) || !std::isfinite(ceilingDb) || !std::isfinite(lowDb) || !std::isfinite(highDb)){
+    if(!std::isfinite(session.bpm) || session.bpm<=0 || sampleRate<8000 || sampleRate>192000 || !std::isfinite(masterGain) || !std::isfinite(ceilingDb) || !std::isfinite(lowDb) || !std::isfinite(highDb)){
         error="Invalid bounce rate or tempo.";return false;
     }
     double lastBeat=0.0;
-    for(const auto& t:session.tracks)
-        for(const auto& c:t.clips)lastBeat=std::max(lastBeat,c.startBeat+c.lengthBeats);
+    for(const auto& t:session.tracks){
+        if(!std::isfinite(t.gain) || !std::isfinite(t.pan)){
+            error="Invalid track mix.";return false;
+        }
+        for(const auto& c:t.clips){
+            if(!ClipEnvelope(c,session.bpm,sampleRate).valid ||
+               !std::isfinite(c.sourceOffsetSeconds) || c.sourceOffsetSeconds<0){
+                error="Invalid clip timing or fade.";return false;
+            }
+            lastBeat=std::max(lastBeat,c.startBeat+c.lengthBeats);
+        }
+    }
     if(lastBeat<=0){error="Session has no clips.";return false;}
-    const int64_t frames=(int64_t)std::ceil(lastBeat*60.0/session.bpm*sampleRate);
-    if(frames<=0 || frames>(int64_t)sampleRate*60*60*4){
+    const double requestedFrames=std::ceil(lastBeat*60.0/session.bpm*sampleRate);
+    if(!std::isfinite(requestedFrames) || requestedFrames<=0 || requestedFrames>(double)sampleRate*60*60*4){
         error="Export duration must be under four hours.";return false;
     }
+    const int64_t frames=(int64_t)requestedFrames;
     if(destination.existsAsFile()){error="Choose a new WAV filename.";return false;}
     auto stream=std::unique_ptr<juce::FileOutputStream>(destination.createOutputStream());
     if(!stream){error="Cannot create WAV output.";return false;}
@@ -53,13 +64,17 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 formats.createReaderFor(juce::File(juce::String(clip.sourcePath))));
             if(!reader){error="Missing or unsupported audio: "+juce::String(clip.sourcePath);writer.reset();destination.deleteFile();return false;}
 
-            const int64_t start=(int64_t)std::llround(clip.startBeat*60.0/session.bpm*sampleRate);
-            const int64_t length=(int64_t)std::llround((clip.startBeat+clip.lengthBeats)*60.0/session.bpm*sampleRate)-start;
+            const ClipEnvelope envelope(clip,session.bpm,sampleRate);
+            const int64_t start=envelope.start,length=envelope.length;
             const float pan=std::clamp(track.pan,-1.0f,1.0f),gain=std::clamp(track.gain,0.0f,2.0f);
             const double sourceRate=reader->sampleRate;
-            clips.push_back({std::move(reader),start,start+length,
-                (int64_t)std::llround(clip.sourceOffsetSeconds*sourceRate),sourceRate,
-                gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1),ClipEnvelope(clip,session.bpm,sampleRate)});
+            int64_t sourceOffset=0;
+            if(!std::isfinite(sourceRate) || sourceRate<=0 ||
+               !roundedSampleFrame(clip.sourceOffsetSeconds*sourceRate,sourceOffset)){
+                error="Invalid source timing.";writer.reset();destination.deleteFile();return false;
+            }
+            clips.push_back({std::move(reader),start,start+length,sourceOffset,sourceRate,
+                gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1),envelope});
         }
     }
     const float outputCeiling=std::pow(10.0f,std::clamp(ceilingDb,-12.0f,-0.1f)/20.0f);
@@ -87,7 +102,13 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 writer.reset();destination.deleteFile();return false;
             }
             const double first=clip.offset+(begin-clip.start)*ratio;
-            const int64_t sourceStart=(int64_t)std::floor(first)-(ratio>1.0?12:0);
+            int64_t firstIndex=0;
+            if(!roundedSampleFrame(std::floor(first),firstIndex) ||
+               firstIndex>std::numeric_limits<int64_t>::max()-1000000){
+                error="Invalid source sample position.";
+                writer.reset();destination.deleteFile();return false;
+            }
+            const int64_t sourceStart=firstIndex-(ratio>1.0?12:0);
             // Validate in floating point before narrowing to int: malformed
             // source metadata must never trigger an out-of-range conversion.
             const double requestedCount=std::ceil(first-sourceStart+(number-1)*ratio)

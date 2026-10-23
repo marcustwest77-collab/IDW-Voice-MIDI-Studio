@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iostream>
 #include <atomic>
+#include <limits>
 int main(){
  using namespace idw::daw;
  auto root=juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("idw-bounce-test","",false);
@@ -115,6 +116,45 @@ int main(){
        originalStereo!=afterStereo || originalMono!=afterMono)
         throw std::runtime_error("source changed");
  }
+ // A half-sample clip entry previously rounded differently in the envelope
+ // and export window, silently dropping an unfaded sample.
+ Session halfSample;halfSample.bpm=137;halfSample.addTrack(TrackType::audio);
+ const double halfStart=7.5*137.0/(60.0*44100.0),halfLength=20.0*137.0/(60.0*44100.0);
+ halfSample.addClip(0,{stereo.getFullPathName().toStdString(),halfStart,halfLength,0.01});
+ const auto halfOutput=root.getChildFile("half-sample-entry.wav");
+ if(!renderSessionWav(halfSample,halfOutput,error))throw std::runtime_error(error.toStdString());
+ auto halfReader=std::unique_ptr<juce::AudioFormatReader>(wav.createReaderFor(halfOutput.createInputStream().release(),true));
+ if(!halfReader)throw std::runtime_error("half sample reader");
+ juce::AudioBuffer<float> halfAudio(2,(int)halfReader->lengthInSamples);
+ if(!halfReader->read(&halfAudio,0,halfAudio.getNumSamples(),0,true,true))throw std::runtime_error("half sample read");
+ const auto halfWindow=overlap(0,halfAudio.getNumSamples(),44100,137,halfStart,halfLength);
+ for(int i=0;i<halfAudio.getNumSamples();++i){
+    const float expected=i>=halfWindow.offset && i<halfWindow.offset+halfWindow.frames?0.2f:0;
+    if(std::abs(halfAudio.getSample(0,i)-expected)>0.0001f ||
+       std::abs(halfAudio.getSample(1,i)+expected)>0.0001f)
+        throw std::runtime_error("half-sample envelope/window disagreement");
+ }
+ halfReader.reset();
+ // Invalid projects fail without leaving output files or touching existing data.
+ const auto invalidOutput=root.getChildFile("invalid-timing.wav");
+ const auto rejectBounce=[&](const Session& invalid){
+    error.clear();
+    if(renderSessionWav(invalid,invalidOutput,error) || error.isEmpty() || invalidOutput.existsAsFile())
+        throw std::runtime_error("invalid timing export was not rejected cleanly");
+ };
+ for(double bad:{std::numeric_limits<double>::quiet_NaN(),std::numeric_limits<double>::infinity(),-1.0}){
+    auto invalid=stereoSession;invalid.bpm=bad;rejectBounce(invalid);
+    invalid=stereoSession;invalid.tracks[0].clips[0].sourceOffsetSeconds=bad;rejectBounce(invalid);
+    invalid=stereoSession;invalid.tracks[0].clips[0].fadeOutBeats=bad;rejectBounce(invalid);
+ }
+ auto invalid=stereoSession;invalid.tracks[0].clips[0].lengthBeats=1.0e300;rejectBounce(invalid);
+ invalid=stereoSession;invalid.tracks[0].clips[0].sourceOffsetSeconds=1.0e300;rejectBounce(invalid);
+ invalid=stereoSession;invalid.tracks[0].gain=std::numeric_limits<float>::quiet_NaN();rejectBounce(invalid);
+ invalid=stereoSession;invalid.tracks[0].clips[0].lengthBeats=8*60*60+1;rejectBounce(invalid);
+ if(!invalidOutput.replaceWithText("keep existing output"))throw std::runtime_error("existing output setup");
+ if(renderSessionWav(stereoSession,invalidOutput,error) || invalidOutput.loadFileAsString()!="keep existing output")
+    throw std::runtime_error("existing output modified");
+ invalidOutput.deleteFile();
  // Check the last sample before a clip and the first sample of the clip,
  // including a transition that lands inside an export processing block.
  const auto boundaryOutput=root.getChildFile("boundary.wav");

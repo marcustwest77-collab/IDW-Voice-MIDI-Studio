@@ -431,3 +431,16 @@ interaction correctness. Windows manual acceptance: drag both handles, apply eac
 curve, undo/redo a pair, save/reopen, listen while seeking into an overlap, and
 compare the exported WAV. Previous basic multitrack tests were user-reported as
 passed; new fade-specific Windows testing remains separate.
+
+
+### Shared clip sample clock and malformed timing regression
+
+Playback windows, fade boundaries and WAV export now use the same checked beat-to-frame
+conversion. This fixes a one-sample discrepancy at some fractional clip positions
+(for example 7.5 * 137 / (60 * 44100) beats at 137 BPM / 44.1 kHz), where an unfaded
+clip could lose its first audible sample. Tests sweep half-sample boundaries across
+four rates and inspect an actual stereo WAV export. Invalid/unrepresentable timing
+is rejected before integer conversion; invalid playback windows are silent, and
+invalid exports return an error without retaining a partial WAV. Tests also cover
+cursor overflow, invalid fades/tempo/mix and preservation of an existing output.
+These automated cases do not replace hardware audio or UI interaction testing.
