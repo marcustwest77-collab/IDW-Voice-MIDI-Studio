@@ -972,7 +972,8 @@ public:
     }
     void mouseDown(const juce::MouseEvent& e) override {
         draggingClip=false;
-        selectedClipValid=false;
+        // Keep the selected clip when clicking the ruler to position a split.
+        if(!(e.y>=330 && e.y<366 && e.x>=205))selectedClipValid=false;
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load() ||
            aiPanel.isVisible() || connectPanel.isVisible())return;
         // The Neo Mixer overview doubles as a channel selector when stopped.
