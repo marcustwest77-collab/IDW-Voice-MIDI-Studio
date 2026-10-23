@@ -8,6 +8,7 @@
 #include "SessionModel.h"
 #include "ClipEnvelope.h"
 #include "ClipPlayback.h"
+#include "WaveformView.h"
 #include "SessionHistory.h"
 #include <optional>
 #include "TimelineMath.h"
@@ -21,6 +22,7 @@
 #include "AIStatusSnapshot.h"
 #include <atomic>
 #include <memory>
+#include <map>
 #include <thread>
 #if JUCE_WINDOWS
 #ifndef NOMINMAX
@@ -1232,6 +1234,24 @@ public:
                 if(clipX>=getWidth()-25){++renderedClipIndex;continue;}
                 g.setColour(track.type==idw::daw::TrackType::audio ? neoTheme.accentColour().darker(0.72f) : neoTheme.accentColour().darker(0.92f));
                 g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
+                if(track.type==idw::daw::TrackType::audio && clipWidth>8){
+                    const auto waveform=waveformThumbnails.find(clip.sourcePath);
+                    const auto interval=idw::daw::clipWaveformWindow(clip,session.bpm);
+                    if(waveform!=waveformThumbnails.end() && interval &&
+                       waveform->second->getTotalLength()>0){
+                        // Clip the preview to the visible lane, but map its time
+                        // against the entire clip (including trimmed source offset).
+                        g.saveState();
+                        g.reduceClipRegion(clipX+3,y+25,
+                            juce::jmax(0,juce::jmin(clipWidth-6,getWidth()-28-clipX)),
+                            trackHeight-39);
+                        g.setColour(juce::Colours::white.withAlpha(0.60f));
+                        waveform->second->drawChannels(g,
+                            juce::Rectangle<int>(clipX+3,y+25,clipWidth-6,trackHeight-39),
+                            interval->startSeconds,interval->endSeconds,0.95f);
+                        g.restoreState();
+                    }
+                }
                 if(selectedClipValid && renderedTrackIndex==selectedClipTrack && renderedClipIndex==selectedClipIndex){
                     g.setColour(neoTheme.accentColour());
                     g.drawRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX),(float)trackHeight-18,4.0f,2.0f);
@@ -1495,6 +1515,9 @@ private:
         for(auto& slot:sources)slot->transport.releaseResources();
     }
     void changeListenerCallback(juce::ChangeBroadcaster* source) override {
+        for(const auto& entry:waveformThumbnails){
+            if(entry.second.get()==source){repaint();return;}
+        }
         if(source==&deviceManager){
             // Device selector changes are delivered on the message thread.
             // Do not rewrite routes while audio recording is in progress.
@@ -1881,6 +1904,20 @@ private:
         int count=0;for(auto& slot:sources)if(slot->reader)++count;
         return count;
     }
+    void cacheWaveform(const juce::File& file){
+        if(!file.existsAsFile())return;
+        const auto path=file.getFullPathName().toStdString();
+        if(waveformThumbnails.find(path)!=waveformThumbnails.end())return;
+        // AudioThumbnail builds a reduced-resolution peak cache in the background.
+        // Never decode a full WAV in paint() or in the real-time audio callback.
+        auto thumbnail=std::make_unique<juce::AudioThumbnail>(512,formats,waveformCache);
+        thumbnail->addChangeListener(this);
+        if(!thumbnail->setSource(new juce::FileInputSource(file))){
+            thumbnail->removeChangeListener(this);
+            return;
+        }
+        waveformThumbnails.emplace(path,std::move(thumbnail));
+    }
     bool restoreProject(const juce::File& project){
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return false;
         idw::daw::Session restored;
@@ -1944,6 +1981,8 @@ private:
         clipUndo.clear();clipRedo.clear();dragHistorySnapshot.reset();
         draggingClip=false;selectedClipValid=false;
         sources=std::move(staged);
+        waveformThumbnails.clear();
+        for(const auto& slot:sources)if(slot->reader)cacheWaveform(slot->file);
         armedTracks.fill(false); // Reopening a project must never arm recording automatically.
         selectedTrack=0;sessionFrames.store(0);playheadBeats=0;
         tempo.setValue(session.bpm,juce::dontSendNotification);
@@ -2052,6 +2091,7 @@ private:
         if(!session.addClip(target->trackIndex,{take.getFullPathName().toStdString(),takeStartBeat,beatLength,trim}))return false;
         target->transport.setSource(source.get(),0,nullptr,rate);
         target->file=take;target->sourcePath=take.getFullPathName().toStdString();target->reader=std::move(source);
+        cacheWaveform(take);
         selectedTrack=target->trackIndex;
         ensureSelectedTrackVisible();
         juce::Logger::writeToLog("IDW vocal take imported: "+take.getFullPathName()+
@@ -2649,6 +2689,7 @@ private:
             target->file=file;target->sourcePath=file.getFullPathName().toStdString();target->reader=std::move(source);
             session.addClip(target->trackIndex,{file.getFullPathName().toStdString(),0.0,
                 sourceRate>0 ? (double)target->reader->getAudioFormatReader()->lengthInSamples/sourceRate*session.bpm/60.0 : 0.0,0.0});
+            cacheWaveform(file);
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
@@ -2716,6 +2757,8 @@ private:
     IDWLoopbackCapture loopbackCapture;
     std::vector<std::pair<std::size_t,juce::File>> multiTakes;
     juce::AudioFormatManager formats;
+    juce::AudioThumbnailCache waveformCache{32};
+    std::map<std::string,std::unique_ptr<juce::AudioThumbnail>> waveformThumbnails;
     std::atomic<int64_t> sessionFrames{0};
     // Allocated on the message thread before transport starts; audio only reads.
     std::shared_ptr<const idw::daw::Session> playbackSession;
