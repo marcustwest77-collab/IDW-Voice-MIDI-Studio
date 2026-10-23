@@ -79,3 +79,29 @@ and drags are not covered by the new history yet.
 6. Save and reopen the project; verify split segments and source offsets persist.
 7. Verify actions at clip boundaries are ignored safely.
 8. Test first and second split segments for audio continuity **after multi-clip playback support is implemented**.
+
+## Multi-clip playback development (2026-10-22)
+
+Source changes committed:
+- `3e2a94a`: audio callback traverses all clips referencing the loaded source on each track and mixes timeline overlaps.
+- `2d9ede0`: deterministic split, trim, gap and overlap timeline regression tests.
+- `abc77d8`: registration of `IDWDAWMultiClip` in CTest.
+
+**Status: implementation committed, not yet Windows-verified.**
+
+Known limitations requiring follow-up:
+- Playback currently uses a single loaded source per track. Clips referencing a different source path on the same track are not handled by this implementation.
+- Seeking the JUCE transport for each clip/window on the audio callback requires real-time stability and audio continuity validation.
+- The new pure timeline regression does not exercise JUCE audio output, resampling or file I/O.
+- GitHub Actions success and artifact availability must be confirmed from a new run before beta release can be called passed.
+
+### Windows QA checklist
+
+1. Check that the latest Actions run completed successfully and `IDWDAWMultiClip` passed.
+2. Import or record one known-good 8-second WAV at a fixed tempo.
+3. Split inside the clip; play through the split and listen for missing audio, duplication, stutters or clicks.
+4. Trim left and right edges; confirm playback begins and ends at the edited points without changing the original WAV.
+5. Move the second clip later; confirm a silent gap and correct resumption.
+6. Move the second clip over the first; confirm both segments are audible and mixed.
+7. Save, close and reopen; repeat playback checks.
+8. Confirm recording, automatic import and existing offline export remain functional.
