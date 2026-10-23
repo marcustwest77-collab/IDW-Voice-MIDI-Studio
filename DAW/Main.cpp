@@ -6,6 +6,7 @@
 #include "PianoRoll.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
+#include <optional>
 #include "TimelineMath.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
@@ -1024,6 +1025,7 @@ public:
                 dragOriginalStart=c.startBeat;dragOriginalLength=c.lengthBeats;
                 dragResize=e.x>=x+w-10;
                 draggingClip=true;
+                dragHistorySnapshot=session;
                 grabKeyboardFocus();
                 repaint();
                 break;
@@ -1056,7 +1058,23 @@ public:
             session.moveClip(dragTrack,dragIndex,snap(dragOriginalStart+delta));
         repaint();
     }
-    void mouseUp(const juce::MouseEvent&) override { draggingClip=false; draggingMixerFader=false; draggingMixerPan=false; }
+    void mouseUp(const juce::MouseEvent&) override {
+        if(draggingClip && dragHistorySnapshot &&
+           dragTrack<session.tracks.size() &&
+           dragIndex<session.tracks[dragTrack].clips.size() &&
+           dragTrack<dragHistorySnapshot->tracks.size() &&
+           dragIndex<dragHistorySnapshot->tracks[dragTrack].clips.size()){
+            const auto& oldClip=dragHistorySnapshot->tracks[dragTrack].clips[dragIndex];
+            const auto& newClip=session.tracks[dragTrack].clips[dragIndex];
+            if(oldClip.startBeat!=newClip.startBeat || oldClip.lengthBeats!=newClip.lengthBeats){
+                if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
+                clipUndo.push_back(std::move(*dragHistorySnapshot));
+                clipRedo.clear();
+            }
+        }
+        dragHistorySnapshot.reset();
+        draggingClip=false;draggingMixerFader=false;draggingMixerPan=false;
+    }
     void paint(juce::Graphics& g) override {
         g.fillAll(useCustomBackground?customBackground:juce::Colour(activeSkin==1?0xff17100b:activeSkin==2?0xff091c18:activeSkin==3?0xff160d22:0xff080f1c));
         // Neo Studio control decks: visual grouping stays outside the audio callback.
@@ -1262,6 +1280,7 @@ private:
         refreshMixer();
         repaint();
     }
+    std::optional<idw::daw::Session> dragHistorySnapshot;
     bool draggingClip=false,dragResize=false;
     bool selectedClipValid=false;
     size_t selectedClipTrack=0,selectedClipIndex=0;
