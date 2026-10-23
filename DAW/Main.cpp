@@ -941,6 +941,7 @@ public:
             return changed;
         }
         const bool shift=key.getModifiers().isShiftDown();
+        const auto before=session;
         bool changed=false;
         if(key.getKeyCode()==juce::KeyPress::leftKey)
             changed=shift ? session.resizeClip(selectedClipTrack,selectedClipIndex,
@@ -952,7 +953,17 @@ public:
                          clip.lengthBeats+0.25)
                           : session.moveClip(selectedClipTrack,selectedClipIndex,
                          clip.startBeat+0.25);
-        if(changed)repaint();
+        if(changed){
+            const auto& previous=before.tracks[selectedClipTrack].clips[selectedClipIndex];
+            const auto& current=session.tracks[selectedClipTrack].clips[selectedClipIndex];
+            if(previous.startBeat!=current.startBeat ||
+               previous.lengthBeats!=current.lengthBeats){
+                if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
+                clipUndo.push_back(before);
+                clipRedo.clear();
+                repaint();
+            }
+        }
         return changed;
     }
     void mouseWheelMove(const juce::MouseEvent& event,
