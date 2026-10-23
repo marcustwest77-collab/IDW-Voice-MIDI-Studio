@@ -63,6 +63,38 @@ public:
         tracks[trackIndex].clips[clipIndex].lengthBeats=newLengthBeats;
         return true;
     }
+    // Clip metadata only: source WAVs are never modified.
+    bool splitClip(size_t track,size_t index,double beat) {
+        if(track>=tracks.size() || index>=tracks[track].clips.size() || !std::isfinite(beat))return false;
+        auto& clips=tracks[track].clips;
+        const auto original=clips[index];
+        const double first=beat-original.startBeat;
+        if(first<=1.0e-6 || first>=original.lengthBeats-1.0e-6)return false;
+        auto second=original;
+        second.startBeat=beat;
+        second.lengthBeats-=first;
+        second.sourceOffsetSeconds+=first*secondsPerBeat();
+        clips[index].lengthBeats=first;
+        clips.insert(clips.begin()+static_cast<std::ptrdiff_t>(index+1),second);
+        return true;
+    }
+    bool trimClipLeft(size_t track,size_t index,double beat) {
+        if(track>=tracks.size() || index>=tracks[track].clips.size() || !std::isfinite(beat))return false;
+        auto& clip=tracks[track].clips[index];
+        const double delta=beat-clip.startBeat;
+        if(delta<0 || delta>=clip.lengthBeats-1.0e-6)return false;
+        clip.startBeat=beat;clip.lengthBeats-=delta;
+        clip.sourceOffsetSeconds+=delta*secondsPerBeat();
+        return true;
+    }
+    bool trimClipRight(size_t track,size_t index,double beat) {
+        if(track>=tracks.size() || index>=tracks[track].clips.size() || !std::isfinite(beat))return false;
+        auto& clip=tracks[track].clips[index];
+        const double newLength=beat-clip.startBeat;
+        if(newLength<=1.0e-6 || newLength>clip.lengthBeats)return false;
+        clip.lengthBeats=newLength;
+        return true;
+    }
     bool addMidiNote(size_t trackIndex,MidiNote note) {
         if(trackIndex>=tracks.size() || tracks[trackIndex].type!=TrackType::midi ||
            tracks[trackIndex].notes.size()>=100000 || note.pitch<0 || note.pitch>127 ||
