@@ -875,6 +875,36 @@ public:
                               juce::dontSendNotification);
 #endif
     }
+    bool clipEditAvailable() const {
+        return !playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() &&
+            !exportRunning.load() && !aiPanel.isVisible() && !connectPanel.isVisible();
+    }
+    void checkpointClips(){
+        if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
+        clipUndo.push_back(session);
+        clipRedo.clear();
+    }
+    void restoreClipHistory(bool undo){
+        if(!clipEditAvailable())return;
+        auto& from=undo?clipUndo:clipRedo;
+        auto& to=undo?clipRedo:clipUndo;
+        if(from.empty())return;
+        to.push_back(session);
+        session=std::move(from.back());
+        from.pop_back();
+        selectedClipValid=false;
+        repaint();
+    }
+    void splitSelectedClip(){
+        if(!clipEditAvailable() || !selectedClipValid ||
+           selectedClipTrack>=session.tracks.size() ||
+           selectedClipIndex>=session.tracks[selectedClipTrack].clips.size())return;
+        const auto before=session;
+        if(session.splitClip(selectedClipTrack,selectedClipIndex,playheadBeats)){
+            if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
+            clipUndo.push_back(before);clipRedo.clear();repaint();
+        }
+    }
     bool keyPressed(const juce::KeyPress& key) override {
         if(key.getKeyCode()==juce::KeyPress::F9Key && !key.getModifiers().isAltDown() &&
            !key.getModifiers().isCommandDown()){
@@ -2467,6 +2497,7 @@ private:
     idw::daw::Session session;
     std::atomic<bool> playing{false};
     double playheadBeats=0;
+    std::vector<idw::daw::Session> clipUndo,clipRedo;
     double takeStartBeat=0.0;
     bool takeWasOverdub=false;
     size_t recordTargetTrack=0;
