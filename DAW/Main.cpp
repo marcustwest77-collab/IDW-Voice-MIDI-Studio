@@ -10,6 +10,7 @@
 #include "ClipPlayback.h"
 #include "WaveformView.h"
 #include "TimelineZoom.h"
+#include "SnapGrid.h"
 #include "SessionHistory.h"
 #include <optional>
 #include "TimelineMath.h"
@@ -979,6 +980,14 @@ public:
         if(key.getModifiers().isCommandDown() && key.getKeyCode()=='Y'){
             restoreClipHistory(false);return true;
         }
+        if(key.getKeyCode()=='G' && !key.getModifiers().isCommandDown() &&
+           !key.getModifiers().isAltDown() && !key.getModifiers().isShiftDown() &&
+           !playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() &&
+           !exportRunning.load() && !aiPanel.isVisible() && !connectPanel.isVisible()){
+            snapGrid=idw::daw::nextSnapGrid(snapGrid);
+            repaint();
+            return true;
+        }
         if(key.getKeyCode()=='S' && !key.getModifiers().isCommandDown()){
             splitSelectedClip();return true;
         }
@@ -1090,7 +1099,8 @@ public:
         }
         constexpr int top=366, height=70, left=205;
         if(e.y>=330 && e.y<366 && e.x>=left){
-            playheadBeats=std::round(idw::daw::timelineBeatAtPixel(e.x,left,timelineZoomLevel,timelineScrollBeats)*4.0)/4.0;
+            playheadBeats=idw::daw::snapTimelineBeat(
+                idw::daw::timelineBeatAtPixel(e.x,left,timelineZoomLevel,timelineScrollBeats),snapGrid);
             repaint();return;
         }
         if(e.y<top || e.x<left || session.tracks.empty())return;
@@ -1148,8 +1158,11 @@ public:
         if(!draggingClip || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) ||
            exportRunning.load())return;
         const auto delta=(double)(e.x-dragOriginX)/idw::daw::timelinePixelsPerBeat(timelineZoomLevel);
-        // Quarter-beat snapping on the visible timeline.
-        const auto snap=[](double beats){return std::max(0.0,std::round(beats*4.0)/4.0);};
+        // Quantize only the edit target, not the clip's original metadata.
+        // The drag always recalculates from its start snapshot to avoid drift.
+        const auto snap=[this](double beats){
+            return idw::daw::snapTimelineBeat(beats,snapGrid);
+        };
         if(dragFade && dragHistorySnapshot){
             const auto& original=dragHistorySnapshot->tracks[dragTrack].clips[dragIndex];
             const double duration=std::clamp((dragFade==1?original.fadeInBeats:original.fadeOutBeats)+
@@ -1162,7 +1175,10 @@ public:
             // dragging back does not permanently clamp its fade durations.
             if(dragHistorySnapshot)
                 session.tracks[dragTrack].clips[dragIndex]=dragHistorySnapshot->tracks[dragTrack].clips[dragIndex];
-            session.resizeClip(dragTrack,dragIndex,std::max(0.25,snap(dragOriginalLength+delta)));
+            session.resizeClip(dragTrack,dragIndex,std::max(
+                snapGrid==idw::daw::SnapGrid::off ? 0.001 :
+                    idw::daw::snapGridStep(snapGrid),
+                snap(dragOriginalLength+delta)));
         }else
             session.moveClip(dragTrack,dragIndex,snap(dragOriginalStart+delta));
         repaint();
@@ -1206,7 +1222,7 @@ public:
         g.setColour(juce::Colour(activeSkin==1?0xff352a1e:activeSkin==2?0xff173e32:activeSkin==3?0xff302340:0xff122338));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         g.setFont(juce::Font(juce::FontOptions(10.0f)));
-        g.drawText("ZOOM "+juce::String(juce::roundToInt(100.0*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)/12.0))+"%  Shift+wheel",
+        g.drawText("ZOOM "+juce::String(juce::roundToInt(100.0*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)/12.0))+"%  SNAP "+idw::daw::snapGridLabel(snapGrid)+" (G)",
                    24,top+5,177,26,juce::Justification::centredLeft);
         const int firstBar=juce::jmax(0,(int)std::floor(timelineScrollBeats/4.0));
         const int barsVisible=juce::jmax(1,(int)std::ceil(
@@ -1424,6 +1440,7 @@ private:
     size_t arrangementScrollTrack=0;
     int timelineZoomLevel=idw::daw::defaultTimelineZoom;
     double timelineScrollBeats=0.0;
+    idw::daw::SnapGrid snapGrid=idw::daw::SnapGrid::quarterBeat;
     double timelineContentEndBeat() const {
         double end=0.0;
         for(const auto& track:session.tracks)
