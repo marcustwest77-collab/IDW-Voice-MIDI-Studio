@@ -29,12 +29,21 @@ int main(){
     Clip beyond{"short.wav",0,8,9};
     auto extended=clipWaveformWindow(beyond,120);
     assert(extended && near(extended->startSeconds,9) && near(extended->endSeconds,13));
+    // Zero is a valid source offset (an untrimmed WAV), but not a valid
+    // tempo or clip length. Check the independent constraints separately.
+    Clip zeroOffset=beyond;zeroOffset.sourceOffsetSeconds=0;
+    auto fromBeginning=clipWaveformWindow(zeroOffset,120);
+    assert(fromBeginning && near(fromBeginning->startSeconds,0) &&
+           near(fromBeginning->endSeconds,4));
     for(double bad:{0.0,-1.0,std::numeric_limits<double>::quiet_NaN(),
                     std::numeric_limits<double>::infinity()}){
         assert(!clipWaveformWindow(beyond,bad));
-        Clip invalid=beyond;invalid.sourceOffsetSeconds=bad;
+        Clip invalid=beyond;invalid.lengthBeats=bad;
         assert(!clipWaveformWindow(invalid,120));
-        invalid=beyond;invalid.lengthBeats=bad;
+    }
+    for(double bad:{-1.0,std::numeric_limits<double>::quiet_NaN(),
+                    std::numeric_limits<double>::infinity()}){
+        Clip invalid=beyond;invalid.sourceOffsetSeconds=bad;
         assert(!clipWaveformWindow(invalid,120));
     }
     Clip huge=beyond;huge.sourceOffsetSeconds=1.7e308;huge.lengthBeats=1e308;
