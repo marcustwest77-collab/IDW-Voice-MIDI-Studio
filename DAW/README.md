@@ -484,3 +484,17 @@ With a clip selected and playback stopped, **Alt+Left/Right** moves it by
 Without Alt, the existing shortcuts still use quarter-beat increments.
 These are metadata-only edits with the existing undo/redo history; they are
 not sample-level waveform edits. Mouse dragging still uses quarter-beat snapping.
+
+### Horizontal arrangement zoom
+
+Use **Ctrl+=** (or **Ctrl++**) to zoom in, **Ctrl+-** to zoom out,
+and **Ctrl+0** to reset to 100%. The arrangement ruler displays the current
+zoom level (50%, 75%, 100%, 150%, 200%). The same scale drives clip
+drawing, fade handles, clip hit testing, mouse dragging and playhead placement,
+so zoom does not alter source offsets or project audio. This is a view-only
+feature; the visible timeline is anchored at beat zero and horizontal scrolling
+is not yet implemented. Existing quarter-beat mouse snapping is unchanged.
+
+`IDWDAWZoom` checks pixel-to-beat round trips at every supported scale.
+A Windows GUI check is still required for keyboard focus, small clips, fade
+handles and rendering at the zoom extremes.
