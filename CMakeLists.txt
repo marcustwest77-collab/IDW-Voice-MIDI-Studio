@@ -105,6 +105,7 @@ target_compile_definitions(IDWVoiceMIDIStudio_Standalone PRIVATE JUCE_USE_CUSTOM
 option(IDW_BUILD_DAW "Build experimental V14 DAW shell" OFF)
 if(IDW_BUILD_DAW)
     juce_add_gui_app(IDWDAW
+        VERSION 14.0.0
         PRODUCT_NAME "IDW DAW V14 Foundation"
         COMPANY_NAME "In Da Wind Entertainment"
         BUNDLE_ID "com.idwent.idwdaw")
