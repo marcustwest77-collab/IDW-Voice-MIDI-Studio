@@ -497,8 +497,27 @@ horizontally; ordinary mouse wheel still scrolls track lanes vertically.
 Scrolling is bounded by the last clip plus a four-beat margin, and never
 changes playback or saved clip positions. The ruler, waveform previews, fade
 handles, playhead, clip hit testing and dragging all use the same scroll offset.
-Existing quarter-beat mouse snapping is unchanged.
+The default mouse snap remains quarter-beat; use **G** to change the grid.
 
 `IDWDAWZoom` checks pixel-to-beat round trips at every supported scale.
 A Windows GUI check is still required for keyboard focus, small clips, fade
 handles and rendering at the zoom extremes.
+
+### Adjustable arrangement snap grid
+
+With the arrangement focused and playback stopped, press **G** to cycle:
+**1/4 beat (default) → 1/16 beat → 1 beat → Off → 1/4 beat**.
+The current mode appears beside the zoom indicator in the ruler.
+The grid applies to dragging clips to move them, dragging their right edges
+to resize them, and clicking the ruler to set the playhead. Fade handles
+remain continuous for smooth fades, and existing Alt fine-edit keyboard
+shortcuts are unchanged. Off preserves the dragged beat position subject
+to model validation (minimum clip duration 0.001 beat when resizing).
+Undo/redo continues to record actual clip metadata changes; no source
+WAV bytes are modified. The snap choice is an editor preference for the
+current app session, not saved in the project file.
+
+`IDWDAWSnap` tests each mode's quantization, cycling and invalid input.
+The Windows GUI test should confirm that G changes the label and that
+dragging clips at each grid setting behaves as expected, including with
+horizontal scrolling and zoom.
