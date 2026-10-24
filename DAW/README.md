@@ -492,8 +492,12 @@ and **Ctrl+0** to reset to 100%. The arrangement ruler displays the current
 zoom level (50%, 75%, 100%, 150%, 200%). The same scale drives clip
 drawing, fade handles, clip hit testing, mouse dragging and playhead placement,
 so zoom does not alter source offsets or project audio. This is a view-only
-feature; the visible timeline is anchored at beat zero and horizontal scrolling
-is not yet implemented. Existing quarter-beat mouse snapping is unchanged.
+feature. **Shift+mouse wheel** over the ruler or arrangement scrolls the timeline
+horizontally; ordinary mouse wheel still scrolls track lanes vertically.
+Scrolling is bounded by the last clip plus a four-beat margin, and never
+changes playback or saved clip positions. The ruler, waveform previews, fade
+handles, playhead, clip hit testing and dragging all use the same scroll offset.
+Existing quarter-beat mouse snapping is unchanged.
 
 `IDWDAWZoom` checks pixel-to-beat round trips at every supported scale.
 A Windows GUI check is still required for keyboard focus, small clips, fade
