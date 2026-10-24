@@ -21,8 +21,10 @@ int main(){
         assert(near(snapTimelineBeat(-10.0,mode),0));
         assert(near(snapTimelineBeat(std::numeric_limits<double>::quiet_NaN(),mode),0));
         assert(near(snapTimelineBeat(std::numeric_limits<double>::infinity(),mode),0));
-        for(double beat:{0.0,0.0625,1.0,20.0})
+        for(double beat:{0.0,1.0,20.0})
             assert(near(snapTimelineBeat(beat,mode),beat));
+        if(mode==SnapGrid::sixteenthBeat || mode==SnapGrid::off)
+            assert(near(snapTimelineBeat(0.0625,mode),0.0625));
     }
     std::cout<<"Snap grid tests passed\n";
 }
