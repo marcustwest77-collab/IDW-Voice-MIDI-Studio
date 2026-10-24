@@ -964,7 +964,7 @@ public:
                 const int next=code=='0' ? idw::daw::defaultTimelineZoom :
                     juce::jlimit(0,idw::daw::maxTimelineZoom,
                         timelineZoomLevel+(code=='-' ? -1 : 1));
-                if(next!=timelineZoomLevel){timelineZoomLevel=next;repaint();}
+                if(next!=timelineZoomLevel){timelineZoomLevel=next;clampTimelineScroll();repaint();}
                 return true;
             }
         }
@@ -1035,6 +1035,17 @@ public:
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
         const int mixerTop=getHeight()-mixerHeight-48;
         const int arrangementBottom=mixerTop>420 ? mixerTop-8 : getHeight()-48;
+        if(event.x>=205 && event.x<getWidth()-20 && event.y>=330 &&
+           event.y<arrangementBottom && !aiPanel.isVisible() && !connectPanel.isVisible() &&
+           (event.mods.isShiftDown() || std::abs(wheel.deltaX)>std::abs(wheel.deltaY))){
+            const double motion=std::abs(wheel.deltaX)>std::abs(wheel.deltaY)
+                ? -wheel.deltaX : -wheel.deltaY;
+            timelineScrollBeats=idw::daw::timelineClampScroll(
+                timelineScrollBeats+motion*16.0,timelineContentEndBeat(),
+                (double)juce::jmax(1,getWidth()-230),timelineZoomLevel);
+            repaint();
+            return;
+        }
         if(event.x>=20 && event.x<getWidth()-20 && event.y>=366 && event.y<arrangementBottom && !session.tracks.empty() && !aiPanel.isVisible() && !connectPanel.isVisible()){
             const int visible=juce::jmax(1,(arrangementBottom-366)/70);
             const size_t maximum=session.tracks.size()>(size_t)visible ?
@@ -1079,7 +1090,7 @@ public:
         }
         constexpr int top=366, height=70, left=205;
         if(e.y>=330 && e.y<366 && e.x>=left){
-            playheadBeats=std::round(idw::daw::timelineBeatAtPixel(e.x,left,timelineZoomLevel)*4.0)/4.0;
+            playheadBeats=std::round(idw::daw::timelineBeatAtPixel(e.x,left,timelineZoomLevel,timelineScrollBeats)*4.0)/4.0;
             repaint();return;
         }
         if(e.y<top || e.x<left || session.tracks.empty())return;
@@ -1092,9 +1103,9 @@ public:
         const auto& clips=session.tracks[ti].clips;
         for(size_t i=clips.size();i>0;--i){
             const auto& c=clips[i-1];
-            const int x=juce::roundToInt(idw::daw::timelinePixelAtBeat(c.startBeat,left,timelineZoomLevel));
+            const int x=juce::roundToInt(idw::daw::timelinePixelAtBeat(c.startBeat,left,timelineZoomLevel,timelineScrollBeats));
             const int w=juce::jmax(2,juce::roundToInt(c.lengthBeats*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)));
-            if(e.x>=x && e.x<x+w && e.y>=top+((int)ti-(int)arrangementScrollTrack)*height+8 &&
+            if(e.x>=left && e.x>=x && e.x<x+w && e.y>=top+((int)ti-(int)arrangementScrollTrack)*height+8 &&
                e.y<top+((int)ti-(int)arrangementScrollTrack+1)*height-10){
                 dragTrack=ti;dragIndex=i-1;dragOriginX=e.x;
                 selectedClipTrack=ti;selectedClipIndex=i-1;selectedClipValid=true;
@@ -1195,11 +1206,16 @@ public:
         g.setColour(juce::Colour(activeSkin==1?0xff352a1e:activeSkin==2?0xff173e32:activeSkin==3?0xff302340:0xff122338));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
         g.setFont(juce::Font(juce::FontOptions(10.0f)));
-        g.drawText("ZOOM "+juce::String(juce::roundToInt(100.0*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)/12.0))+"%  Ctrl +/-  Ctrl 0",
+        g.drawText("ZOOM "+juce::String(juce::roundToInt(100.0*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)/12.0))+"%  Shift+wheel",
                    24,top+5,177,26,juce::Justification::centredLeft);
-        for(int bar=0;bar<17;++bar){
-            const int x=juce::roundToInt(idw::daw::timelinePixelAtBeat(bar*4.0,left,timelineZoomLevel));
-            if(x>=getWidth()-30)break;
+        const int firstBar=juce::jmax(0,(int)std::floor(timelineScrollBeats/4.0));
+        const int barsVisible=juce::jmax(1,(int)std::ceil(
+            (double)juce::jmax(1,getWidth()-left)/(
+                4.0*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)))+2);
+        for(int bar=firstBar;bar<firstBar+barsVisible;++bar){
+            const int x=juce::roundToInt(idw::daw::timelinePixelAtBeat(
+                bar*4.0,left,timelineZoomLevel,timelineScrollBeats));
+            if(x<left || x>=getWidth()-30)continue;
             g.drawVerticalLine(x,(float)top,(float)(getHeight()-30));
             g.drawText(juce::String(bar+1),x+3,top,40,30,juce::Justification::centredLeft);
         }
@@ -1246,9 +1262,15 @@ public:
                        83,y+32,100,12,juce::Justification::centredRight);
             size_t renderedClipIndex=0;
             for(const auto& clip:track.clips){
-                const int clipX=juce::roundToInt(idw::daw::timelinePixelAtBeat(clip.startBeat,left,timelineZoomLevel));
+                const int clipX=juce::roundToInt(idw::daw::timelinePixelAtBeat(clip.startBeat,left,timelineZoomLevel,timelineScrollBeats));
                 const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)));
-                if(clipX>=getWidth()-25){++renderedClipIndex;continue;}
+                if(clipX>=getWidth()-25 || clipX+clipWidth<=left){
+                    ++renderedClipIndex;continue;
+                }
+                // Prevent scrolled clips and waveform labels from painting over
+                // the track controls at the left of the arrangement.
+                g.saveState();
+                g.reduceClipRegion(left,y,getWidth()-left-25,trackHeight);
                 g.setColour(track.type==idw::daw::TrackType::audio ? neoTheme.accentColour().darker(0.72f) : neoTheme.accentColour().darker(0.92f));
                 g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
                 if(track.type==idw::daw::TrackType::audio && clipWidth>8){
@@ -1294,13 +1316,14 @@ public:
                 ++renderedClipIndex;
                 g.setColour(juce::Colours::white);
                 g.drawFittedText(juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
+                g.restoreState();
             }
             y+=trackHeight;
             ++renderedTrackIndex;
             if(y>getHeight()-60)break;
         }
-        const int head=juce::roundToInt(idw::daw::timelinePixelAtBeat(playheadBeats,left,timelineZoomLevel));
-        if(head<getWidth()-30){
+        const int head=juce::roundToInt(idw::daw::timelinePixelAtBeat(playheadBeats,left,timelineZoomLevel,timelineScrollBeats));
+        if(head>=left && head<getWidth()-30){
             g.setColour(juce::Colour(0xff17d9ff));
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
         }
@@ -1400,6 +1423,19 @@ private:
     bool neoMixerExpanded=false;
     size_t arrangementScrollTrack=0;
     int timelineZoomLevel=idw::daw::defaultTimelineZoom;
+    double timelineScrollBeats=0.0;
+    double timelineContentEndBeat() const {
+        double end=0.0;
+        for(const auto& track:session.tracks)
+            for(const auto& clip:track.clips)
+                end=std::max(end,clip.startBeat+clip.lengthBeats);
+        return end;
+    }
+    void clampTimelineScroll(){
+        timelineScrollBeats=idw::daw::timelineClampScroll(
+            timelineScrollBeats,timelineContentEndBeat(),
+            (double)juce::jmax(1,getWidth()-230),timelineZoomLevel);
+    }
     bool draggingMixerFader=false,draggingMixerPan=false;
     void updateMixerPan(int mouseX,int stripX,int stripWidth){
         if(selectedTrack>=session.tracks.size())return;
