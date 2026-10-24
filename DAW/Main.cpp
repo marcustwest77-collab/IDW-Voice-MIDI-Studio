@@ -9,6 +9,7 @@
 #include "ClipEnvelope.h"
 #include "ClipPlayback.h"
 #include "WaveformView.h"
+#include "TimelineZoom.h"
 #include "SessionHistory.h"
 #include <optional>
 #include "TimelineMath.h"
@@ -957,6 +958,16 @@ public:
             });
     }
     bool keyPressed(const juce::KeyPress& key) override {
+        if(key.getModifiers().isCommandDown() && !key.getModifiers().isAltDown()){
+            const int code=key.getKeyCode();
+            if(code=='=' || code=='+' || code=='-' || code=='0'){
+                const int next=code=='0' ? idw::daw::defaultTimelineZoom :
+                    juce::jlimit(0,idw::daw::maxTimelineZoom,
+                        timelineZoomLevel+(code=='-' ? -1 : 1));
+                if(next!=timelineZoomLevel){timelineZoomLevel=next;repaint();}
+                return true;
+            }
+        }
         if(key.getKeyCode()==juce::KeyPress::F9Key && !key.getModifiers().isAltDown() &&
            !key.getModifiers().isCommandDown()){
             startDictation();
@@ -1068,7 +1079,7 @@ public:
         }
         constexpr int top=366, height=70, left=205;
         if(e.y>=330 && e.y<366 && e.x>=left){
-            playheadBeats=std::max(0.0,std::round(((double)e.x-left)/12.0*4.0)/4.0);
+            playheadBeats=std::round(idw::daw::timelineBeatAtPixel(e.x,left,timelineZoomLevel)*4.0)/4.0;
             repaint();return;
         }
         if(e.y<top || e.x<left || session.tracks.empty())return;
@@ -1081,8 +1092,8 @@ public:
         const auto& clips=session.tracks[ti].clips;
         for(size_t i=clips.size();i>0;--i){
             const auto& c=clips[i-1];
-            const int x=left+juce::roundToInt(c.startBeat*12.0);
-            const int w=juce::jmax(2,juce::roundToInt(c.lengthBeats*12.0));
+            const int x=juce::roundToInt(idw::daw::timelinePixelAtBeat(c.startBeat,left,timelineZoomLevel));
+            const int w=juce::jmax(2,juce::roundToInt(c.lengthBeats*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)));
             if(e.x>=x && e.x<x+w && e.y>=top+((int)ti-(int)arrangementScrollTrack)*height+8 &&
                e.y<top+((int)ti-(int)arrangementScrollTrack+1)*height-10){
                 dragTrack=ti;dragIndex=i-1;dragOriginX=e.x;
@@ -1094,8 +1105,8 @@ public:
                 dragFade=0;
                 const int rowTop=top+((int)ti-(int)arrangementScrollTrack)*height;
                 if(e.y<rowTop+22){
-                    const int inX=x+juce::roundToInt(c.fadeInBeats*12.0);
-                    const int outX=x+w-juce::roundToInt(c.fadeOutBeats*12.0);
+                    const int inX=x+juce::roundToInt(c.fadeInBeats*idw::daw::timelinePixelsPerBeat(timelineZoomLevel));
+                    const int outX=x+w-juce::roundToInt(c.fadeOutBeats*idw::daw::timelinePixelsPerBeat(timelineZoomLevel));
                     if(std::abs(e.x-inX)<=7 || std::abs(e.x-outX)<=7)
                         dragFade=std::abs(e.x-inX)<=std::abs(e.x-outX)?1:2;
                 }
@@ -1125,7 +1136,7 @@ public:
         }
         if(!draggingClip || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) ||
            exportRunning.load())return;
-        const auto delta=(double)(e.x-dragOriginX)/12.0;
+        const auto delta=(double)(e.x-dragOriginX)/idw::daw::timelinePixelsPerBeat(timelineZoomLevel);
         // Quarter-beat snapping on the visible timeline.
         const auto snap=[](double beats){return std::max(0.0,std::round(beats*4.0)/4.0);};
         if(dragFade && dragHistorySnapshot){
@@ -1183,8 +1194,11 @@ public:
         const int top=330, trackHeight=70, left=205;
         g.setColour(juce::Colour(activeSkin==1?0xff352a1e:activeSkin==2?0xff173e32:activeSkin==3?0xff302340:0xff122338));g.fillRect(20,top,getWidth()-40,36);
         g.setColour(juce::Colours::lightgrey);
+        g.setFont(juce::Font(juce::FontOptions(10.0f)));
+        g.drawText("ZOOM "+juce::String(juce::roundToInt(100.0*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)/12.0))+"%  Ctrl +/-  Ctrl 0",
+                   24,top+5,177,26,juce::Justification::centredLeft);
         for(int bar=0;bar<17;++bar){
-            const int x=left+bar*48;
+            const int x=juce::roundToInt(idw::daw::timelinePixelAtBeat(bar*4.0,left,timelineZoomLevel));
             if(x>=getWidth()-30)break;
             g.drawVerticalLine(x,(float)top,(float)(getHeight()-30));
             g.drawText(juce::String(bar+1),x+3,top,40,30,juce::Justification::centredLeft);
@@ -1232,8 +1246,8 @@ public:
                        83,y+32,100,12,juce::Justification::centredRight);
             size_t renderedClipIndex=0;
             for(const auto& clip:track.clips){
-                const int clipX=left+juce::roundToInt(clip.startBeat*12.0);
-                const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*12.0));
+                const int clipX=juce::roundToInt(idw::daw::timelinePixelAtBeat(clip.startBeat,left,timelineZoomLevel));
+                const int clipWidth=juce::jmax(2,juce::roundToInt(clip.lengthBeats*idw::daw::timelinePixelsPerBeat(timelineZoomLevel)));
                 if(clipX>=getWidth()-25){++renderedClipIndex;continue;}
                 g.setColour(track.type==idw::daw::TrackType::audio ? neoTheme.accentColour().darker(0.72f) : neoTheme.accentColour().darker(0.92f));
                 g.fillRoundedRectangle((float)clipX,(float)y+8,(float)juce::jmin(clipWidth,getWidth()-25-clipX), (float)trackHeight-18,4.0f);
@@ -1263,7 +1277,7 @@ public:
                 const auto drawFade=[&](bool fadeIn){
                     const double beats=fadeIn?clip.fadeInBeats:clip.fadeOutBeats;
                     const auto curve=fadeIn?clip.fadeInCurve:clip.fadeOutCurve;
-                    const float width=(float)(beats*12.0);
+                    const float width=(float)(beats*idw::daw::timelinePixelsPerBeat(timelineZoomLevel));
                     const float edge=(float)(fadeIn?clipX:clipX+clipWidth);
                     juce::Path path;
                     for(int point=0;point<=24;++point){
@@ -1285,7 +1299,7 @@ public:
             ++renderedTrackIndex;
             if(y>getHeight()-60)break;
         }
-        const int head=left+(int)(playheadBeats*12.0);
+        const int head=juce::roundToInt(idw::daw::timelinePixelAtBeat(playheadBeats,left,timelineZoomLevel));
         if(head<getWidth()-30){
             g.setColour(juce::Colour(0xff17d9ff));
             g.drawVerticalLine(head,(float)top,(float)(getHeight()-30));
@@ -1385,6 +1399,7 @@ public:
 private:
     bool neoMixerExpanded=false;
     size_t arrangementScrollTrack=0;
+    int timelineZoomLevel=idw::daw::defaultTimelineZoom;
     bool draggingMixerFader=false,draggingMixerPan=false;
     void updateMixerPan(int mouseX,int stripX,int stripWidth){
         if(selectedTrack>=session.tracks.size())return;
