@@ -18,6 +18,7 @@
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
 #include "SessionPersistence.h"
 #include "SessionRecovery.h"
+#include "AudioRelink.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
 #include "IDWConnectPanel.h"
@@ -1988,6 +1989,7 @@ private:
         repaint();
     }
     struct AudioSlot {
+        ~AudioSlot(){transport.setSource(nullptr);}
         juce::AudioTransportSource transport;
         std::unique_ptr<juce::AudioFormatReaderSource> reader;
         juce::File file;
@@ -2041,10 +2043,82 @@ private:
         }
         return true;
     }
+    bool applyAudioRelink(const std::string& missingPath,const juce::File& replacement,juce::String& error){
+        if(!recoveryIdle()){error="Stop playback, recording and export before relinking.";return false;}
+        idw::daw::Session candidate;
+        if(!idw::daw::prepareAudioRelink(session,missingPath,replacement,formats,candidate,error))return false;
+        const auto replacementPath=replacement.getFullPathName().toStdString();
+        std::vector<std::unique_ptr<AudioSlot>> staged;
+        for(size_t track=0;track<candidate.tracks.size();++track){
+            if(candidate.tracks[track].type!=idw::daw::TrackType::audio)continue;
+            const bool affected=std::any_of(session.tracks[track].clips.begin(),session.tracks[track].clips.end(),
+                [&](const auto& clip){return clip.sourcePath==missingPath;});
+            if(!affected)continue;
+            const bool loaded=std::any_of(sources.begin(),sources.end(),[&](const auto& slot){
+                return slot->trackIndex==track && slot->sourcePath==replacementPath && slot->reader!=nullptr;
+            });
+            if(loaded)continue;
+            auto reader=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(replacement));
+            if(!reader || reader->sampleRate<=0 || reader->lengthInSamples<=0){
+                error="The selected file became unavailable. No clips were changed.";return false;
+            }
+            auto slot=std::make_unique<AudioSlot>();slot->trackIndex=track;
+            const double rate=reader->sampleRate;
+            slot->reader=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
+            slot->transport.setSource(slot->reader.get(),0,nullptr,rate);
+            slot->file=replacement;slot->sourcePath=replacementPath;
+            if(preparedBlockSize>0){
+                slot->scratch.setSize(2,preparedBlockSize,false,true,false);
+                slot->transport.prepareToPlay(preparedBlockSize,deviceRate);
+            }
+            staged.push_back(std::move(slot));
+        }
+        // Keep prepared readers for undo/redo. Only sources referenced by current
+        // clips contribute audio; returning to a missing path correctly restores silence.
+        auto nextHistory=clipHistory;
+        if(!nextHistory.record(session,candidate)){error="No clip changes were made.";return false;}
+        sources.reserve(sources.size()+staged.size());
+        for(auto& slot:staged)sources.push_back(std::move(slot));
+        session=std::move(candidate);clipHistory=std::move(nextHistory);
+        cacheWaveform(replacement);selectedClipValid=false;
+        commandStatus.setText("Audio relinked. Save the project to keep the new location.",juce::dontSendNotification);
+        repaint();return true;
+    }
+    void showMissingAudioMenu(){
+        if(!recoveryIdle())return;
+        const auto missing=idw::daw::missingAudioSources(session,formats);
+        if(missing.empty()){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                "Audio files found","No missing or unreadable audio sources were found.");
+            return;
+        }
+        const auto beforeJson=juce::JSON::toString(idw::daw::sessionToJson(session));
+        juce::PopupMenu menu;menu.addSectionHeader("Choose the missing source to locate");
+        for(size_t i=0;i<missing.size();++i)menu.addItem(1+(int)i,juce::String(missing[i]));
+        menu.showMenuAsync(juce::PopupMenu::Options(),
+            [safe=juce::Component::SafePointer<Workstation>(this),missing,beforeJson](int result){
+                if(safe==nullptr || result<=0 || (size_t)result>missing.size() || !safe->recoveryIdle() ||
+                   juce::JSON::toString(idw::daw::sessionToJson(safe->session))!=beforeJson)return;
+                const auto path=missing[(size_t)result-1];
+                safe->relinkChooser=std::make_unique<juce::FileChooser>(
+                    "Locate replacement audio (all clips using this source)",
+                    juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*.wav;*.aif;*.aiff");
+                safe->relinkChooser->launchAsync(juce::FileBrowserComponent::openMode |
+                    juce::FileBrowserComponent::canSelectFiles,[safe,path,beforeJson](const juce::FileChooser& chooser){
+                        const auto file=chooser.getResult();
+                        if(safe==nullptr || file==juce::File{} || !safe->recoveryIdle() ||
+                           juce::JSON::toString(idw::daw::sessionToJson(safe->session))!=beforeJson)return;
+                        juce::String error;
+                        if(!safe->applyAudioRelink(path,file,error))
+                            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Relink failed",error);
+                    });
+            });
+    }
     void showProjectMenu(){
         if(!recoveryIdle())return;
         const auto copies=recovery.copies();
         juce::PopupMenu menu;menu.addItem(1,"Open saved project...");
+        menu.addItem(3,"Relink missing audio...");
         juce::PopupMenu recoverMenu;
         for(size_t i=0;i<copies.size() && i<20;++i){
             idw::daw::Session ignored;juce::File origin;
@@ -2058,6 +2132,7 @@ private:
         menu.showMenuAsync(juce::PopupMenu::Options(),[safe=juce::Component::SafePointer<Workstation>(this),copies](int result){
             if(safe==nullptr || !safe->recoveryIdle())return;
             if(result==1){safe->openProjectFile();return;}
+            if(result==3){safe->showMissingAudioMenu();return;}
             if(result==2){
                 if(safe->recovery.directory().createDirectory().wasOk())
                     safe->recovery.directory().revealToUser();
@@ -2091,13 +2166,7 @@ private:
                 auto file=juce::File::isAbsolutePath(savedPath)
                     ? juce::File(savedPath)
                     : project.getParentDirectory().getChildFile(savedPath);
-                if(!file.existsAsFile()){
-                    const auto name=file.getFileName();
-                    const auto adjacent=project.getParentDirectory().getChildFile(name);
-                    const auto packaged=project.getParentDirectory().getChildFile("Audio").getChildFile(name);
-                    if(adjacent.existsAsFile())file=adjacent;
-                    else if(packaged.existsAsFile())file=packaged;
-                }
+                // Do not guess by basename: different recordings can share a name.
                 clip.sourcePath=file.getFullPathName().toStdString();
                 if(!file.existsAsFile()){++missing;continue;}
                 if(std::find(opened.begin(),opened.end(),file)!=opened.end())continue;
@@ -2145,7 +2214,7 @@ private:
         tempo.setValue(session.bpm,juce::dontSendNotification);
         refreshMixer();repaint();
         if(missing>0)juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
-            "Missing audio",juce::String(missing)+" audio file(s) could not be located. Their clip references remain in the project.");
+            "Missing audio",juce::String(missing)+" audio file(s) could not be located. Their clip references remain in the project. Use OPEN / RECOVER > Relink missing audio to locate replacements.");
         return true;
     }
     void openProjectFile(){
@@ -2952,7 +3021,7 @@ public:
     double deviceRate=48000.0;
     int preparedBlockSize=0;
     std::vector<std::unique_ptr<AudioSlot>> sources;
-    std::unique_ptr<juce::FileChooser> chooser,projectChooser,calibrationChooser,referenceChooser;
+    std::unique_ptr<juce::FileChooser> chooser,projectChooser,calibrationChooser,referenceChooser,relinkChooser;
     juce::Slider tempo;
 };
 class DAWApplication final : public juce::JUCEApplication {

@@ -589,3 +589,33 @@ Regression coverage checks gain mathematics, playback/export sample agreement,
 unaffected adjacent clips, both crossfade curves, source-byte preservation,
 undo/redo, split/trim retention, recovery, legacy project defaults and invalid
 metadata. GUI slider, Apply/Cancel and listening checks remain manual.
+
+### Relink missing audio
+
+Stop playback and choose OPEN / RECOVER > Relink missing audio. The menu lists
+distinct missing or unreadable sources by their full saved paths. Select one,
+then locate its replacement WAV/AIFF. All clips referencing that exact source,
+including splits and references on other tracks, are updated together. Different
+sources sharing a filename are not automatically matched.
+
+The replacement must decode and cover every referenced clip's source offset and
+duration. A shorter, empty or unsupported file is rejected without changing the
+project. Canceling the chooser or changing the project while it is open also
+leaves it unchanged. Relinking preserves timeline positions, trims, fades, clip
+gain, notes and track settings; no audio files are modified or moved.
+
+Relinking is one undoable clip-history edit. Prepared readers are retained for
+undo/redo during the current project; only currently referenced sources play.
+Undo can return clips to a missing path and silence them until redone. Save the
+project to persist new paths; recovery copies also capture them. Relinking cannot
+establish that a chosen file contains the correct performance: listen to confirm.
+
+IDWDAWRelink checks moved WAVs, exact-path matching, cross-track updates, same-name
+isolation, rejected short/unreadable/missing candidates, unchanged state after
+failure, metadata retention, undo/redo, save/reopen, recovery, source-byte
+preservation, and actual playback/export parity at several block sizes. File
+chooser interaction and hardware listening remain manual acceptance checks.
+
+Project loading no longer guesses an absolute source replacement from an adjacent
+file with the same basename. Relative portable-project paths still resolve against
+the project folder; moved absolute sources use the explicit relink workflow.
