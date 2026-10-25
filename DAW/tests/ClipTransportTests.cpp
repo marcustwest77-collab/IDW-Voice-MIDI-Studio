@@ -234,6 +234,67 @@ int main(){
     compare(playback(deletion,source,0,160,31),beforeDeleteAudio,0.00001f);
     juce::MemoryBlock afterDeleteBytes;
     require(source.loadFileAsData(afterDeleteBytes) && afterDeleteBytes==originalSource,"deletion changed source bytes");
+    // A real editing sequence must restore every intermediate audio state,
+    // including the duplicate that a later deletion removed.
+    for(auto curve:{FadeCurve::linear,FadeCurve::equalPower}){
+        const auto chainRoot=root.getChildFile(curve==FadeCurve::linear?"chain-linear":"chain-power");
+        require(chainRoot.createDirectory().wasOk(),"chain fixture directory");
+        Session edited;edited.bpm=60;edited.addTrack(TrackType::audio);
+        require(edited.addClip(0,{path,0,64.0/44100,32.0/44100}),"chain first clip");
+        require(edited.addClip(0,{path,128.0/44100,32.0/44100,96.0/44100}),"chain neighbor");
+        ClipEditHistory chainHistory;
+        std::vector<Session> states{edited};
+        const auto saveEdit=[&](){
+            require(chainHistory.record(states.back(),edited),"chain history entry");
+            states.push_back(edited);
+        };
+        require(edited.setClipFades(0,0,8.0/44100,16.0/44100,curve,curve),"chain fades");saveEdit();
+        require(edited.setClipGain(0,0,-6),"chain gain");saveEdit();
+        require(edited.duplicateClip(0,0),"chain duplicate");saveEdit();
+        require(edited.removeClip(0,1),"chain deletion");saveEdit();
+        std::vector<juce::AudioBuffer<float>> audio;
+        for(size_t i=0;i<states.size();++i)
+            audio.push_back(bounceAudio(states[i],chainRoot.getChildFile("state-"+juce::String((int)i)+".wav")));
+        for(int ch=0;ch<2;++ch){
+            for(int frame=0;frame<64;++frame)
+                require(std::abs(audio[3].getSample(ch,64+frame)-audio[2].getSample(ch,frame))<0.00001f,
+                        "chain duplicate does not repeat edited audio");
+            for(int frame=64;frame<128;++frame)
+                require(audio[4].getSample(ch,frame)==0,"chain deleted copy not silent");
+            for(size_t i=1;i<audio.size();++i)for(int frame=128;frame<160;++frame)
+                require(std::abs(audio[i].getSample(ch,frame)-audio[0].getSample(ch,frame))<0.00001f,
+                        "chain changed neighboring audio");
+        }
+        const auto verifyState=[&](size_t index,const juce::String& tag){
+            require(sameClips(edited.tracks[0].clips,states[index].tracks[0].clips),"chain metadata restoration");
+            compare(bounceAudio(edited,chainRoot.getChildFile(tag+".wav")),audio[index],0.00001f);
+            for(int block:{1,17,64,256})
+                compare(playback(edited,source,0,160,block),audio[index],0.00001f);
+        };
+        verifyState(4,"final");
+        for(int i=3;i>=0;--i){
+            require(chainHistory.undo(edited)==ClipEditHistory::Result::applied,"chain undo");
+            verifyState((size_t)i,"undo-"+juce::String(i));
+        }
+        require(chainHistory.undo(edited)==ClipEditHistory::Result::empty,"chain undo boundary");
+        for(size_t i=1;i<states.size();++i){
+            require(chainHistory.redo(edited)==ClipEditHistory::Result::applied,"chain redo");
+            verifyState(i,"redo-"+juce::String((int)i));
+        }
+        require(chainHistory.redo(edited)==ClipEditHistory::Result::empty,"chain redo boundary");
+        require(chainHistory.undo(edited)==ClipEditHistory::Result::applied,"chain branch undo");
+        const auto beforeBranch=edited;
+        require(edited.setClipGain(0,1,-12) && chainHistory.record(beforeBranch,edited),"chain branch edit");
+        const auto branched=edited;
+        require(chainHistory.redo(edited)==ClipEditHistory::Result::empty &&
+                sameClips(edited.tracks[0].clips,branched.tracks[0].clips),"chain stale redo preserved");
+        const auto branchAudio=bounceAudio(edited,chainRoot.getChildFile("branch.wav"));
+        for(int block:{1,17,64,256})compare(playback(edited,source,0,160,block),branchAudio,0.00001f);
+        require(chainHistory.undo(edited)==ClipEditHistory::Result::applied,"chain branch undo gain");
+        verifyState(3,"branch-undo");
+        juce::MemoryBlock unchanged;
+        require(source.loadFileAsData(unchanged) && unchanged==originalSource,"chain changed source WAV");
+    }
     // Repeat at a different source rate. Compare repeated sections, not against
     // export's different resampling algorithm; both reads should be identical.
     const auto resampled=root.getChildFile("48k.wav");makeSource(resampled,48000);
