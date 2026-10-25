@@ -17,6 +17,34 @@
 #include <iostream>
 int main(){
  using namespace idw::daw;
+ // Invalid saved tempo must not silently change timing or replace live work.
+ Session tempoOriginal;tempoOriginal.setTempo(97.5);tempoOriginal.addTrack(TrackType::audio);
+ tempoOriginal.addClip(0,{"keep.wav",2,4,0.5,0.25,0.5,FadeCurve::linear,FadeCurve::equalPower,-6});
+ const auto tempoSnapshot=juce::JSON::toString(sessionToJson(tempoOriginal));
+ for(const juce::var invalidTempo : {juce::var(),juce::var("120"),juce::var(true),
+      juce::var(0),juce::var(-1),juce::var(19.99),juce::var(300.01),
+      juce::var(std::numeric_limits<double>::quiet_NaN()),
+      juce::var(std::numeric_limits<double>::infinity())}){
+    auto data=sessionToJson(tempoOriginal);
+    data.getDynamicObject()->setProperty("bpm",invalidTempo);
+    auto output=tempoOriginal;
+    if(sessionFromJson(data,output) || juce::JSON::toString(sessionToJson(output))!=tempoSnapshot)
+        throw std::runtime_error("invalid saved tempo accepted or replaced current project");
+ }
+ {
+    auto data=sessionToJson(tempoOriginal);data.getDynamicObject()->removeProperty("bpm");
+    auto output=tempoOriginal;
+    if(sessionFromJson(data,output) || juce::JSON::toString(sessionToJson(output))!=tempoSnapshot)
+        throw std::runtime_error("missing tempo accepted or changed current project");
+ }
+ for(double bpm:{20.0,97.5,120.0,300.0}){
+    auto data=sessionToJson(tempoOriginal);data.getDynamicObject()->setProperty("bpm",bpm);
+    Session output;
+    if(!sessionFromJson(juce::JSON::parse(juce::JSON::toString(data)),output) ||
+       output.bpm!=bpm || !sameClips(output.tracks[0].clips,tempoOriginal.tracks[0].clips))
+        throw std::runtime_error("valid saved tempo or clip timing changed");
+ }
+
  Session duplicateSession;duplicateSession.addTrack(TrackType::audio);
  duplicateSession.addClip(0,{"duplicate.wav",1,4,0.25,0.5,1,FadeCurve::equalPower,FadeCurve::linear,-6});
  if(!duplicateSession.duplicateClip(0,0))throw std::runtime_error("duplicate persistence setup");

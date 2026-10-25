@@ -55,7 +55,12 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
     if(!root || root->getProperty("format").toString()!="idw-daw-session" ||
        (int)root->getProperty("version")!=1)return false;
     Session next;
-    next.setTempo((double)root->getProperty("bpm"));
+    // Loading must preserve saved timing exactly, not silently clamp/default it.
+    const auto savedTempo=root->getProperty("bpm");
+    if(!savedTempo.isDouble() && !savedTempo.isInt() && !savedTempo.isInt64())return false;
+    const double bpm=(double)savedTempo;
+    if(!std::isfinite(bpm) || bpm<20.0 || bpm>300.0)return false;
+    next.bpm=bpm;
     next.numerator=(int)root->getProperty("numerator");
     next.denominator=(int)root->getProperty("denominator");
     if(next.numerator<1 || next.numerator>32 || next.denominator<1 || next.denominator>32)return false;
