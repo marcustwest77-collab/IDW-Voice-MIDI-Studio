@@ -1,5 +1,6 @@
 #include "ClipPlayback.h"
 #include "OfflineBounce.h"
+#include "SessionHistory.h"
 #include <stdexcept>
 #include <iostream>
 #include <vector>
@@ -50,6 +51,8 @@ int main(){
         .getNonexistentChildFile("idw-clip-transport","",false);
     require(root.createDirectory().wasOk(),"fixture directory");
     const auto source=root.getChildFile("source.wav");makeSource(source,44100);
+    juce::MemoryBlock originalSource;
+    require(source.loadFileAsData(originalSource),"read original source bytes");
     Session repeated;repeated.bpm=60;repeated.addTrack(TrackType::audio);
     const auto path=source.getFullPathName().toStdString();
     require(repeated.addClip(0,{path,0,128.0/44100,0}),"first clip");
@@ -102,6 +105,46 @@ int main(){
         juce::AudioBuffer<float> expectedSeek(2,67);
         for(int ch=0;ch<2;++ch)expectedSeek.copyFrom(ch,0,expected,ch,83,67);
         compare(playback(overlapSession,source,83,67,17),expectedSeek,0.00001f);
+    }
+    // Exercise history through actual audio, not just metadata. Each curve
+    // starts from a dry session, with independent outside fades on the pair.
+    const auto bounceAudio=[&](const Session& session,const juce::File& output){
+        juce::String error;require(renderSessionWav(session,output,error),"history bounce");
+        juce::AudioFormatManager formats;formats.registerBasicFormats();
+        auto reader=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(output));
+        require(reader!=nullptr && reader->lengthInSamples==160,"history bounce length");
+        juce::AudioBuffer<float> samples(2,160);
+        require(reader->read(&samples,0,160,0,true,true),"history bounce samples");
+        return samples;
+    };
+    for(auto curve:{FadeCurve::linear,FadeCurve::equalPower}){
+        const auto historyRoot=root.getChildFile(curve==FadeCurve::linear?"history-linear":"history-power");
+        require(historyRoot.createDirectory().wasOk(),"history fixture directory");
+        Session session;session.bpm=60;session.addTrack(TrackType::audio);
+        session.addClip(0,{path,0,128.0/44100,0});
+        session.addClip(0,{path,64.0/44100,96.0/44100,16.0/44100});
+        const auto dry=session;
+        const auto baseline=bounceAudio(dry,historyRoot.getChildFile("history-dry.wav"));
+        ClipEditHistory history;
+        require(session.setClipFades(0,0,16.0/44100,0,curve,curve),"outside fade in");
+        require(session.setClipFades(0,1,0,16.0/44100,curve,curve),"outside fade out");
+        require(session.crossfadeClips(0,0,1,curve),"history crossfade");
+        require(history.record(dry,session),"record audio edit");
+        const auto faded=bounceAudio(session,historyRoot.getChildFile("history-faded.wav"));
+        require(std::abs(faded.getSample(0,80)-baseline.getSample(0,80))>0.01f,
+                "fade must audibly change fixture");
+        require(faded.getSample(0,0)==0 && faded.getSample(0,159)==0,"outside fade endpoints");
+        for(int block:{1,17,128,256})
+            compare(playback(session,source,0,160,block),faded,0.00001f);
+        require(history.undo(session)==ClipEditHistory::Result::applied,"audio undo");
+        compare(bounceAudio(session,historyRoot.getChildFile("history-undo.wav")),baseline,0.00001f);
+        compare(playback(session,source,0,160,17),baseline,0.00001f);
+        require(history.redo(session)==ClipEditHistory::Result::applied,"audio redo");
+        compare(bounceAudio(session,historyRoot.getChildFile("history-redo.wav")),faded,0.00001f);
+        compare(playback(session,source,0,160,31),faded,0.00001f);
+        juce::MemoryBlock currentSource;
+        require(source.loadFileAsData(currentSource) && currentSource==originalSource,
+                "fade/history/playback/export modified source WAV");
     }
     // Repeat at a different source rate. Compare repeated sections, not against
     // export's different resampling algorithm; both reads should be identical.
