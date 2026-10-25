@@ -17,6 +17,22 @@
 #include <iostream>
 int main(){
  using namespace idw::daw;
+ Session gainSession;gainSession.addTrack(TrackType::audio);
+ gainSession.addClip(0,{"gain.wav",0,4,0});gainSession.setClipGain(0,0,-7.5);
+ auto gainJson=sessionToJson(gainSession);Session gainRestored;
+ if(!sessionFromJson(gainJson,gainRestored) || gainRestored.tracks[0].clips[0].gainDb!=-7.5)
+    throw std::runtime_error("clip gain round trip");
+ auto* gainObject=gainJson.getDynamicObject()->getProperty("tracks").getArray()->getReference(0)
+    .getDynamicObject()->getProperty("clips").getArray()->getReference(0).getDynamicObject();
+ for(const juce::var invalid: {juce::var("loud"),juce::var(true),juce::var(-60.1),
+                              juce::var(12.1),juce::var(std::numeric_limits<double>::infinity())}){
+    gainObject->setProperty("gainDb",invalid);
+    if(sessionFromJson(gainJson,gainRestored) || gainRestored.tracks[0].clips[0].gainDb!=-7.5)
+        throw std::runtime_error("invalid clip gain accepted or changed existing project");
+ }
+ gainObject->removeProperty("gainDb");
+ if(!sessionFromJson(gainJson,gainRestored) || gainRestored.tracks[0].clips[0].gainDb!=0)
+    throw std::runtime_error("legacy clip gain must default to zero dB");
  Session fadeSession;fadeSession.addTrack(TrackType::audio);
  fadeSession.addClip(0,{"fade.wav",1,4,0.5});
  if(!fadeSession.setClipFades(0,0,0.5,1.25,FadeCurve::equalPower,FadeCurve::linear))

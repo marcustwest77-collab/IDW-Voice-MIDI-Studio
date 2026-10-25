@@ -79,6 +79,20 @@ public:
         g.drawRoundedRectangle(area,7.0f,highlighted ? 1.6f : 1.0f);
     }
 };
+class ClipGainDialog final : public juce::AlertWindow {
+public:
+    explicit ClipGainDialog(double db):juce::AlertWindow("Clip volume",
+        "Adjust this clip only. 0 dB keeps the original level.",juce::MessageBoxIconType::NoIcon){
+        gain.setRange(-60.0,12.0,0.1);
+        gain.setSliderStyle(juce::Slider::LinearHorizontal);
+        gain.setTextBoxStyle(juce::Slider::TextBoxRight,false,85,28);
+        gain.setTextValueSuffix(" dB");gain.setValue(db,juce::dontSendNotification);
+        gain.setSize(330,50);addCustomComponent(&gain);
+        addButton("Apply",1,juce::KeyPress(juce::KeyPress::returnKey));
+        addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
+    }
+    juce::Slider gain;
+};
 class Workstation final : public juce::AudioAppComponent, private juce::Timer, private juce::ChangeListener {
 public:
     Workstation() {
@@ -916,9 +930,30 @@ public:
             clipHistory.record(before,session);repaint();
         }
     }
+    void showClipGainDialog(size_t track,size_t index){
+        if(!clipEditAvailable() || track>=session.tracks.size() || index>=session.tracks[track].clips.size())return;
+        const auto beforeJson=juce::JSON::toString(idw::daw::sessionToJson(session));
+        auto* dialog=new ClipGainDialog(session.tracks[track].clips[index].gainDb);
+        dialog->enterModalState(true,juce::ModalCallbackFunction::create(
+            [safe=juce::Component::SafePointer<Workstation>(this),
+             gainDialog=juce::Component::SafePointer<ClipGainDialog>(dialog),track,index,beforeJson](int result){
+                if(result!=1 || safe==nullptr || gainDialog==nullptr || !safe->clipEditAvailable() ||
+                   juce::JSON::toString(idw::daw::sessionToJson(safe->session))!=beforeJson)return;
+                const auto before=safe->session;
+                if(safe->session.setClipGain(track,index,gainDialog->gain.getValue())){
+                    safe->clipHistory.record(before,safe->session);safe->repaint();
+                }
+            }),true);
+    }
     void showClipFadeMenu(size_t track,size_t index) {
         if(!clipEditAvailable())return;
         juce::PopupMenu menu;
+        juce::PopupMenu volume;
+        volume.addItem(7,"Adjust clip volume...");
+        volume.addItem(8,"Quieter: -1 dB");
+        volume.addItem(9,"Louder: +1 dB");
+        volume.addItem(10,"Reset to 0 dB");
+        menu.addSubMenu("Clip volume ("+juce::String(session.tracks[track].clips[index].gainDb,1)+" dB)",volume);
         menu.addSectionHeader("Clip fades (beats)");
         menu.addItem(1,"Clear fades");
         menu.addItem(2,"Fade in: 1/4 beat");
@@ -946,7 +981,11 @@ public:
                 const auto c=before.tracks[track].clips[index];
                 bool changed=false;
                 using Curve=idw::daw::FadeCurve;
-                if(result>=102){
+                if(result==7){safe->showClipGainDialog(track,index);return;}
+                if(result>=8 && result<=10){
+                    changed=safe->session.setClipGain(track,index,result==10?0.0:
+                        std::clamp(c.gainDb+(result==8?-1.0:1.0),-60.0,12.0));
+                }else if(result>=102){
                     const size_t partner=(size_t)((result-102)/2);
                     if(partner<partners.size())changed=safe->session.crossfadeClips(track,index,partners[partner],
                         result%2 ? Curve::equalPower : Curve::linear);
@@ -1331,7 +1370,7 @@ public:
                 drawFade(true);drawFade(false);
                 ++renderedClipIndex;
                 g.setColour(juce::Colours::white);
-                g.drawFittedText(juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
+                g.drawFittedText(juce::String(clip.gainDb,1)+" dB | "+juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
                 g.restoreState();
             }
             y+=trackHeight;

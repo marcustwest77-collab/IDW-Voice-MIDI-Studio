@@ -94,6 +94,33 @@ int main(){
     assert(!ClipEnvelope(a,0,48000).valid);
     assert(!ClipEnvelope(a,120,std::numeric_limits<double>::infinity()).valid);
     assert(e.gain(std::numeric_limits<int64_t>::min())==0);
+    // Clip gain is independent of track gain and survives edit/history operations.
+    Session gainSession;gainSession.addTrack(TrackType::audio);
+    assert(gainSession.addClip(0,{"gain.wav",0,4,0}));
+    assert(gainSession.addClip(0,{"other.wav",5,4,0}));
+    const auto originalGainSession=gainSession;
+    ClipEditHistory gainHistory;
+    assert(gainSession.setClipGain(0,0,-6.0));
+    assert(gainHistory.record(originalGainSession,gainSession));
+    assert(gainSession.tracks[0].gain==1 && gainSession.tracks[0].clips[1].gainDb==0);
+    assert(near(ClipEnvelope(gainSession.tracks[0].clips[0],120,48000).gain(100),
+                std::pow(10.0,-6.0/20.0)));
+    assert(gainHistory.undo(gainSession)==ClipEditHistory::Result::applied);
+    assert(gainSession.tracks[0].clips[0].gainDb==0);
+    assert(gainHistory.redo(gainSession)==ClipEditHistory::Result::applied);
+    assert(gainSession.tracks[0].clips[0].gainDb==-6);
+    assert(gainSession.splitClip(0,0,2));
+    assert(gainSession.tracks[0].clips[0].gainDb==-6 && gainSession.tracks[0].clips[1].gainDb==-6);
+    assert(gainSession.trimClipLeft(0,0,0.5) && gainSession.resizeClip(0,0,1));
+    assert(gainSession.tracks[0].clips[0].gainDb==-6);
+    for(double invalid:{-60.1,12.1,std::numeric_limits<double>::infinity(),
+                        std::numeric_limits<double>::quiet_NaN()}){
+        assert(!gainSession.setClipGain(0,0,invalid) && gainSession.tracks[0].clips[0].gainDb==-6);
+        auto clip=gainSession.tracks[0].clips[0];clip.gainDb=invalid;
+        assert(!gainSession.addClip(0,clip));
+        assert(!ClipEnvelope(clip,120,48000).valid);
+    }
+    assert(gainSession.setClipGain(0,0,-60) && gainSession.setClipGain(0,0,12));
     std::cout<<"Clip fade model, history and playback envelope regressions passed\n";
 }
 

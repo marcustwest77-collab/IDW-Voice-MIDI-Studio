@@ -23,6 +23,7 @@ inline juce::var sessionToJson(const Session& s) {
         juce::Array<juce::var> clips;
         for(const auto& c:t.clips){
             auto clip=std::make_unique<juce::DynamicObject>();
+            clip->setProperty("gainDb",c.gainDb);
             clip->setProperty("sourcePath",juce::String(c.sourcePath));
             clip->setProperty("startBeat",c.startBeat);
             clip->setProperty("lengthBeats",c.lengthBeats);
@@ -91,6 +92,12 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
         for(const auto& c:*clips.getArray()){
             auto* co=c.getDynamicObject();
             if(!co)return false;
+            double gainDb=0;
+            const auto savedGain=co->getProperty("gainDb");
+            if(!savedGain.isVoid()){
+                if(!savedGain.isDouble() && !savedGain.isInt() && !savedGain.isInt64())return false;
+                gainDb=(double)savedGain;if(!validClipGain(gainDb))return false;
+            }
             double fadeIn=0,fadeOut=0;
             int inCurve=0,outCurve=0;
             const auto readDuration=[&](const char* name,double& value){
@@ -112,7 +119,7 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
                 co->getProperty("sourcePath").toString().toStdString(),
                 (double)co->getProperty("startBeat"),(double)co->getProperty("lengthBeats"),
                 (double)co->getProperty("sourceOffsetSeconds"),fadeIn,fadeOut,
-                (FadeCurve)inCurve,(FadeCurve)outCurve}))return false;
+                (FadeCurve)inCurve,(FadeCurve)outCurve,gainDb}))return false;
         }
         // Older v1 sessions may omit the new MIDI notes property.
         const auto notes=obj->getProperty("notes");

@@ -15,6 +15,7 @@ int main(){
     Session session;session.addTrack(TrackType::audio);
     session.addClip(0,{"source.wav",0,4,0.25});
     session.setClipFades(0,0,0.5,1,FadeCurve::equalPower,FadeCurve::linear);
+    session.setClipGain(0,0,-7.5);
     session.addTrack(TrackType::midi);session.addMidiNote(1,{64,1,2,95});
     require(saveSession(session,project),"manual fixture");
     const auto originalProject=project.loadFileAsString(),originalAudio=audio.loadFileAsString();
@@ -27,7 +28,7 @@ int main(){
     const auto first=files.front();
     Session restored;juce::File origin;
     require(SessionRecovery::read(first,restored,origin) && origin==project,"read recovery origin");
-    require(restored.bpm==93 && restored.tracks[0].clips[0].fadeInCurve==FadeCurve::equalPower &&
+    require(restored.bpm==93 && restored.tracks[0].clips[0].gainDb==-7.5 && restored.tracks[0].clips[0].fadeInCurve==FadeCurve::equalPower &&
         restored.tracks[0].clips[0].sourcePath==audio.getFullPathName().toStdString() &&
         restored.tracks[1].notes.size()==1,"preserve fades notes and relative media location");
     require(recovery.checkpoint(session,project)==SessionRecovery::Result::unchanged &&

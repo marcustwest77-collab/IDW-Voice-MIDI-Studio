@@ -10,6 +10,7 @@ enum class FadeCurve { linear, equalPower };
 inline bool validFadeCurve(FadeCurve curve) {
     return curve==FadeCurve::linear || curve==FadeCurve::equalPower;
 }
+inline bool validClipGain(double db){return std::isfinite(db) && db>=-60.0 && db<=12.0;}
 struct Clip {
     std::string sourcePath;
     double startBeat=0.0;
@@ -17,6 +18,7 @@ struct Clip {
     double sourceOffsetSeconds=0.0;
     double fadeInBeats=0.0,fadeOutBeats=0.0;
     FadeCurve fadeInCurve=FadeCurve::linear,fadeOutCurve=FadeCurve::linear;
+    double gainDb=0.0; // Per-clip volume, independent of track gain.
     void clampFades() {
         fadeInBeats=std::min(fadeInBeats,lengthBeats);
         fadeOutBeats=std::min(fadeOutBeats,lengthBeats);
@@ -59,9 +61,14 @@ public:
             !std::isfinite(clip.fadeInBeats) || !std::isfinite(clip.fadeOutBeats) ||
             clip.fadeInBeats<0 || clip.fadeOutBeats<0 ||
             clip.fadeInBeats>clip.lengthBeats || clip.fadeOutBeats>clip.lengthBeats ||
-            !validFadeCurve(clip.fadeInCurve) || !validFadeCurve(clip.fadeOutCurve)) return false;
+            !validClipGain(clip.gainDb) || !validFadeCurve(clip.fadeInCurve) || !validFadeCurve(clip.fadeOutCurve)) return false;
         tracks[trackIndex].clips.push_back(std::move(clip));
         return true;
+    }
+    bool setClipGain(size_t track,size_t index,double db) {
+        if(track>=tracks.size() || tracks[track].type!=TrackType::audio ||
+           index>=tracks[track].clips.size() || !validClipGain(db))return false;
+        tracks[track].clips[index].gainDb=db;return true;
     }
     bool setClipFades(size_t track,size_t index,double in,double out,
                       FadeCurve inCurve=FadeCurve::linear,FadeCurve outCurve=FadeCurve::linear) {

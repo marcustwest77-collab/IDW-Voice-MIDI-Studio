@@ -146,6 +146,42 @@ int main(){
         require(source.loadFileAsData(currentSource) && currentSource==originalSource,
                 "fade/history/playback/export modified source WAV");
     }
+    // An independent numeric oracle catches a gain omitted or applied twice in
+    // both shared playback/export paths. The adjacent clip must remain unchanged.
+    for(double db:{-60.0,-6.0,6.0,12.0}){
+        const auto gainRoot=root.getChildFile("gain-"+juce::String(db,0));
+        require(gainRoot.createDirectory().wasOk(),"gain fixtures");
+        Session session;session.bpm=60;session.addTrack(TrackType::audio);
+        session.addClip(0,{path,0,64.0/44100,0});
+        session.addClip(0,{path,64.0/44100,96.0/44100,0});
+        const auto dry=session;
+        ClipEditHistory history;
+        require(session.setClipGain(0,0,db) && history.record(dry,session),"gain edit");
+        const auto exported=bounceAudio(session,gainRoot.getChildFile("gain.wav"));
+        for(int ch=0;ch<2;++ch)for(int i=0;i<160;++i){
+            const int sourceFrame=i<64?i:i-64;
+            const float sourceValue=ch==0?0.1f+sourceFrame/1024.0f:-0.05f-sourceFrame/2048.0f;
+            const double factor=i<64?std::pow(10.0,db/20.0):1.0;
+            require(std::abs(exported.getSample(ch,i)-sourceValue*factor)<0.00001,
+                    "clip gain numeric oracle or unaffected neighbor");
+        }
+        for(int block:{1,17,64,256})compare(playback(session,source,0,160,block),exported,0.00001f);
+        require(history.undo(session)==ClipEditHistory::Result::applied,"gain undo");
+        compare(bounceAudio(session,gainRoot.getChildFile("undo.wav")),
+                playback(dry,source,0,160,17),0.00001f);
+        require(history.redo(session)==ClipEditHistory::Result::applied,"gain redo");
+        compare(bounceAudio(session,gainRoot.getChildFile("redo.wav")),exported,0.00001f);
+        juce::MemoryBlock unchanged;
+        require(source.loadFileAsData(unchanged) && unchanged==originalSource,"gain modified source file");
+    }
+    // Gains compose with both crossfade laws in the actual WAV readers.
+    for(auto curve:{FadeCurve::linear,FadeCurve::equalPower}){
+        auto gained=overlapSession;
+        require(gained.crossfadeClips(0,0,1,curve) &&
+                gained.setClipGain(0,0,-6) && gained.setClipGain(0,1,3),"gained crossfade");
+        const auto expected=bounceAudio(gained,root.getChildFile(curve==FadeCurve::linear?"gain-linear.wav":"gain-power.wav"));
+        for(int block:{1,17,64,256})compare(playback(gained,source,0,160,block),expected,0.00001f);
+    }
     // Repeat at a different source rate. Compare repeated sections, not against
     // export's different resampling algorithm; both reads should be identical.
     const auto resampled=root.getChildFile("48k.wav");makeSource(resampled,48000);

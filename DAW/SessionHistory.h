@@ -8,7 +8,7 @@ inline bool sameClips(const std::vector<Clip>& a,const std::vector<Clip>& b){
         if(x.sourcePath!=y.sourcePath || x.startBeat!=y.startBeat ||
            x.lengthBeats!=y.lengthBeats || x.sourceOffsetSeconds!=y.sourceOffsetSeconds ||
            x.fadeInBeats!=y.fadeInBeats || x.fadeOutBeats!=y.fadeOutBeats ||
-           x.fadeInCurve!=y.fadeInCurve || x.fadeOutCurve!=y.fadeOutCurve)return false;
+           x.gainDb!=y.gainDb || x.fadeInCurve!=y.fadeInCurve || x.fadeOutCurve!=y.fadeOutCurve)return false;
     }
     return true;
 }

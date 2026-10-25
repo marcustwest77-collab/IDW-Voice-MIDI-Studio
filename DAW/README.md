@@ -570,3 +570,22 @@ preferences. Recovered projects should be manually saved using SAVE PROJECT.
 corrupt-generation fallback, owner and document isolation, missing/relative media,
 untitled sessions, and unchanged manual projects/source files. GUI startup,
 recovery selection and real process-crash testing remain separate manual checks.
+
+### Per-clip volume
+
+Right-click an audio clip and open Clip volume. Adjust clip volume opens a slider
+from -60 to +12 dB in 0.1 dB steps; Apply records one undoable edit, while Cancel
+leaves the clip unchanged. The menu also offers +/-1 dB steps and reset to 0 dB.
+The clip label displays the current dB value. Editing is available with playback,
+recording and export stopped, using the existing clip-edit safeguards.
+
+Gain is applied once, together with the clip fade envelope, before track/master
+processing. It does not change the track volume or source audio. Both halves of a
+split inherit the gain; moves, trims and crossfades retain it. Project saving,
+portable project metadata and recovery copies preserve it; older projects default
+to 0 dB. Values outside -60 to +12 dB and nonnumeric values are rejected.
+
+Regression coverage checks gain mathematics, playback/export sample agreement,
+unaffected adjacent clips, both crossfade curves, source-byte preservation,
+undo/redo, split/trim retention, recovery, legacy project defaults and invalid
+metadata. GUI slider, Apply/Cancel and listening checks remain manual.
