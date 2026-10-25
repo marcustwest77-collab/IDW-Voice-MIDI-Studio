@@ -2364,8 +2364,11 @@ private:
         if(!target)
             for(auto& slot:sources)if(!slot->reader && session.isEmptyAudioTrack(slot->trackIndex)){target=slot.get();break;}
         if(!target){
+            const auto previousTracks=session.tracks.size();
             addAudioTrack();
-            if(!sources.empty() && !sources.back()->reader)target=sources.back().get();
+            if(session.tracks.size()>previousTracks && !sources.empty() &&
+               !sources.back()->reader && session.isEmptyAudioTrack(sources.back()->trackIndex))
+                target=sources.back().get();
         }
         if(!target)return false;
         auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
@@ -2745,7 +2748,7 @@ private:
                         silent ? "Silent vocal take imported" :
                         truncatedWav ? "Incomplete vocal WAV imported" : "Vocal take imported",
                         (inputAdvice.isNotEmpty() ? inputAdvice+"\n\n" : juce::String())+
-                        "WAV saved and added to track "+juce::String((int)recordTargetTrack+1)+
+                        "WAV saved and added to track "+juce::String((int)selectedTrack+1)+
                         ".\nFrames received: "+juce::String(static_cast<juce::int64>(receivedFrames))+
                         "\nFile: "+take.getFullPathName()+
                         "\nApprox. captured duration: "+
@@ -2966,21 +2969,30 @@ private:
     void loadAudio(){
         chooser=std::make_unique<juce::FileChooser>("Select WAV or AIFF audio file",juce::File{},"*.wav;*.aiff;*.aif");
         chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,[this](const juce::FileChooser& picker){
-            auto file=picker.getResult();if(!file.existsAsFile() || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
+            auto file=picker.getResult();if(file==juce::File{} || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
+            const auto fail=[](const juce::String& message){
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Audio import unavailable",message);
+            };
             std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
-            if(!reader)return;
+            if(!reader || !std::isfinite(reader->sampleRate) || reader->sampleRate<=0 || reader->lengthInSamples<=0){
+                fail("Choose a readable WAV or AIFF containing audio. No clip was added.");return;
+            }
             AudioSlot* target=nullptr;
             for(auto& slot:sources)if(!slot->reader && session.isEmptyAudioTrack(slot->trackIndex)){target=slot.get();break;}
-            if(!target)return; // Add another audio track before importing another file.
+            if(!target){fail("Add an empty audio track before importing another file.");return;}
             auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
             const auto sourceRate=source->getAudioFormatReader()->sampleRate;
+            // Validate the timeline edit before occupying the reusable reader slot.
+            if(!session.addClip(target->trackIndex,{file.getFullPathName().toStdString(),0.0,
+                (double)source->getAudioFormatReader()->lengthInSamples/sourceRate*session.bpm/60.0,0.0})){
+                fail("The audio could not be added to this track. No clip was added.");return;
+            }
             target->transport.setSource(source.get(),0,nullptr,sourceRate);
             target->file=file;target->sourcePath=file.getFullPathName().toStdString();target->reader=std::move(source);
             removeDuplicateSourceReaders(target);
-            session.addClip(target->trackIndex,{file.getFullPathName().toStdString(),0.0,
-                sourceRate>0 ? (double)target->reader->getAudioFormatReader()->lengthInSamples/sourceRate*session.bpm/60.0 : 0.0,0.0});
             cacheWaveform(file);
-            sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
+            selectedTrack=target->trackIndex;ensureSelectedTrackVisible();
+            sessionFrames.store(0);playing=false;playheadBeats=0;refreshMixer();repaint();
         });
     }
 public:
