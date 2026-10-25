@@ -536,3 +536,37 @@ redo available; a real new edit clears redo. History retains 64 edits and resets
 when another project is loaded. Automated tests cover these rules and session
 serialization after undo/redo; GUI keyboard and drag testing remains separate.
 
+
+### Autosave and recovery
+
+Every 30 seconds while playback, recording, export, calibration and clip dragging
+are idle, changed project metadata is written to a separate recovery copy under
+the user application-data folder, `IDW Neo Studio/Recovery`. The last manually
+saved project and source audio are never overwritten by autosave. Two alternating
+generations are retained for each document instance. Each write uses a temporary
+file, validates it, then replaces the older slot; failed writes can be retried.
+Unchanged projects do not generate new copies.
+
+OPEN / RECOVER offers saved-project opening, up to 20 valid recovery copies
+(newest first), and the recovery folder. A startup notice reports available
+copies. Corrupt copies are skipped so the preceding generation remains available.
+Recovery keeps missing audio references and resolves relative media paths against
+the original project folder. Recovery cannot recreate deleted audio files.
+
+Opening another project first protects current changes. Normal application close
+stops recording/playback, saves pending metadata and keeps the window open if the
+save fails. Autosave is deferred during playback/recording: a crash can still lose
+changes since the last idle checkpoint and an unfinished recording is not covered.
+This is metadata recovery, not a backup of audio or a power-loss guarantee.
+
+Successful manual saves remove only recovery slots owned by the current document
+instance. Previously recovered copies and copies from earlier document instances
+remain available until removed in the recovery folder. Switching documents or
+running another app instance never reuses their slots. Recovery includes the
+fields in the existing project format, not undo history or unsaved device/view
+preferences. Recovered projects should be manually saved using SAVE PROJECT.
+
+`IDWDAWRecovery` verifies rotation, dirty/no-op behavior, write-failure retry,
+corrupt-generation fallback, owner and document isolation, missing/relative media,
+untitled sessions, and unchanged manual projects/source files. GUI startup,
+recovery selection and real process-crash testing remain separate manual checks.

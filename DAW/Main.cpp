@@ -17,6 +17,7 @@
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
 #include "SessionPersistence.h"
+#include "SessionRecovery.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
 #include "IDWConnectPanel.h"
@@ -494,7 +495,7 @@ public:
         runVoiceCommand.setTooltip("Voice-ready command input: on Windows press Win+H and dictate a command, then press Enter. Native speech recognition is not yet integrated.");
         voiceCommandInput.onReturnKey=[this]{executeStudioCommand(voiceCommandInput.getText());};
         saveProject.setButtonText("SAVE PROJECT");
-        openProject.setButtonText("OPEN PROJECT");
+        openProject.setButtonText("OPEN / RECOVER");
         exportProject.setButtonText("EXPORT PORTABLE");
         bounce.setButtonText("BOUNCE WAV");
         cancelBounce.setButtonText("CANCEL EXPORT");cancelBounce.setEnabled(false);
@@ -602,7 +603,7 @@ public:
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
         saveProject.onClick=[this]{saveProjectFile();};
-        openProject.onClick=[this]{openProjectFile();};
+        openProject.onClick=[this]{showProjectMenu();};
         exportProject.onClick=[this]{exportProjectFile();};
         bounce.onClick=[this]{bounceMix();};
         cancelBounce.onClick=[this]{exportCancel.store(true);};
@@ -728,6 +729,13 @@ public:
         addAndMakeVisible(ceilingControl);
         ceilingControl.onValueChange=[this]{ceilingDb.store((float)ceilingControl.getValue(),std::memory_order_relaxed);};
         refreshMixer();
+        recovery.begin(session);
+        recoveryTimer.startTimer(30000);
+        if(!recovery.copies().empty())
+            juce::MessageManager::callAsync([safe=juce::Component::SafePointer<Workstation>(this)]{
+                if(safe!=nullptr)juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                    "Recovery copies available","Choose OPEN / RECOVER to review saved recovery copies. Your saved projects have not been changed.");
+            });
     }
     void resized() override {
         auto area=getLocalBounds().reduced(20);
@@ -1981,10 +1989,55 @@ private:
         }
         waveformThumbnails.emplace(path,std::move(thumbnail));
     }
-    bool restoreProject(const juce::File& project){
+    bool recoveryIdle() const {
+        return !playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() &&
+            !exportRunning.load() && !draggingClip && !loopbackCapture.isActive();
+    }
+    bool autosaveRecovery(){
+        if(!recoveryIdle())return false;
+        const auto result=recovery.checkpoint(session,currentProject);
+        if(result==idw::daw::SessionRecovery::Result::failed){
+            commandStatus.setText("Recovery save failed; save your project manually",juce::dontSendNotification);
+            return false;
+        }
+        return true;
+    }
+    void showProjectMenu(){
+        if(!recoveryIdle())return;
+        const auto copies=recovery.copies();
+        juce::PopupMenu menu;menu.addItem(1,"Open saved project...");
+        juce::PopupMenu recoverMenu;
+        for(size_t i=0;i<copies.size() && i<20;++i){
+            idw::daw::Session ignored;juce::File origin;
+            if(!idw::daw::SessionRecovery::read(copies[i],ignored,origin))continue;
+            const auto label=(origin==juce::File{}?juce::String("Untitled project"):origin.getFileNameWithoutExtension())+
+                " — "+copies[i].getLastModificationTime().formatted("%Y-%m-%d %H:%M:%S");
+            recoverMenu.addItem(100+(int)i,label);
+        }
+        menu.addSubMenu("Recover unsaved work",recoverMenu,!copies.empty());
+        menu.addItem(2,"Show recovery folder");
+        menu.showMenuAsync(juce::PopupMenu::Options(),[safe=juce::Component::SafePointer<Workstation>(this),copies](int result){
+            if(safe==nullptr || !safe->recoveryIdle())return;
+            if(result==1){safe->openProjectFile();return;}
+            if(result==2){
+                if(safe->recovery.directory().createDirectory().wasOk())
+                    safe->recovery.directory().revealToUser();
+                return;
+            }
+            if(result>=100 && (size_t)(result-100)<copies.size() &&
+               !safe->restoreProject(copies[(size_t)(result-100)],true))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "Recovery unavailable","The copy could not be opened, or the current work could not be protected. Your current project is unchanged.");
+        });
+    }
+    bool restoreProject(const juce::File& project,bool fromRecovery=false){
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return false;
         idw::daw::Session restored;
-        if(!idw::daw::loadSession(project,restored))return false;
+        juce::File origin=project;
+        if(fromRecovery){
+            if(!idw::daw::SessionRecovery::read(project,restored,origin))return false;
+        }else if(!idw::daw::loadSession(project,restored))return false;
+        if(!autosaveRecovery())return false;
         // Build replacement players before replacing the current project.
         std::vector<std::unique_ptr<AudioSlot>> staged;
         int missing=0;
@@ -2006,8 +2059,8 @@ private:
                     if(adjacent.existsAsFile())file=adjacent;
                     else if(packaged.existsAsFile())file=packaged;
                 }
-                if(!file.existsAsFile()){++missing;continue;}
                 clip.sourcePath=file.getFullPathName().toStdString();
+                if(!file.existsAsFile()){++missing;continue;}
                 if(std::find(opened.begin(),opened.end(),file)!=opened.end())continue;
                 std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
                 if(!reader || reader->sampleRate<=0){++missing;continue;}
@@ -2040,6 +2093,8 @@ private:
         for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
         sources.clear();
         session=std::move(restored);
+        currentProject=origin;
+        recovery.begin(session,fromRecovery);
         // Undo snapshots refer to the prior project; never restore them into a new one.
         clipHistory.clear();dragHistorySnapshot.reset();
         draggingClip=false;selectedClipValid=false;
@@ -2122,8 +2177,14 @@ private:
             [this](const juce::FileChooser& picker){
                 const auto file=picker.getResult();
                 if(file==juce::File{} || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
-                if(!idw::daw::saveSession(session,file.withFileExtension(".idwproj")))
+                const auto destination=file.withFileExtension(".idwproj");
+                if(!idw::daw::saveSession(session,destination))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save failed","Could not write IDW project.");
+                else{
+                    currentProject=destination;
+                    if(!recovery.markSaved(session))
+                        commandStatus.setText("Project saved; older recovery copies retained",juce::dontSendNotification);
+                }
             });
     }
     bool importTake(const juce::File& take){
@@ -2756,7 +2817,19 @@ private:
             sessionFrames.store(0);playing=false;playheadBeats=0;repaint();
         });
     }
-    ~Workstation() override {voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+public:
+    bool prepareToClose(){
+        if(exportRunning.load()){
+            commandStatus.setText("Wait for export to finish before closing",juce::dontSendNotification);
+            return false;
+        }
+        stop.onClick();
+        if(autosaveRecovery())return true;
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            "Recovery save failed","Save the project manually before closing. The window has been left open.");
+        return false;
+    }
+    ~Workstation() override {recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
     juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton,skinToolsButton;
@@ -2772,6 +2845,18 @@ private:
     std::atomic<bool> exportRunning{false};
     std::atomic<bool> exportCancel{false};
     std::atomic<float> exportProgress{0.0f};
+    class RecoveryTimer final : public juce::Timer {
+    public:
+        explicit RecoveryTimer(Workstation& value):owner(value){}
+        void timerCallback() override {owner.autosaveRecovery();}
+    private:
+        Workstation& owner;
+    };
+    idw::daw::SessionRecovery recovery{
+        juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+            .getChildFile("IDW Neo Studio").getChildFile("Recovery")};
+    juce::File currentProject;
+    RecoveryTimer recoveryTimer{*this};
     idw::daw::Session session;
     std::atomic<bool> playing{false};
     double playheadBeats=0;
@@ -2839,6 +2924,9 @@ public:
         window=std::make_unique<MainWindow>(getApplicationName());
     }
     void shutdown() override {window.reset();}
+    void systemRequestedQuit() override {
+        if(window==nullptr || static_cast<Workstation*>(window->getContentComponent())->prepareToClose())quit();
+    }
 private:
     class MainWindow final : public juce::DocumentWindow {
     public:
