@@ -911,7 +911,7 @@ public:
             !exportRunning.load() && !aiPanel.isVisible() && !connectPanel.isVisible();
     }
     void restoreClipHistory(bool undo){
-        if(!clipEditAvailable())return;
+        if(!clipEditAvailable() || draggingClip || pianoRoll.isVisible())return;
         const auto result=undo?clipHistory.undo(session):clipHistory.redo(session);
         if(result==idw::daw::ClipEditHistory::Result::conflict){
             commandStatus.setText("Clip undo/redo unavailable: affected clips changed; newer work was preserved",
@@ -941,7 +941,7 @@ public:
         repaint();
     }
     void duplicateClipAt(size_t track,size_t index){
-        if(!clipEditAvailable())return;
+        if(!clipEditAvailable() || draggingClip || pianoRoll.isVisible())return;
         const auto before=session;
         if(!session.duplicateClip(track,index))return;
         clipHistory.record(before,session);
@@ -950,7 +950,7 @@ public:
         repaint();
     }
     void splitSelectedClip(){
-        if(!clipEditAvailable() || !selectedClipValid ||
+        if(!clipEditAvailable() || draggingClip || pianoRoll.isVisible() || !selectedClipValid ||
            selectedClipTrack>=session.tracks.size() ||
            selectedClipIndex>=session.tracks[selectedClipTrack].clips.size())return;
         const auto before=session;
@@ -1057,6 +1057,9 @@ public:
             startDictation();
             return true;
         }
+        // Child editors own their shortcuts. Never edit timeline clips from a
+        // bubbled key event, or mutate clip history during an unfinished drag.
+        if(!hasKeyboardFocus(false) || draggingClip || pianoRoll.isVisible())return false;
         if(key.getModifiers().isCommandDown() && !key.getModifiers().isAltDown() &&
            !key.getModifiers().isShiftDown() && key.getKeyCode()=='D'){
             if(selectedClipValid)duplicateClipAt(selectedClipTrack,selectedClipIndex);
