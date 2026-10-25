@@ -65,6 +65,17 @@ public:
         tracks[trackIndex].clips.push_back(std::move(clip));
         return true;
     }
+    bool isEmptyAudioTrack(size_t track) const {
+        return track<tracks.size() && tracks[track].type==TrackType::audio && tracks[track].clips.empty();
+    }
+    // Remove a timeline reference only. The source file is never touched.
+    bool removeClip(size_t track,size_t index) {
+        if(track>=tracks.size() || tracks[track].type!=TrackType::audio ||
+           index>=tracks[track].clips.size())return false;
+        auto& clips=tracks[track].clips;
+        clips.erase(clips.begin()+static_cast<std::ptrdiff_t>(index));
+        return true;
+    }
     // Copy metadata only; repeat the same source segment after this clip.
     bool duplicateClip(size_t track,size_t index) {
         if(track>=tracks.size() || tracks[track].type!=TrackType::audio ||

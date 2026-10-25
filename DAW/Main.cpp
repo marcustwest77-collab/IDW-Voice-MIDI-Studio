@@ -920,6 +920,24 @@ public:
         }
         if(result!=idw::daw::ClipEditHistory::Result::applied)return;
         selectedClipValid=false;
+        refreshMixer();repaint();
+    }
+    void deleteClipAt(size_t track,size_t index){
+        if(!clipEditAvailable() || draggingClip || pianoRoll.isVisible())return;
+        const auto before=session;
+        if(!session.removeClip(track,index))return;
+        clipHistory.record(before,session);
+        if(session.isEmptyAudioTrack(track) &&
+           std::none_of(sources.begin(),sources.end(),[&](const auto& slot){return slot->trackIndex==track && !slot->reader;})){
+            auto slot=std::make_unique<AudioSlot>();slot->trackIndex=track;
+            if(preparedBlockSize>0){
+                slot->scratch.setSize(2,preparedBlockSize,false,true,false);
+                slot->transport.prepareToPlay(preparedBlockSize,deviceRate);
+            }
+            sources.push_back(std::move(slot));
+        }
+        selectedClipValid=false;dragHistorySnapshot.reset();refreshMixer();
+        commandStatus.setText("Clip removed. Undo restores it; source audio is unchanged.",juce::dontSendNotification);
         repaint();
     }
     void duplicateClipAt(size_t track,size_t index){
@@ -959,6 +977,7 @@ public:
         if(!clipEditAvailable())return;
         juce::PopupMenu menu;
         menu.addItem(11,"Duplicate clip");
+        menu.addItem(12,"Delete clip");
         juce::PopupMenu volume;
         volume.addItem(7,"Adjust clip volume...");
         volume.addItem(8,"Quieter: -1 dB");
@@ -992,6 +1011,7 @@ public:
                 const auto c=before.tracks[track].clips[index];
                 bool changed=false;
                 using Curve=idw::daw::FadeCurve;
+                if(result==12){safe->deleteClipAt(track,index);return;}
                 if(result==11){safe->duplicateClipAt(track,index);return;}
                 if(result==7){safe->showClipGainDialog(track,index);return;}
                 if(result>=8 && result<=10){
@@ -1015,6 +1035,13 @@ public:
             });
     }
     bool keyPressed(const juce::KeyPress& key) override {
+        if((key.getKeyCode()==juce::KeyPress::deleteKey || key.getKeyCode()==juce::KeyPress::backspaceKey) &&
+           !key.getModifiers().isAnyModifierKeyDown()){
+            // A field or another editor must own its own deletion keys.
+            if(!hasKeyboardFocus(false) || !selectedClipValid || !clipEditAvailable() ||
+               draggingClip || pianoRoll.isVisible())return false;
+            deleteClipAt(selectedClipTrack,selectedClipIndex);return true;
+        }
         if(key.getModifiers().isCommandDown() && !key.getModifiers().isAltDown()){
             const int code=key.getKeyCode();
             if(code=='=' || code=='+' || code=='-' || code=='0'){
@@ -2311,6 +2338,13 @@ private:
                 }
             });
     }
+    void removeDuplicateSourceReaders(AudioSlot* active){
+        // Reimporting a deleted source must not leave two readers mixing the same clips.
+        sources.erase(std::remove_if(sources.begin(),sources.end(),[&](const auto& slot){
+            return slot.get()!=active && slot->trackIndex==active->trackIndex &&
+                slot->reader && slot->sourcePath==active->sourcePath;
+        }),sources.end());
+    }
     bool importTake(const juce::File& take){
         if(!take.existsAsFile() || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return false;
         std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(take));
@@ -2319,9 +2353,9 @@ private:
         // Prefer the audio track selected when recording began, provided it
         // remains empty. Never overwrite a previously recorded/imported take.
         for(auto& slot:sources)
-            if(slot->trackIndex==recordTargetTrack && !slot->reader){target=slot.get();break;}
+            if(slot->trackIndex==recordTargetTrack && !slot->reader && session.isEmptyAudioTrack(slot->trackIndex)){target=slot.get();break;}
         if(!target)
-            for(auto& slot:sources)if(!slot->reader){target=slot.get();break;}
+            for(auto& slot:sources)if(!slot->reader && session.isEmptyAudioTrack(slot->trackIndex)){target=slot.get();break;}
         if(!target){
             addAudioTrack();
             if(!sources.empty() && !sources.back()->reader)target=sources.back().get();
@@ -2339,6 +2373,7 @@ private:
         if(!session.addClip(target->trackIndex,{take.getFullPathName().toStdString(),takeStartBeat,beatLength,trim}))return false;
         target->transport.setSource(source.get(),0,nullptr,rate);
         target->file=take;target->sourcePath=take.getFullPathName().toStdString();target->reader=std::move(source);
+        removeDuplicateSourceReaders(target);
         cacheWaveform(take);
         selectedTrack=target->trackIndex;
         ensureSelectedTrackVisible();
@@ -2524,10 +2559,7 @@ private:
         const int callbackIndex=device && physical>=0
             ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physical)
             : -1;
-        bool occupied=false;
-        if(audioTrack)
-            for(const auto& slot:sources)
-                if(slot->trackIndex==selectedTrack && slot->reader)occupied=true;
+        const bool occupied=audioTrack && !session.isEmptyAudioTrack(selectedTrack);
         const bool rateOk=std::isfinite(deviceRate) && deviceRate>0.0;
         const bool inputOk=device && callbackIndex>=0 && physical<inputNames.size() && rateOk;
         const bool outputOk=device && device->getActiveOutputChannels().countNumberOfSetBits()>0;
@@ -2800,8 +2832,7 @@ private:
             // Overdubs must use empty destination tracks. Existing material
             // is preserved and never overwritten by the recording operation.
             for(const auto index:selectedInputs)
-                for(const auto& slot:sources)
-                    if(slot->trackIndex==index && slot->reader){
+                    if(!session.isEmptyAudioTrack(index)){
                         juce::AlertWindow::showMessageBoxAsync(
                             juce::MessageBoxIconType::WarningIcon,"Overdub needs empty tracks",
                             "Add and arm an empty audio track to record alongside playback.");
@@ -2809,10 +2840,9 @@ private:
                     }
         }
         if(selectedInputs.size()>1){
-            // A loaded track cannot accept a second AudioSlot reader yet.
+            // Recording destinations must have no timeline clips.
             for(const auto index:selectedInputs)
-                for(const auto& slot:sources)
-                    if(slot->trackIndex==index && slot->reader){
+                    if(!session.isEmptyAudioTrack(index)){
                         juce::AlertWindow::showMessageBoxAsync(
                             juce::MessageBoxIconType::WarningIcon,"Track already has audio",
                             "Arm empty audio tracks for simultaneous recording.");
@@ -2859,8 +2889,8 @@ private:
             // Single-take imports use one audio reader per track. Reject an
             // occupied destination before opening the WAV writer; otherwise
             // a successful recording can end in an avoidable import failure.
-            for(const auto& slot:sources){
-                if(slot->trackIndex==recordTargetTrack && slot->reader){
+            {
+                if(!session.isEmptyAudioTrack(recordTargetTrack)){
                     juce::AlertWindow::showMessageBoxAsync(
                         juce::MessageBoxIconType::WarningIcon,
                         "Recording track already has audio",
@@ -2929,12 +2959,13 @@ private:
             std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
             if(!reader)return;
             AudioSlot* target=nullptr;
-            for(auto& slot:sources)if(!slot->reader){target=slot.get();break;}
+            for(auto& slot:sources)if(!slot->reader && session.isEmptyAudioTrack(slot->trackIndex)){target=slot.get();break;}
             if(!target)return; // Add another audio track before importing another file.
             auto source=std::make_unique<juce::AudioFormatReaderSource>(reader.release(),true);
             const auto sourceRate=source->getAudioFormatReader()->sampleRate;
             target->transport.setSource(source.get(),0,nullptr,sourceRate);
             target->file=file;target->sourcePath=file.getFullPathName().toStdString();target->reader=std::move(source);
+            removeDuplicateSourceReaders(target);
             session.addClip(target->trackIndex,{file.getFullPathName().toStdString(),0.0,
                 sourceRate>0 ? (double)target->reader->getAudioFormatReader()->lengthInSamples/sourceRate*session.bpm/60.0 : 0.0,0.0});
             cacheWaveform(file);

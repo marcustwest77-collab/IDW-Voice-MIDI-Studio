@@ -641,3 +641,33 @@ Regression coverage verifies metadata, fractional positions, unchanged neighbors
 repeated duplication, undo/redo, invalid requests, serialization, actual WAV
 playback/export at multiple block sizes, EOF source reuse and source-byte
 preservation. Shortcut/menu interaction and listening remain manual checks.
+
+### Delete audio clips
+
+Select a timeline clip and press Delete or Backspace without modifiers, or
+right-click it and choose Delete clip. Deletion removes only that timeline
+reference; it never deletes or rewrites the source audio. Neighboring clips stay
+in place. Selection clears afterward to prevent a held key from deleting the
+next clip.
+
+Undo restores the clip with its position, duration, source offset, fades, curves
+and gain. Redo removes it again. The operation uses the existing clip-edit guards
+and is disabled during a drag or while the piano roll is open. Keyboard deletion
+requires the timeline component itself to have focus, so child text/numeric
+editors retain their own Delete/Backspace behavior.
+
+Project serialization retains deletion and permits empty tracks. An empty audio
+track plays silence; export of a project with no clips continues to fail cleanly
+without creating a WAV. Source readers remain available for undo.
+
+Regression cases cover deleting middle/first/last clips, invalid requests,
+unchanged neighbors and newer track volume, undo/redo, persistence of deletion
+and empty tracks, silent removed regions, restored rendered audio, playback/export
+agreement, and unchanged source bytes. GUI focus, menu/keyboard interaction and
+hardware listening remain pending manual checks.
+
+After deleting the last clip, track readiness and import/recording eligibility use
+the empty timeline state rather than retained undo readers. An empty destination
+reader is available for reuse; reimporting the same source retires a duplicate
+cached reader to prevent double playback. A later import/recording is protected
+by the existing history-conflict check.

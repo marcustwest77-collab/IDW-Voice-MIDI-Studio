@@ -24,6 +24,15 @@ int main(){
  if(!sessionFromJson(sessionToJson(duplicateSession),duplicateRestored) ||
     !sameClips(duplicateSession.tracks[0].clips,duplicateRestored.tracks[0].clips))
     throw std::runtime_error("duplicated clip metadata round trip");
+ if(!duplicateSession.removeClip(0,0) ||
+    !sessionFromJson(sessionToJson(duplicateSession),duplicateRestored) ||
+    duplicateRestored.tracks[0].clips.size()!=1 ||
+    !sameClips(duplicateSession.tracks[0].clips,duplicateRestored.tracks[0].clips))
+    throw std::runtime_error("deleted clip persistence");
+ if(!duplicateSession.removeClip(0,0) ||
+    !sessionFromJson(sessionToJson(duplicateSession),duplicateRestored) ||
+    !duplicateRestored.tracks[0].clips.empty())
+    throw std::runtime_error("empty track persistence after deletion");
  Session gainSession;gainSession.addTrack(TrackType::audio);
  gainSession.addClip(0,{"gain.wav",0,4,0});gainSession.setClipGain(0,0,-7.5);
  auto gainJson=sessionToJson(gainSession);Session gainRestored;

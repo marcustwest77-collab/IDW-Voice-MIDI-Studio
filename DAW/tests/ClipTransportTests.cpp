@@ -203,6 +203,37 @@ int main(){
         juce::MemoryBlock unchanged;
         require(source.loadFileAsData(unchanged) && unchanged==originalSource,"duplicate modified source file");
     }
+    // Removing a clip leaves silence in its former region, preserves the
+    // neighbor, and restores the original samples on undo.
+    Session deletion;deletion.bpm=60;deletion.addTrack(TrackType::audio);
+    deletion.addClip(0,{path,0,64.0/44100,16.0/44100,8.0/44100,8.0/44100,
+                       FadeCurve::equalPower,FadeCurve::linear,-6});
+    deletion.addClip(0,{path,96.0/44100,64.0/44100,32.0/44100});
+    const auto beforeDelete=deletion;ClipEditHistory deleteHistory;
+    const auto beforeDeleteAudio=bounceAudio(deletion,root.getChildFile("before-delete.wav"));
+    require(deletion.removeClip(0,0) && deleteHistory.record(beforeDelete,deletion),"delete audio clip");
+    const auto afterDeleteAudio=bounceAudio(deletion,root.getChildFile("after-delete.wav"));
+    for(int ch=0;ch<2;++ch)for(int i=0;i<160;++i)
+        require(i<96 ? afterDeleteAudio.getSample(ch,i)==0 :
+            std::abs(afterDeleteAudio.getSample(ch,i)-beforeDeleteAudio.getSample(ch,i))<0.00001f,
+            "deleted region or surviving clip incorrect");
+    for(int block:{1,17,64,256})compare(playback(deletion,source,0,160,block),afterDeleteAudio,0.00001f);
+    const auto oneRemaining=deletion;
+    require(deletion.removeClip(0,0) && deleteHistory.record(oneRemaining,deletion),"delete final clip");
+    require(playback(deletion,source,0,160,17).getMagnitude(0,160)==0,"empty track not silent");
+    const auto emptyFile=root.getChildFile("empty.wav");juce::String emptyError;
+    require(!renderSessionWav(deletion,emptyFile,emptyError) && !emptyFile.exists(),
+            "empty project export should fail without creating a file");
+    require(deleteHistory.undo(deletion)==ClipEditHistory::Result::applied,"undo final deletion");
+    compare(bounceAudio(deletion,root.getChildFile("undo-final-delete.wav")),afterDeleteAudio,0.00001f);
+    require(deleteHistory.redo(deletion)==ClipEditHistory::Result::applied && deletion.tracks[0].clips.empty(),
+            "redo final deletion");
+    require(deleteHistory.undo(deletion)==ClipEditHistory::Result::applied &&
+            deleteHistory.undo(deletion)==ClipEditHistory::Result::applied,"undo both deletions");
+    compare(bounceAudio(deletion,root.getChildFile("undo-both-delete.wav")),beforeDeleteAudio,0.00001f);
+    compare(playback(deletion,source,0,160,31),beforeDeleteAudio,0.00001f);
+    juce::MemoryBlock afterDeleteBytes;
+    require(source.loadFileAsData(afterDeleteBytes) && afterDeleteBytes==originalSource,"deletion changed source bytes");
     // Repeat at a different source rate. Compare repeated sections, not against
     // export's different resampling algorithm; both reads should be identical.
     const auto resampled=root.getChildFile("48k.wav");makeSource(resampled,48000);
