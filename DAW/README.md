@@ -619,3 +619,25 @@ chooser interaction and hardware listening remain manual acceptance checks.
 Project loading no longer guesses an absolute source replacement from an adjacent
 file with the same basename. Relative portable-project paths still resolve against
 the project folder; moved absolute sources use the explicit relink workflow.
+
+### Duplicate audio clips
+
+Select a clip and press Ctrl+D on Windows or Command+D on macOS, or right-click
+and choose Duplicate clip. The duplicate starts exactly at the original clip's
+end and becomes the selected clip, so repeated commands build a chain.
+
+Duplication copies metadata and references the same source audio segment; it does
+not create or rewrite a WAV. Source offset, duration, fades, curves and clip gain
+are preserved. Existing neighboring clips are not shifted or overwritten. If the
+new copy overlaps another clip, the ordinary overlap/mixing behavior applies;
+no crossfade is automatically created. Existing edge fades are copied as-is.
+
+The operation is available while clip editing is allowed (playback, recording and
+export stopped), and is one undoable edit. Project serialization and autosave
+retain the copy. Invalid indexes, MIDI tracks and nonfinite/overflowing duplicate
+positions are rejected without changing the model.
+
+Regression coverage verifies metadata, fractional positions, unchanged neighbors,
+repeated duplication, undo/redo, invalid requests, serialization, actual WAV
+playback/export at multiple block sizes, EOF source reuse and source-byte
+preservation. Shortcut/menu interaction and listening remain manual checks.

@@ -65,6 +65,22 @@ public:
         tracks[trackIndex].clips.push_back(std::move(clip));
         return true;
     }
+    // Copy metadata only; repeat the same source segment after this clip.
+    bool duplicateClip(size_t track,size_t index) {
+        if(track>=tracks.size() || tracks[track].type!=TrackType::audio ||
+           index>=tracks[track].clips.size())return false;
+        const auto original=tracks[track].clips[index];
+        const double nextStart=original.startBeat+original.lengthBeats;
+        const double nextEnd=nextStart+original.lengthBeats;
+        if(!std::isfinite(original.startBeat) || original.startBeat<0 ||
+           !std::isfinite(original.lengthBeats) || original.lengthBeats<=0 ||
+           !std::isfinite(nextStart) || !std::isfinite(nextEnd) ||
+           nextStart<=original.startBeat || nextEnd<=nextStart)return false;
+        auto copy=original;copy.startBeat=nextStart;
+        auto& clips=tracks[track].clips;
+        clips.insert(clips.begin()+static_cast<std::ptrdiff_t>(index+1),std::move(copy));
+        return true;
+    }
     bool setClipGain(size_t track,size_t index,double db) {
         if(track>=tracks.size() || tracks[track].type!=TrackType::audio ||
            index>=tracks[track].clips.size() || !validClipGain(db))return false;

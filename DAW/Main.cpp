@@ -922,6 +922,15 @@ public:
         selectedClipValid=false;
         repaint();
     }
+    void duplicateClipAt(size_t track,size_t index){
+        if(!clipEditAvailable())return;
+        const auto before=session;
+        if(!session.duplicateClip(track,index))return;
+        clipHistory.record(before,session);
+        selectedClipTrack=track;selectedClipIndex=index+1;selectedClipValid=true;
+        commandStatus.setText("Clip duplicated",juce::dontSendNotification);
+        repaint();
+    }
     void splitSelectedClip(){
         if(!clipEditAvailable() || !selectedClipValid ||
            selectedClipTrack>=session.tracks.size() ||
@@ -949,6 +958,7 @@ public:
     void showClipFadeMenu(size_t track,size_t index) {
         if(!clipEditAvailable())return;
         juce::PopupMenu menu;
+        menu.addItem(11,"Duplicate clip");
         juce::PopupMenu volume;
         volume.addItem(7,"Adjust clip volume...");
         volume.addItem(8,"Quieter: -1 dB");
@@ -982,6 +992,7 @@ public:
                 const auto c=before.tracks[track].clips[index];
                 bool changed=false;
                 using Curve=idw::daw::FadeCurve;
+                if(result==11){safe->duplicateClipAt(track,index);return;}
                 if(result==7){safe->showClipGainDialog(track,index);return;}
                 if(result>=8 && result<=10){
                     changed=safe->session.setClipGain(track,index,result==10?0.0:
@@ -1017,6 +1028,11 @@ public:
         if(key.getKeyCode()==juce::KeyPress::F9Key && !key.getModifiers().isAltDown() &&
            !key.getModifiers().isCommandDown()){
             startDictation();
+            return true;
+        }
+        if(key.getModifiers().isCommandDown() && !key.getModifiers().isAltDown() &&
+           !key.getModifiers().isShiftDown() && key.getKeyCode()=='D'){
+            if(selectedClipValid)duplicateClipAt(selectedClipTrack,selectedClipIndex);
             return true;
         }
         if(key.getModifiers().isCommandDown() && key.getKeyCode()=='Z'){

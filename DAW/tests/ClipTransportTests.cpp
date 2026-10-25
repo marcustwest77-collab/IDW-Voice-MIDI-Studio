@@ -182,6 +182,27 @@ int main(){
         const auto expected=bounceAudio(gained,root.getChildFile(curve==FadeCurve::linear?"gain-linear.wav":"gain-power.wav"));
         for(int block:{1,17,64,256})compare(playback(gained,source,0,160,block),expected,0.00001f);
     }
+    // Duplicating repeats exactly the same trimmed, faded, gained source segment.
+    Session duplicate;duplicate.bpm=60;duplicate.addTrack(TrackType::audio);
+    duplicate.addClip(0,{path,0,96.0/44100,32.0/44100,16.0/44100,16.0/44100,
+                        FadeCurve::equalPower,FadeCurve::linear,-6.0});
+    require(duplicate.duplicateClip(0,0),"duplicate audio clip");
+    const auto duplicateWav=root.getChildFile("duplicate.wav");juce::String duplicateError;
+    require(renderSessionWav(duplicate,duplicateWav,duplicateError),"duplicate export");
+    {
+        juce::AudioFormatManager formats;formats.registerBasicFormats();
+        auto reader=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(duplicateWav));
+        require(reader!=nullptr,"duplicate reader");
+        juce::AudioBuffer<float> expected(2,192);
+        require(reader->read(&expected,0,192,0,true,true),"duplicate export samples");
+        require(expected.getMagnitude(0,192)>0.03f,"duplicate fixture silent");
+        for(int ch=0;ch<2;++ch)for(int i=0;i<96;++i)
+            require(std::abs(expected.getSample(ch,i)-expected.getSample(ch,96+i))<0.00001f,
+                    "duplicate changed source segment or envelope");
+        for(int block:{1,17,64,256})compare(playback(duplicate,source,0,192,block),expected,0.00001f);
+        juce::MemoryBlock unchanged;
+        require(source.loadFileAsData(unchanged) && unchanged==originalSource,"duplicate modified source file");
+    }
     // Repeat at a different source rate. Compare repeated sections, not against
     // export's different resampling algorithm; both reads should be identical.
     const auto resampled=root.getChildFile("48k.wav");makeSource(resampled,48000);

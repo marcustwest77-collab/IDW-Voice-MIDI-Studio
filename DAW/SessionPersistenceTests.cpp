@@ -17,6 +17,13 @@
 #include <iostream>
 int main(){
  using namespace idw::daw;
+ Session duplicateSession;duplicateSession.addTrack(TrackType::audio);
+ duplicateSession.addClip(0,{"duplicate.wav",1,4,0.25,0.5,1,FadeCurve::equalPower,FadeCurve::linear,-6});
+ if(!duplicateSession.duplicateClip(0,0))throw std::runtime_error("duplicate persistence setup");
+ Session duplicateRestored;
+ if(!sessionFromJson(sessionToJson(duplicateSession),duplicateRestored) ||
+    !sameClips(duplicateSession.tracks[0].clips,duplicateRestored.tracks[0].clips))
+    throw std::runtime_error("duplicated clip metadata round trip");
  Session gainSession;gainSession.addTrack(TrackType::audio);
  gainSession.addClip(0,{"gain.wav",0,4,0});gainSession.setClipGain(0,0,-7.5);
  auto gainJson=sessionToJson(gainSession);Session gainRestored;
