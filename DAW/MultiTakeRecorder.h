@@ -1,5 +1,6 @@
 #pragma once
-#include <JuceHeader.h>
+#include <juce_audio_devices/juce_audio_devices.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <array>
 #include <atomic>
 #include <cmath>
@@ -68,6 +69,7 @@ public:
         const juce::ScopedLock lock(guard);
         slots=std::move(pending);
         count=inputs.size();
+        deviceInterrupted.store(false,std::memory_order_relaxed);
         return true;
     }
 
@@ -92,6 +94,9 @@ public:
     std::uint64_t getRejectedWrites() const noexcept {
         return rejectedWrites.load(std::memory_order_relaxed);
     }
+    bool wasDeviceInterrupted() const noexcept {
+        return deviceInterrupted.load(std::memory_order_relaxed);
+    }
     bool isRecording() const {
         const juce::ScopedLock lock(guard);
         return count!=0;
@@ -104,7 +109,7 @@ public:
             droppedBlocks.fetch_add(1,std::memory_order_relaxed);
             return;
         }
-        if(count==0 || samples<=0)return;
+        if(count==0 || deviceInterrupted.load(std::memory_order_relaxed) || samples<=0)return;
         if(!inputs){droppedBlocks.fetch_add(1,std::memory_order_relaxed);return;}
         // Refuse the whole block when any armed source is missing, so WAV
         // durations remain aligned. Device dropouts need separate diagnostics.
@@ -137,10 +142,19 @@ public:
                 rejectedWrites.fetch_add(1,std::memory_order_relaxed);
         }
     }
-    void audioDeviceAboutToStart(juce::AudioIODevice*) override {}
-    void audioDeviceStopped() override {stop();}
+    void audioDeviceAboutToStart(juce::AudioIODevice*) override {markDeviceInterrupted();}
+    void audioDeviceStopped() override {markDeviceInterrupted();}
 
 private:
+    void markDeviceInterrupted(){
+        const juce::ScopedLock lock(guard);
+        // Keep takes pending until the message thread flushes and imports them.
+        // A restarted device may have a different sample rate or input routing.
+        if(count!=0){
+            deviceInterrupted.store(true,std::memory_order_relaxed);
+            monitorGain.store(0.0f,std::memory_order_relaxed);
+        }
+    }
     struct Slot {
         std::unique_ptr<juce::AudioFormatWriter::ThreadedWriter> writer;
         juce::File file;
@@ -158,6 +172,7 @@ private:
     std::size_t count=0;
     std::atomic<std::uint64_t> droppedBlocks{0};
     std::atomic<std::uint64_t> rejectedWrites{0};
+    std::atomic<bool> deviceInterrupted{false};
     std::atomic<float> monitorGain{0.0f};
     std::array<std::atomic<float>,maxTracks> inputPeaks{};
 };

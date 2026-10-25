@@ -2000,6 +2000,10 @@ private:
                 sustainedSilence ? juce::Colour(0xffffc857) : juce::Colour(0xff73f9ae));
         }
         if(multiRecorder.isRecording()){
+            if(multiRecorder.wasDeviceInterrupted()){
+                toggleRecording(); // Flush and import partial takes on the message thread.
+                return;
+            }
             juce::String levels("RECORDING INPUTS  ");
             float maximum=0.0f;
             for(std::size_t i=0;i<multiTakes.size();++i){
@@ -2637,6 +2641,7 @@ private:
             for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(0);}
             playing.store(false);stopTimer();sessionFrames.store(0);playheadBeats=0;
             if(wasMulti){
+                const bool interrupted=multiRecorder.wasDeviceInterrupted();
                 juce::String failures;
                 for(const auto& item:multiTakes){
                     recordTargetTrack=item.first;
@@ -2651,6 +2656,9 @@ private:
                             ": WAV could not be imported ("+item.second.getFileName()+")\n";
                 }
                 multiTakes.clear();
+                if(interrupted)juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,"Multitrack device interrupted",
+                    "The audio device stopped or changed. Recorded audio was retained and available takes were imported. Check partial takes before continuing.");
                 if(rejected>0)juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,"Audio disk buffer overflow",
                     juce::String(rejected)+" WAV write operations were rejected. Check recorded takes for missing audio.");
