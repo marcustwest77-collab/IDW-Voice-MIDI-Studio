@@ -36,14 +36,15 @@ int main(){
     Session pair;pair.bpm=60;assert(pair.addTrack(TrackType::audio));
     assert(pair.addClip(0,{"a.wav",0,3,0.2}));
     assert(pair.addClip(0,{"b.wav",2,3,0.3}));
-    std::vector<Session> undo{pair},redo;
+    ClipEditHistory history;const auto beforeCrossfade=pair;
     assert(pair.crossfadeClips(0,1,0,FadeCurve::linear));
     for(int frame=16;frame<24;++frame)
         assert(near(ClipEnvelope(pair.tracks[0].clips[0],60,8).gain(frame)+
                     ClipEnvelope(pair.tracks[0].clips[1],60,8).gain(frame),1));
-    assert(restoreSessionHistory(pair,undo,redo));
+    assert(history.record(beforeCrossfade,pair));
+    assert(history.undo(pair)==ClipEditHistory::Result::applied);
     assert(pair.tracks[0].clips[0].fadeOutBeats==0 && pair.tracks[0].clips[1].fadeInBeats==0);
-    assert(restoreSessionHistory(pair,redo,undo));
+    assert(history.redo(pair)==ClipEditHistory::Result::applied);
     assert(pair.tracks[0].clips[0].fadeOutBeats==1 && pair.tracks[0].clips[1].fadeInBeats==1);
     assert(pair.tracks[0].clips[0].sourcePath=="a.wav" && pair.tracks[0].clips[0].sourceOffsetSeconds==0.2);
     assert(pair.crossfadeClips(0,0,1,FadeCurve::equalPower));
@@ -95,3 +96,4 @@ int main(){
     assert(e.gain(std::numeric_limits<int64_t>::min())==0);
     std::cout<<"Clip fade model, history and playback envelope regressions passed\n";
 }
+

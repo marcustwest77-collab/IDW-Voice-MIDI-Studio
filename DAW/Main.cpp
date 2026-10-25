@@ -887,16 +887,15 @@ public:
         return !playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() &&
             !exportRunning.load() && !aiPanel.isVisible() && !connectPanel.isVisible();
     }
-    void checkpointClips(){
-        if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
-        clipUndo.push_back(session);
-        clipRedo.clear();
-    }
     void restoreClipHistory(bool undo){
         if(!clipEditAvailable())return;
-        auto& from=undo?clipUndo:clipRedo;
-        auto& to=undo?clipRedo:clipUndo;
-        if(!idw::daw::restoreSessionHistory(session,from,to))return;
+        const auto result=undo?clipHistory.undo(session):clipHistory.redo(session);
+        if(result==idw::daw::ClipEditHistory::Result::conflict){
+            commandStatus.setText("Clip undo/redo unavailable: affected clips changed; newer work was preserved",
+                                  juce::dontSendNotification);
+            return;
+        }
+        if(result!=idw::daw::ClipEditHistory::Result::applied)return;
         selectedClipValid=false;
         repaint();
     }
@@ -906,8 +905,7 @@ public:
            selectedClipIndex>=session.tracks[selectedClipTrack].clips.size())return;
         const auto before=session;
         if(session.splitClip(selectedClipTrack,selectedClipIndex,playheadBeats)){
-            if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
-            clipUndo.push_back(before);clipRedo.clear();repaint();
+            clipHistory.record(before,session);repaint();
         }
     }
     void showClipFadeMenu(size_t track,size_t index) {
@@ -953,8 +951,7 @@ public:
                         result==5?Curve::linear:result==6?Curve::equalPower:c.fadeOutCurve);
                 }
                 if(changed && juce::JSON::toString(idw::daw::sessionToJson(safe->session))!=beforeJson){
-                    if(safe->clipUndo.size()>=64)safe->clipUndo.erase(safe->clipUndo.begin());
-                    safe->clipUndo.push_back(before);safe->clipRedo.clear();safe->repaint();
+                    safe->clipHistory.record(before,safe->session);safe->repaint();
                 }
             });
     }
@@ -1009,8 +1006,7 @@ public:
                 ? session.trimClipLeft(selectedClipTrack,selectedClipIndex,clip.startBeat+editStep)
                 : session.trimClipRight(selectedClipTrack,selectedClipIndex,
                     clip.startBeat+clip.lengthBeats-editStep);
-            if(changed){if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
-                clipUndo.push_back(before);clipRedo.clear();repaint();}
+            if(changed){clipHistory.record(before,session);repaint();}
             return changed;
         }
         const bool shift=key.getModifiers().isShiftDown();
@@ -1031,9 +1027,7 @@ public:
             const auto& current=session.tracks[selectedClipTrack].clips[selectedClipIndex];
             if(previous.startBeat!=current.startBeat ||
                previous.lengthBeats!=current.lengthBeats){
-                if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
-                clipUndo.push_back(before);
-                clipRedo.clear();
+                clipHistory.record(before,session);
                 repaint();
             }
         }
@@ -1193,9 +1187,7 @@ public:
             const auto& newClip=session.tracks[dragTrack].clips[dragIndex];
             if(oldClip.startBeat!=newClip.startBeat || oldClip.lengthBeats!=newClip.lengthBeats ||
                oldClip.fadeInBeats!=newClip.fadeInBeats || oldClip.fadeOutBeats!=newClip.fadeOutBeats){
-                if(clipUndo.size()>=64)clipUndo.erase(clipUndo.begin());
-                clipUndo.push_back(std::move(*dragHistorySnapshot));
-                clipRedo.clear();
+                clipHistory.record(*dragHistorySnapshot,session);
             }
         }
         dragHistorySnapshot.reset();
@@ -2049,7 +2041,7 @@ private:
         sources.clear();
         session=std::move(restored);
         // Undo snapshots refer to the prior project; never restore them into a new one.
-        clipUndo.clear();clipRedo.clear();dragHistorySnapshot.reset();
+        clipHistory.clear();dragHistorySnapshot.reset();
         draggingClip=false;selectedClipValid=false;
         sources=std::move(staged);
         waveformThumbnails.clear();
@@ -2783,7 +2775,7 @@ private:
     idw::daw::Session session;
     std::atomic<bool> playing{false};
     double playheadBeats=0;
-    std::vector<idw::daw::Session> clipUndo,clipRedo;
+    idw::daw::ClipEditHistory clipHistory;
     double takeStartBeat=0.0;
     bool takeWasOverdub=false;
     size_t recordTargetTrack=0;
@@ -2861,3 +2853,4 @@ private:
     std::unique_ptr<MainWindow> window;
 };
 START_JUCE_APPLICATION(DAWApplication)
+

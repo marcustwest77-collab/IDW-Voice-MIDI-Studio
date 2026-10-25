@@ -521,3 +521,18 @@ current app session, not saved in the project file.
 The Windows GUI test should confirm that G changes the label and that
 dragging clips at each grid setting behaves as expected, including with
 horizontal scrolling and zoom.
+
+
+### Clip undo preserves unrelated project work
+
+Clip undo/redo now records only changed clip lists, with expected before/after
+contents. It does not restore the whole session: later tempo, mix, routing, MIDI
+notes, instrument settings, added tracks and recordings on unrelated tracks are
+preserved. A crossfade or split remains one atomic edit. If the clips on an
+affected track have changed outside this history (such as a new recording/import),
+undo/redo declines the stale edit and displays a message rather than deleting
+newer work. A conflict leaves the session and history unchanged. No-op edits keep
+redo available; a real new edit clears redo. History retains 64 edits and resets
+when another project is loaded. Automated tests cover these rules and session
+serialization after undo/redo; GUI keyboard and drag testing remains separate.
+

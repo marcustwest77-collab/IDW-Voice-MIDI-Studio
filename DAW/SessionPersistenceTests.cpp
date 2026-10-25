@@ -1,4 +1,5 @@
 #include "SessionPersistence.h"
+#include "SessionHistory.h"
 #include "AIProposal.h"
 #include "AIStatusSnapshot.h"
 #include "MidiScheduler.h"
@@ -39,6 +40,25 @@ int main(){
     throw std::runtime_error("legacy fade defaults");
  fadeObject->setProperty("fadeInCurve",7);
  if(sessionFromJson(fadeJson,fadeRestored))throw std::runtime_error("invalid fade curve accepted");
+ // Saving after clip undo must keep later tempo/mixer/recording changes.
+ Session historySession;historySession.addTrack(TrackType::audio);
+ historySession.addClip(0,{"original.wav",0,4,0});const auto historyBefore=historySession;
+ ClipEditHistory clipHistory;historySession.setClipFades(0,0,0.5,1);
+ if(!clipHistory.record(historyBefore,historySession))throw std::runtime_error("history setup");
+ historySession.setTempo(97);historySession.setTrackMix(0,0.6f,0.2f);
+ historySession.addTrack(TrackType::audio);historySession.addClip(1,{"new-take.wav",1,2,0});
+ if(clipHistory.undo(historySession)!=ClipEditHistory::Result::applied)
+    throw std::runtime_error("history undo");
+ Session historyReloaded;
+ if(!sessionFromJson(sessionToJson(historySession),historyReloaded) || historyReloaded.bpm!=97 ||
+    historyReloaded.tracks.size()!=2 || historyReloaded.tracks[0].gain!=0.6f ||
+    historyReloaded.tracks[0].clips[0].fadeInBeats!=0 ||
+    historyReloaded.tracks[1].clips[0].sourcePath!="new-take.wav")
+    throw std::runtime_error("save after undo lost unrelated work");
+ if(clipHistory.redo(historySession)!=ClipEditHistory::Result::applied ||
+    !sessionFromJson(sessionToJson(historySession),historyReloaded) ||
+    historyReloaded.tracks[0].clips[0].fadeOutBeats!=1 || historyReloaded.tracks.size()!=2)
+    throw std::runtime_error("save after redo lost state");
  AIProposal action{AIProposal::Kind::tempo};
  if(!parseAIProposal(juce::JSON::parse(R"({"format":"idw-ai-proposal-v1","action":{"type":"set_tempo","bpm":145}})"),action)
     || action.kind!=AIProposal::Kind::tempo || action.bpm!=145)
@@ -778,3 +798,4 @@ int main(){
  root.deleteRecursively();
  std::cout<<"PASS: session project persistence\n";
 }
+

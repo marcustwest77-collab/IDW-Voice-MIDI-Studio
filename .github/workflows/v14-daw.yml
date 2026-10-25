@@ -15,7 +15,7 @@ jobs:
       - name: Configure V14 DAW
         run: cmake -S . -B build-v14 -DIDW_BUILD_DAW=ON -DBUILD_TESTING=ON
       - name: Build workstation and test
-        run: cmake --build build-v14 --config Release --target IDWDAW IDWDAWSessionTests IDWDAWTimelineTests IDWDAWPersistenceTests IDWDAWBounceTests IDWDAWMidiBenchmark IDWDAWClipEditingTests IDWDAWMultiClipTests IDWDAWClipFadeTests IDWDAWClipTransportTests IDWDAWWaveformTests IDWDAWZoomTests IDWDAWSnapTests --parallel 2
+        run: cmake --build build-v14 --config Release --target IDWDAW IDWDAWSessionTests IDWDAWTimelineTests IDWDAWPersistenceTests IDWDAWBounceTests IDWDAWMidiBenchmark IDWDAWClipEditingTests IDWDAWMultiClipTests IDWDAWClipFadeTests IDWDAWClipTransportTests IDWDAWWaveformTests IDWDAWZoomTests IDWDAWSnapTests IDWDAWClipHistoryTests --parallel 2
       - name: Test session model
         run: ctest --test-dir build-v14 -C Release -R IDWDAW --output-on-failure
       - name: Upload regression results
@@ -74,3 +74,4 @@ jobs:
           path: beta-windows/
           if-no-files-found: error
           retention-days: 14
+
