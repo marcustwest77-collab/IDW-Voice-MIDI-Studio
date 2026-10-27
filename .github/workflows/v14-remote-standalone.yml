@@ -34,3 +34,7 @@ jobs:
       - name: Test loopback-only Python TCP transport
         shell: bash
         run: python DAW/network/test_loopback_transport.py
+
+      - name: Test loopback command parser
+        shell: bash
+        run: python DAW/network/test_command_protocol.py
