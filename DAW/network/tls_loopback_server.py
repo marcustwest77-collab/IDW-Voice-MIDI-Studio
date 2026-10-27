@@ -79,9 +79,9 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                     if not callable(host_approval) or host_approval(certificate_peer, session.epoch) is not True:
                         raise PermissionError('host approval denied or expired')
                     command = parse_command(payload)
+                    replay_guard.inspect(session, payload, certificate_peer, verified_channel_id)
                     if host_approval_ledger is not None and not host_approval_ledger.consume(
                         certificate_peer, command['session_epoch'], command['request_id']
                     ):
                         raise PermissionError('command lacks single-use host approval')
-                    replay_guard.inspect(session, payload, certificate_peer, verified_channel_id)
                 send_frame(secure, payload)
