@@ -46,6 +46,10 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                         hashlib.sha256(peer_certificate).hexdigest(), approved_client_sha256
                     ):
                         raise PermissionError('unapproved client certificate')
+                # A protected session must be backed by mandatory mutual TLS and pinning.
+                # External peer/channel assertions alone are not sufficient.
+                if session is not None and (not client_cafile or not approved_client_sha256):
+                    raise PermissionError('protected sessions require pinned mTLS identity')
                 payload = receive_frame(secure)
                 if session is not None:
                     if not verified_peer_id or not verified_channel_id:

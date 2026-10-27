@@ -4,6 +4,7 @@ Inputs representing user identity and channel token are synthetic test fixtures,
 not derived from the TLS connection. No DAW control is performed.
 """
 import shutil
+import hashlib
 import socket
 import ssl
 import subprocess
@@ -30,6 +31,17 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                  "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost"],
                 check=True, capture_output=True, timeout=25,
             )
+            client_cert = Path(folder) / "guest.crt"
+            client_key = Path(folder) / "guest.key"
+            subprocess.run(
+                ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                 "-keyout", str(client_key), "-out", str(client_cert), "-days", "1",
+                 "-subj", "/CN=guest", "-addext", "subjectAltName=DNS:guest"],
+                check=True, capture_output=True, timeout=25,
+            )
+            fingerprint = hashlib.sha256(
+                ssl.PEM_cert_to_DER_cert(client_cert.read_text())
+            ).hexdigest()
             session = BoundSession("guest", 45, "test_channel_binding_12345")
             self.assertTrue(session.admit_bound(
                 "guest", "test_channel_binding_12345", True, True
@@ -49,7 +61,8 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                         serve_tls_once(port, str(cert), str(key), ready=ready,
                                        session=session, verified_peer_id="guest",
                                        verified_channel_id="test_channel_binding_12345",
-                                       replay_guard=guard)
+                                       replay_guard=guard, client_cafile=str(client_cert),
+                                       approved_client_sha256=fingerprint)
                     except Exception as exc:
                         server_failures.append(exc)
 
@@ -58,7 +71,8 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                 self.assertTrue(ready.wait(5))
                 try:
                     reply = verified_tls_client(
-                        "127.0.0.1", port, "localhost", str(cert), payload
+                        "127.0.0.1", port, "localhost", str(cert), payload,
+                        client_certfile=str(client_cert), client_keyfile=str(client_key)
                     )
                 except (ConnectionError, ssl.SSLError, OSError):
                     reply = None

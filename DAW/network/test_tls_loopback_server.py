@@ -16,6 +16,21 @@ from replay_guard import ReplayGuard
 
 
 class TLSServerTest(unittest.TestCase):
+    def test_unpinned_protected_session_rejected_before_read(self):
+        from unittest.mock import MagicMock
+        session = MagicMock()
+        with mock.patch("tls_loopback_server.ssl.SSLContext") as ctx, \
+             mock.patch("tls_loopback_server.socket.socket") as make_socket:
+            listener = make_socket.return_value.__enter__.return_value
+            listener.accept.return_value = (mock.MagicMock(), ("127.0.0.1", 40000))
+            secure = ctx.return_value.wrap_socket.return_value.__enter__.return_value
+            with self.assertRaises(PermissionError):
+                serve_tls_once(38941, "cert", "key", session=session,
+                               verified_peer_id="guest", verified_channel_id="trusted",
+                               replay_guard=ReplayGuard())
+            secure.recv.assert_not_called()
+
+
     def test_gate_requires_trusted_context(self):
         session = BoundSession("guest", 7, "trusted_channel_identity_123")
         self.assertTrue(session.admit_bound("guest", "trusted_channel_identity_123", True, True))
