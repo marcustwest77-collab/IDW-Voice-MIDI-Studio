@@ -79,6 +79,10 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                     if not callable(host_approval) or host_approval(certificate_peer, session.epoch) is not True:
                         raise PermissionError('host approval denied or expired')
                     command = parse_command(payload)
+                    # Match the C++ host review queue's minimal action allowlist.
+                    # Never burn approvals or replay sequence for forbidden actions.
+                    if command['action'] not in {'select', 'arm'}:
+                        raise PermissionError('remote action is not enabled')
                     # Reject unapproved commands before committing anti-replay state.
                     if not host_approval_ledger.contains(
                         certificate_peer, command['session_epoch'], command['request_id']
