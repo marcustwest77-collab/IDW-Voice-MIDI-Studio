@@ -32,4 +32,11 @@ int main() {
     assert(!queue.stage(cmd,grant));
     queue.clear(); assert(queue.size()==0);
     grant.revokedEpoch=11;assert(!queue.stage(cmd,grant));
+    grant.revokedEpoch=0;
+    cmd.protocolVersion=2; assert(!queue.stage(cmd,grant));
+    cmd.protocolVersion=1; cmd.sequence=0; assert(!queue.stage(cmd,grant));
+    cmd.sequence=4; cmd.requestId="../bad"; assert(!queue.stage(cmd,grant));
+    cmd.requestId="safe"; cmd.action=Action::delete_track; assert(!queue.stage(cmd,grant));
+    cmd.action=Action::export_audio; assert(!queue.stage(cmd,grant));
+    assert(queue.size()==0);
 }
