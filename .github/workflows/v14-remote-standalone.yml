@@ -30,3 +30,7 @@ jobs:
             echo "Running ${name}"
             "./remote-test-bin/$name"
           done
+
+      - name: Test loopback-only Python TCP transport
+        shell: bash
+        run: python DAW/network/test_loopback_transport.py
