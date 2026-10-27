@@ -27,9 +27,7 @@ int main() {
  assert(!admitted.beginHostApprovedSession(200,true,true,true));
  assert(admitted.beginHostApprovedSession(201,true,true,true));
  assert(admitted.pending().empty());
- assert(coordinator.session().open(100));
- assert(coordinator.session().admitGuest(true,true));
- assert(coordinator.session().setPrivileges(true,false));
+ assert(coordinator.beginHostApprovedSession(100,true,true,true));
  Request live;live.trackCount=4;live.trackIsAudio=true;
  CommandMessage cmd;cmd.sessionEpoch=100;cmd.sequence=1;cmd.requestId="track100";
  cmd.action=Action::arm_track;cmd.trackIndex=1;
@@ -45,10 +43,8 @@ int main() {
  coordinator.disconnect();
  assert(coordinator.pending().empty());
  assert(!coordinator.stageInspected(cmd,live));
- assert(!coordinator.session().open(100));
- assert(coordinator.session().open(101));
- assert(coordinator.session().admitGuest(true,true));
- assert(coordinator.session().setPrivileges(true,false));
+ assert(!coordinator.beginHostApprovedSession(100,true,true,true));
+ assert(coordinator.beginHostApprovedSession(101,true,true,true));
  cmd.sessionEpoch=101;cmd.sequence=1;cmd.requestId="track101";
  cmd.action=Action::select_track;
  assert(coordinator.stageInspected(cmd,live));
