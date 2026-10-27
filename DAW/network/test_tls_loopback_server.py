@@ -11,7 +11,22 @@ from tls_client import verified_tls_client
 from tls_loopback_server import serve_tls_once
 
 
+from channel_bound_session import BoundSession
+from replay_guard import ReplayGuard
+
+
 class TLSServerTest(unittest.TestCase):
+    def test_gate_requires_trusted_context(self):
+        session = BoundSession("guest", 7, "trusted_channel_identity_123")
+        self.assertTrue(session.admit_bound("guest", "trusted_channel_identity_123", True, True))
+        self.assertTrue(session.grant(True, False))
+        guard = ReplayGuard()
+        self.assertEqual(guard.inspect(session, b"1|7|1|request1|arm|1",
+                                      "guest", "trusted_channel_identity_123")["sequence"], 1)
+        with self.assertRaises(PermissionError):
+            guard.inspect(session, b"1|7|1|request1|arm|1",
+                          "guest", "trusted_channel_identity_123")
+
     def test_requires_credentials(self):
         with self.assertRaises(ValueError):
             serve_tls_once(0, "certificate", "key")
