@@ -71,3 +71,7 @@ jobs:
       - name: Test remote command replay guard
         shell: bash
         run: python DAW/network/test_replay_guard.py
+
+      - name: Exercise guarded localhost TLS roundtrip
+        shell: bash
+        run: python DAW/network/test_guarded_tls_roundtrip.py
