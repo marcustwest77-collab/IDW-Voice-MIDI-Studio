@@ -10,7 +10,7 @@ import ssl
 from loopback_transport import send_frame, receive_frame
 
 
-def verified_tls_client(host, port, server_name, cafile, payload, timeout=5):
+def verified_tls_client(host, port, server_name, cafile, payload, timeout=5, *, client_certfile=None, client_keyfile=None):
     if not server_name or not server_name.strip() or not cafile:
         raise ValueError("server_name and trusted CA file are required")
     if not host or not (1 <= port <= 65535):
@@ -18,6 +18,10 @@ def verified_tls_client(host, port, server_name, cafile, payload, timeout=5):
     if not 1 <= len(payload) <= 4096:
         raise ValueError("invalid payload")
     context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=cafile)
+    if bool(client_certfile) != bool(client_keyfile):
+        raise ValueError("client certificate and key must be supplied together")
+    if client_certfile:
+        context.load_cert_chain(certfile=client_certfile, keyfile=client_keyfile)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.verify_mode = ssl.CERT_REQUIRED
     context.check_hostname = True
