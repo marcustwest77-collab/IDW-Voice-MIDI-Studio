@@ -13,8 +13,17 @@ public:
     // refresh live grant/track state and use HostReviewController::approve.
     std::function<void(const std::string&, bool approve)> onHostDecision;
 
-    HostReviewPanel() { addAndMakeVisible(header_); header_.setText(
-        "Remote Studio - Host Approval", juce::dontSendNotification); }
+    HostReviewPanel() {
+        addAndMakeVisible(header_);
+        header_.setText("Remote Studio - Host Approval", juce::dontSendNotification);
+        addAndMakeVisible(status_);
+        status_.setText("Offline: remote approvals unavailable", juce::dontSendNotification);
+    }
+
+    void setApprovalEnabled(bool enabled) {
+        approvalEnabled_ = enabled;
+        for (auto& row : rows_) row->approve.setEnabled(enabled);
+    }
 
     void showPending(const std::vector<PendingReview>& pending) {
         jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
@@ -26,7 +35,10 @@ public:
                 juce::String(id) + " | action " + juce::String(static_cast<int>(item.action))
                 + " | track " + juce::String(static_cast<int>(item.trackIndex + 1)),
                 juce::dontSendNotification);
-            row->approve.onClick = [this, id] { if (onHostDecision) onHostDecision(id, true); };
+            row->approve.setEnabled(approvalEnabled_);
+            row->approve.onClick = [this, id] {
+                if (approvalEnabled_ && onHostDecision) onHostDecision(id, true);
+            };
             row->deny.onClick = [this, id] { if (onHostDecision) onHostDecision(id, false); };
             addAndMakeVisible(*row);
             rows_.push_back(std::move(row));
@@ -38,6 +50,7 @@ public:
     void resized() override {
         auto area = getLocalBounds().reduced(8);
         header_.setBounds(area.removeFromTop(30));
+        status_.setBounds(area.removeFromTop(24));
         for (auto& row : rows_) row->setBounds(area.removeFromTop(36));
     }
 private:
@@ -56,7 +69,8 @@ private:
             caption.setBounds(bounds);
         }
     };
-    juce::Label header_;
+    bool approvalEnabled_ = false; // deny by default until live authenticated DAW integration
+    juce::Label header_, status_;
     std::vector<std::unique_ptr<ReviewRow>> rows_;
 };
 }
