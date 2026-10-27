@@ -17,9 +17,10 @@ class SessionAdmission:
         self.connected = False
         self.control = False
         self.recording = False
+        self.revoked = False
 
     def admit(self, verified_peer_identity, host_approved, transport_verified):
-        if (not transport_verified or not host_approved or
+        if (self.revoked or not transport_verified or not host_approved or
                 verified_peer_identity != self.expected_peer_id):
             return False
         self.connected = True
@@ -38,6 +39,7 @@ class SessionAdmission:
                 (not recording or self.recording))
 
     def revoke(self):
+        self.revoked = True
         self.connected = False
         self.control = False
         self.recording = False

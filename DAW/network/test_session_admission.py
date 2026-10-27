@@ -20,6 +20,8 @@ class SessionAdmissionTest(unittest.TestCase):
         session.revoke()
         self.assertFalse(session.can_request("guest-1", 42))
         self.assertFalse(session.grant(True, True))
+        self.assertFalse(session.admit("guest-1", True, True))
+        self.assertFalse(session.can_request("guest-1", 42))
 
     def test_invalid_session(self):
         with self.assertRaises(ValueError):
