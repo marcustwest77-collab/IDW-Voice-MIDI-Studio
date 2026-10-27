@@ -49,7 +49,7 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             self.assertTrue(session.grant(control=True, recording=False))
             guard = ReplayGuard()
 
-            def exchange(payload):
+            def exchange(payload, mapped_peer='guest'):
                 with socket.socket() as probe:
                     probe.bind(("127.0.0.1", 0))
                     port = probe.getsockname()[1]
@@ -62,7 +62,8 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                                        session=session, verified_peer_id="guest",
                                        verified_channel_id="test_channel_binding_12345",
                                        replay_guard=guard, client_cafile=str(client_cert),
-                                       approved_client_sha256=fingerprint)
+                                       approved_client_sha256=fingerprint,
+                                       approved_peer_by_sha256={fingerprint: mapped_peer})
                     except Exception as exc:
                         server_failures.append(exc)
 
@@ -80,6 +81,9 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                 self.assertFalse(worker.is_alive())
                 return reply, server_failures
 
+            denied, errors = exchange(b"1|45|1|wrong_guest|arm|1", mapped_peer="intruder")
+            self.assertIsNone(denied)
+            self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
             allowed, errors = exchange(b"1|45|1|arm_one|arm|1")
             self.assertEqual(allowed, b"1|45|1|arm_one|arm|1")
             self.assertFalse(errors)

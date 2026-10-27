@@ -13,7 +13,8 @@ from replay_guard import ReplayGuard
 
 def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                    verified_peer_id=None, verified_channel_id=None, replay_guard=None,
-                   client_cafile=None, approved_client_sha256=None):
+                   client_cafile=None, approved_client_sha256=None,
+                   approved_peer_by_sha256=None):
     if not (1024 <= port <= 65535) or not certfile or not keyfile:
         raise ValueError("port and TLS certificate/key are required")
     if approved_client_sha256 is not None:
@@ -21,6 +22,11 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
             ch not in '0123456789abcdef' for ch in approved_client_sha256
         ):
             raise ValueError('client trust and lowercase SHA-256 fingerprint required')
+    if approved_peer_by_sha256 is not None:
+        if not isinstance(approved_peer_by_sha256, dict) or not approved_peer_by_sha256:
+            raise ValueError('trusted certificate-to-peer mapping required')
+        if not client_cafile:
+            raise ValueError('certificate mapping requires mutual TLS')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(certfile=certfile, keyfile=keyfile)
@@ -50,11 +56,21 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                 # External peer/channel assertions alone are not sufficient.
                 if session is not None and (not client_cafile or not approved_client_sha256):
                     raise PermissionError('protected sessions require pinned mTLS identity')
+                certificate_peer = None
+                if approved_peer_by_sha256 is not None:
+                    peer_der = secure.getpeercert(binary_form=True)
+                    if not peer_der:
+                        raise PermissionError('peer certificate required')
+                    certificate_peer = approved_peer_by_sha256.get(hashlib.sha256(peer_der).hexdigest())
+                    if not certificate_peer:
+                        raise PermissionError('client certificate not mapped to approved guest')
                 payload = receive_frame(secure)
                 if session is not None:
-                    if not verified_peer_id or not verified_channel_id:
+                    if approved_peer_by_sha256 is None or certificate_peer != session.expected_peer_id:
+                        raise PermissionError('certificate identity does not match approved session guest')
+                    if not verified_channel_id:
                         raise PermissionError("trusted identity and channel binding required")
                     if replay_guard is None:
                         raise PermissionError("session replay guard required")
-                    replay_guard.inspect(session, payload, verified_peer_id, verified_channel_id)
+                    replay_guard.inspect(session, payload, certificate_peer, verified_channel_id)
                 send_frame(secure, payload)
