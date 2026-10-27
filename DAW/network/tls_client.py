@@ -17,9 +17,9 @@ def verified_tls_client(host, port, server_name, cafile, payload, timeout=5, *, 
         raise ValueError("invalid endpoint")
     if not 1 <= len(payload) <= 4096:
         raise ValueError("invalid payload")
-    context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=cafile)
     if bool(client_certfile) != bool(client_keyfile):
         raise ValueError("client certificate and key must be supplied together")
+    context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=cafile)
     if client_certfile:
         context.load_cert_chain(certfile=client_certfile, keyfile=client_keyfile)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
