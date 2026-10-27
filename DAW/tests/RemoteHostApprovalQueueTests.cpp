@@ -15,6 +15,11 @@ int main() {
     assert(queue.stage(cmd,grant));
     assert(!queue.stage(cmd,grant)); // duplicate
     assert(queue.size()==1);
+    const auto snapshot=queue.pending();
+    assert(snapshot.size()==1 && snapshot.front().requestId=="r1");
+    assert(queue.deny("r1"));
+    assert(snapshot.size()==1 && snapshot.front().requestId=="r1");
+    assert(queue.stage(cmd,grant));
     assert(!queue.approve("other",grant,live,approved));
     assert(queue.approve("r1",grant,live,approved));
     assert(approved.requestId=="r1" && queue.size()==0);
