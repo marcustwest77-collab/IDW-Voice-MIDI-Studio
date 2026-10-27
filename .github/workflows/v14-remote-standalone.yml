@@ -55,3 +55,7 @@ jobs:
       - name: Reject untrusted TLS server certificate
         shell: bash
         run: python DAW/network/test_tls_identity_rejection.py
+
+      - name: Test remote session identity binding
+        shell: bash
+        run: python DAW/network/test_session_admission.py
