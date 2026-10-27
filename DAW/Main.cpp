@@ -1839,6 +1839,37 @@ private:
         }else if(command=="play" || command=="start playback" || command=="play the beat"){
             if(!busy){play.triggerClick();feedback="PLAY requested";}
             else feedback="Playback command blocked: recording/export busy";
+        }else if(command.startsWith("arm track ") || command.startsWith("disarm track ")){
+            // Explicit numbered arming never falls back to the currently selected track.
+            const bool shouldArm=command.startsWith("arm track ");
+            const auto requested=command.fromFirstOccurrenceOf("track ",false,false).trim();
+            const juce::StringArray numberWords{"one","two","three","four","five",
+                                                "six","seven","eight","nine","ten"};
+            int trackNumber=0;
+            if(requested.isNotEmpty() && requested.containsOnly("0123456789")){
+                trackNumber=requested.getIntValue();
+            }else{
+                const int wordIndex=numberWords.indexOf(requested);
+                if(wordIndex>=0)trackNumber=wordIndex+1;
+            }
+            if(trackNumber<1 || (size_t)trackNumber>session.tracks.size() ||
+               (size_t)trackNumber>armedTracks.size()){
+                feedback="Invalid track number; no tracks were armed or disarmed";
+            }else if(busy || playing.load()){
+                feedback="Stop playback, recording or export before changing armed tracks";
+            }else{
+                const auto index=(size_t)(trackNumber-1);
+                if(session.tracks[index].type!=idw::daw::TrackType::audio){
+                    feedback="Track "+juce::String(trackNumber)+" is not an audio track";
+                }else{
+                    armedTracks[index]=shouldArm;
+                    selectedTrack=index;
+                    ensureSelectedTrackVisible();
+                    refreshMixer();repaint();
+                    feedback="Track "+juce::String(trackNumber)+
+                        (shouldArm ? " armed" : " disarmed");
+                }
+            }
         }else if(command=="arm track" || command=="arm input" || command=="disarm track" || command=="disarm input"){
             if(!busy && !playing.load() && selectedTrack<session.tracks.size() &&
                selectedTrack<armedTracks.size() &&
