@@ -1968,6 +1968,24 @@ private:
         juce::Logger::writeToLog("IDW command: "+command+" -> "+feedback);
         voiceCommandInput.selectAll();
     }
+    // Trusted message-thread intake for a command already authenticated by the
+    // transport. No network listener calls this yet. Never use peer-supplied DAW state.
+    bool stageAuthenticatedTrackRequest(const idw::daw::remote::CommandMessage& command) {
+        using namespace idw::daw::remote;
+        if (command.action!=Action::select_track && command.action!=Action::arm_track)
+            return false;
+        if (command.trackIndex>=session.tracks.size()) return false;
+        Request live;
+        live.actor=Role::guest;
+        live.trackCount=session.tracks.size();
+        live.trackIsAudio=
+            session.tracks[command.trackIndex].type==idw::daw::TrackType::audio;
+        live.transportBusy=playing.load() || exportRunning.load();
+        live.recordingActive=recorder.isRecording() || multiRecorder.isRecording();
+        if (!remoteSessionReviews.stageInspected(command, live)) return false;
+        remoteReviewPanel.showPending(remoteSessionReviews.pending());
+        return true;
+    }
     // Called only from a future verified LOCAL host decision handler. No network
     // entrypoint is connected. Approval remains disabled in the visible UI.
     bool dispatchApprovedTrackRequest(const std::string& requestId) {
