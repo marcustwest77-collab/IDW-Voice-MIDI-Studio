@@ -25,6 +25,7 @@
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
 #include "RemoteHostReviewPanel.h"
+#include "RemoteSessionReviewCoordinator.h"
 #include "RemoteTrackControlAdapter.h"
 #include "RemoteRestrictedCommandDispatcher.h"
 #include <atomic>
@@ -117,7 +118,7 @@ public:
         addChildComponent(remoteReviewPanel);
         remoteReviewPanel.setApprovalEnabled(false); // no verified session or dispatcher yet
         remoteReviewButton.onClick=[this] {
-            remoteReviewPanel.showPending(remoteReviewController.pending(remoteReviewGrant));
+            remoteReviewPanel.showPending(remoteSessionReviews.pending());
             remoteReviewPanel.setVisible(!remoteReviewPanel.isVisible());
             remoteReviewPanel.toFront(false);
         };
@@ -128,9 +129,9 @@ public:
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
                     "Remote approval unavailable", "No authenticated remote session is connected.");
             } else {
-                remoteReviewController.deny(id);
+                remoteSessionReviews.reviews().deny(id);
             }
-            remoteReviewPanel.showPending(remoteReviewController.pending(remoteReviewGrant));
+            remoteReviewPanel.showPending(remoteSessionReviews.pending());
         };
         addAndMakeVisible(skinSelector);
         addAndMakeVisible(recordReadiness);
@@ -1968,7 +1969,7 @@ private:
         state.trackCount=session.tracks.size();
         // Resolve the reviewed command before policy checks; never assume
         // a guest-selected track is audio or even exists.
-        const auto pending=remoteReviewController.pending(verifiedGrant);
+        const auto pending=remoteSessionReviews.reviews().pending(verifiedGrant);
         const auto request=std::find_if(pending.begin(),pending.end(),
             [&requestId](const auto& item){return item.requestId==requestId;});
         if (request==pending.end() || request->trackIndex>=session.tracks.size() ||
@@ -1979,7 +1980,7 @@ private:
         state.transportBusy=playing.load() || exportRunning.load();
         state.recordingActive=recorder.isRecording() || multiRecorder.isRecording();
         auto adapter=makeRemoteTrackAdapter();
-        HostApprovalDispatchGate gate(remoteReviewController);
+        HostApprovalDispatchGate gate(remoteSessionReviews.reviews());
         RestrictedCommandDispatcher dispatcher(gate);
         return dispatcher.dispatchAfterHostClick(requestId, verifiedGrant, state, adapter);
     }
@@ -3155,9 +3156,7 @@ public:
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
     juce::TextButton remoteReviewButton;
-    idw::daw::remote::HostApprovalQueue remoteApprovalQueue;
-    idw::daw::remote::HostReviewController remoteReviewController{remoteApprovalQueue};
-    idw::daw::remote::Grant remoteReviewGrant; // disconnected until authenticated transport integration
+    idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
     idw::daw::remote::HostReviewPanel remoteReviewPanel;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
