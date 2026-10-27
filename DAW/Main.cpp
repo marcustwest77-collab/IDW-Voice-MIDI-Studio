@@ -26,6 +26,7 @@
 #include "AIStatusSnapshot.h"
 #include "RemoteHostReviewPanel.h"
 #include "RemoteTrackControlAdapter.h"
+#include "RemoteRestrictedCommandDispatcher.h"
 #include <atomic>
 #include <memory>
 #include <map>
@@ -1956,6 +1957,22 @@ private:
         commandStatus.setText(feedback,juce::dontSendNotification);
         juce::Logger::writeToLog("IDW command: "+command+" -> "+feedback);
         voiceCommandInput.selectAll();
+    }
+    // Called only from a future verified LOCAL host decision handler. No network
+    // entrypoint is connected. Approval remains disabled in the visible UI.
+    bool dispatchApprovedTrackRequest(const std::string& requestId,
+                                      const idw::daw::remote::Grant& verifiedGrant) {
+        using namespace idw::daw::remote;
+        Request state;
+        state.actor=Role::guest;
+        state.trackCount=session.tracks.size();
+        state.trackIsAudio=true; // recomputed by the per-track adapter before arming
+        state.transportBusy=playing.load() || exportRunning.load();
+        state.recordingActive=recorder.isRecording() || multiRecorder.isRecording();
+        auto adapter=makeRemoteTrackAdapter();
+        HostApprovalDispatchGate gate(remoteReviewController);
+        RestrictedCommandDispatcher dispatcher(gate);
+        return dispatcher.dispatchAfterHostClick(requestId, verifiedGrant, state, adapter);
     }
     // Local-only callback adapter for future approved remote requests. The UI currently
     // has no authenticated transport and never invokes this adapter on peer messages.
