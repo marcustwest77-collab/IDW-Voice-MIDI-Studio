@@ -6,9 +6,11 @@ authentication, host approval or DAW control. Never expose to LAN/Internet.
 import socket
 import ssl
 from loopback_transport import receive_frame, send_frame
+from replay_guard import ReplayGuard
 
 
-def serve_tls_once(port, certfile, keyfile, ready=None):
+def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
+                   verified_peer_id=None, verified_channel_id=None, replay_guard=None):
     if not (1024 <= port <= 65535) or not certfile or not keyfile:
         raise ValueError("port and TLS certificate/key are required")
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -26,4 +28,10 @@ def serve_tls_once(port, certfile, keyfile, ready=None):
             raw.settimeout(5)
             with context.wrap_socket(raw, server_side=True) as secure:
                 payload = receive_frame(secure)
+                if session is not None:
+                    if not verified_peer_id or not verified_channel_id:
+                        raise PermissionError("trusted identity and channel binding required")
+                    if replay_guard is None:
+                        raise PermissionError("session replay guard required")
+                    replay_guard.inspect(session, payload, verified_peer_id, verified_channel_id)
                 send_frame(secure, payload)
