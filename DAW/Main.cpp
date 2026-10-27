@@ -2019,7 +2019,7 @@ private:
     idw::daw::remote::TrackControlAdapter makeRemoteTrackAdapter() {
         return {juce::jmin(session.tracks.size(), armedTracks.size()),
             [this](std::size_t index) {
-                if (index>=session.tracks.size() || playing.load() ||
+                if (index>=session.tracks.size() || index>=armedTracks.size() || playing.load() ||
                     recorder.isRecording() || multiRecorder.isRecording() ||
                     exportRunning.load()) return false;
                 selectedTrack=index;
