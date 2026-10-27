@@ -49,5 +49,9 @@ int main() {
     cmd.sequence=4; cmd.requestId="../bad"; assert(!queue.stage(cmd,grant));
     cmd.requestId="safe"; cmd.action=Action::delete_track; assert(!queue.stage(cmd,grant));
     cmd.action=Action::export_audio; assert(!queue.stage(cmd,grant));
+    cmd.action=Action::start_recording; assert(!queue.stage(cmd,grant));
+    cmd.action=Action::set_gain; assert(!queue.stage(cmd,grant));
+    cmd.action=Action::select_track; assert(queue.stage(cmd,grant));
+    assert(queue.deny("safe"));
     assert(queue.size()==0);
 }
