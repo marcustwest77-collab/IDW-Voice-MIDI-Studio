@@ -30,7 +30,13 @@ int main() {
     for(int i=0;i<16;i++){cmd.requestId="id"+std::to_string(i); assert(queue.stage(cmd,grant));}
     cmd.requestId="over";
     assert(!queue.stage(cmd,grant));
+    assert(queue.deny("id0"));
+    assert(queue.size()==15);
+    assert(!queue.deny("id0"));
+    assert(!queue.approve("id0",grant,live,approved));
+    assert(queue.deny("id1"));
     queue.clear(); assert(queue.size()==0);
+    assert(!queue.deny("id2"));
     grant.revokedEpoch=11;assert(!queue.stage(cmd,grant));
     grant.revokedEpoch=0;
     cmd.protocolVersion=2; assert(!queue.stage(cmd,grant));
