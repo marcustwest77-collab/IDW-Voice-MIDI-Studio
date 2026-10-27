@@ -1971,7 +1971,7 @@ private:
     // entrypoint is connected. Approval remains disabled in the visible UI.
     bool dispatchApprovedTrackRequest(const std::string& requestId) {
         // Never trust a caller-provided grant; read the local session authority.
-        const auto& verifiedGrant=remoteSessionReviews.session().privileges();
+        const auto& verifiedGrant=remoteSessionReviews.grant();
         using namespace idw::daw::remote;
         Request state;
         state.actor=Role::guest;
