@@ -14,7 +14,7 @@ from replay_guard import ReplayGuard
 def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                    verified_peer_id=None, verified_channel_id=None, replay_guard=None,
                    client_cafile=None, approved_client_sha256=None,
-                   approved_peer_by_sha256=None):
+                   approved_peer_by_sha256=None, host_approval=None):
     if not (1024 <= port <= 65535) or not certfile or not keyfile:
         raise ValueError("port and TLS certificate/key are required")
     if approved_client_sha256 is not None:
@@ -27,6 +27,8 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
             raise ValueError('trusted certificate-to-peer mapping required')
         if not client_cafile:
             raise ValueError('certificate mapping requires mutual TLS')
+    if session is not None and host_approval is None:
+        raise PermissionError('protected session requires host approval callback')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(certfile=certfile, keyfile=keyfile)
@@ -72,5 +74,7 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                         raise PermissionError("trusted identity and channel binding required")
                     if replay_guard is None:
                         raise PermissionError("session replay guard required")
+                    if not callable(host_approval) or host_approval(certificate_peer, session.epoch) is not True:
+                        raise PermissionError('host approval denied or expired')
                     replay_guard.inspect(session, payload, certificate_peer, verified_channel_id)
                 send_frame(secure, payload)
