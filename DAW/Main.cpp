@@ -123,8 +123,11 @@ public:
             remoteReviewPanel.toFront(false);
         };
         remoteReviewPanel.onRevokeControl=[this] {
-            remoteSessionReviews.revokeControl();
+            const bool revoked=remoteSessionReviews.revokeControl();
             remoteReviewPanel.setApprovalEnabled(false);
+            remoteReviewPanel.setConnectionStatus(revoked
+                ? "Remote control revoked; pending requests cleared"
+                : "Offline: no active remote control to revoke");
             remoteReviewPanel.showPending(remoteSessionReviews.pending());
         };
         remoteReviewPanel.onHostDecision=[this](const std::string& id, bool approve) {
