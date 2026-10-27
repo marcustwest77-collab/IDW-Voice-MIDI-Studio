@@ -35,6 +35,37 @@ class TransportTest(unittest.TestCase):
             left.close()
             right.close()
 
+    def test_validated_local_socket(self):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+        listener.close()
+        server = threading.Thread(target=t.serve_once, args=(port, True), daemon=True)
+        server.start()
+        import time
+        for _ in range(40):
+            try:
+                t.client(port, b"1|25|1|request_1|arm|2")
+                break
+            except OSError:
+                time.sleep(0.025)
+        else:
+            self.fail("validated local server not reachable")
+        server.join(timeout=3)
+        self.assertFalse(server.is_alive())
+
+    def test_invalid_payload_rejected_before_echo(self):
+        left, right = socket.socketpair()
+        try:
+            t.send_frame(left, b"1|25|1|request_1|delete|2")
+            payload = t.receive_frame(right)
+            from command_protocol import parse_command
+            with self.assertRaises(ValueError):
+                parse_command(payload)
+        finally:
+            left.close()
+            right.close()
+
     def test_local_tcp_round_trip(self):
         probe = socket.socket()
         probe.bind(("127.0.0.1", 0))
