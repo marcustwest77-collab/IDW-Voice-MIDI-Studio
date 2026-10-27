@@ -9,12 +9,14 @@ import hmac
 import ssl
 from loopback_transport import receive_frame, send_frame
 from replay_guard import ReplayGuard
+from command_protocol import parse_command
 
 
 def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                    verified_peer_id=None, verified_channel_id=None, replay_guard=None,
                    client_cafile=None, approved_client_sha256=None,
-                   approved_peer_by_sha256=None, host_approval=None):
+                   approved_peer_by_sha256=None, host_approval=None,
+                   host_approval_ledger=None):
     if not (1024 <= port <= 65535) or not certfile or not keyfile:
         raise ValueError("port and TLS certificate/key are required")
     if approved_client_sha256 is not None:
@@ -76,5 +78,10 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                         raise PermissionError("session replay guard required")
                     if not callable(host_approval) or host_approval(certificate_peer, session.epoch) is not True:
                         raise PermissionError('host approval denied or expired')
+                    command = parse_command(payload)
+                    if host_approval_ledger is not None and not host_approval_ledger.consume(
+                        certificate_peer, command['session_epoch'], command['request_id']
+                    ):
+                        raise PermissionError('command lacks single-use host approval')
                     replay_guard.inspect(session, payload, certificate_peer, verified_channel_id)
                 send_frame(secure, payload)
