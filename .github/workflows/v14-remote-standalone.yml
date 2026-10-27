@@ -51,3 +51,7 @@ jobs:
       - name: Test encrypted localhost TLS roundtrip
         shell: bash
         run: python DAW/network/test_tls_roundtrip.py
+
+      - name: Reject untrusted TLS server certificate
+        shell: bash
+        run: python DAW/network/test_tls_identity_rejection.py
