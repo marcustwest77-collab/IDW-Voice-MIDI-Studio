@@ -42,3 +42,7 @@ jobs:
       - name: Test certificate-verified TLS client configuration
         shell: bash
         run: python DAW/network/test_tls_client.py
+
+      - name: Test localhost TLS server configuration
+        shell: bash
+        run: python DAW/network/test_tls_loopback_server.py

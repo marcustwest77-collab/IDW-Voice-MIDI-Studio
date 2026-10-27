@@ -1,0 +1,29 @@
+"""Development-only TLS echo server bound exclusively to 127.0.0.1.
+
+TLS protects transport to a validated hostname, but provides NO account/guest
+authentication, host approval or DAW control. Never expose to LAN/Internet.
+"""
+import socket
+import ssl
+from loopback_transport import receive_frame, send_frame
+
+
+def serve_tls_once(port, certfile, keyfile, ready=None):
+    if not (1024 <= port <= 65535) or not certfile or not keyfile:
+        raise ValueError("port and TLS certificate/key are required")
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(certfile=certfile, keyfile=keyfile)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", port))
+        listener.listen(1)
+        listener.settimeout(5)
+        if ready is not None:
+            ready.set()
+        raw, _ = listener.accept()
+        with raw:
+            raw.settimeout(5)
+            with context.wrap_socket(raw, server_side=True) as secure:
+                payload = receive_frame(secure)
+                send_frame(secure, payload)
