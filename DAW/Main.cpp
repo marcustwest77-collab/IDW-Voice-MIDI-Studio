@@ -24,6 +24,7 @@
 #include "IDWConnectPanel.h"
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
+#include "RemoteHostReviewPanel.h"
 #include <atomic>
 #include <memory>
 #include <map>
@@ -109,6 +110,25 @@ public:
         title.setColour(juce::Label::textColourId,juce::Colour(0xff4adfff));
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
+        addAndMakeVisible(remoteReviewButton);
+        remoteReviewButton.setButtonText("REMOTE REVIEW");
+        addChildComponent(remoteReviewPanel);
+        remoteReviewButton.onClick=[this] {
+            remoteReviewPanel.showPending(remoteReviewController.pending(remoteReviewGrant));
+            remoteReviewPanel.setVisible(!remoteReviewPanel.isVisible());
+            remoteReviewPanel.toFront(false);
+        };
+        remoteReviewPanel.onHostDecision=[this](const std::string& id, bool approve) {
+            if (approve) {
+                // No remote session is authenticated in this DAW window yet.
+                // Fail closed until the transport supplies verified live state.
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                    "Remote approval unavailable", "No authenticated remote session is connected.");
+            } else {
+                remoteReviewController.deny(id);
+            }
+            remoteReviewPanel.showPending(remoteReviewController.pending(remoteReviewGrant));
+        };
         addAndMakeVisible(skinSelector);
         addAndMakeVisible(recordReadiness);
         recordReadiness.setJustificationType(juce::Justification::centredLeft);
@@ -758,6 +778,7 @@ public:
         auto header=area.removeFromTop(42);
         recordReadiness.setBounds(26,249,juce::jmax(100,getWidth()-52),18);
         skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
+        remoteReviewButton.setBounds(header.removeFromRight(125).reduced(3));
         skinSelector.setBounds(header.removeFromRight(165).reduced(3));
         title.setBounds(header);
         auto controls=area.removeFromTop(44);
@@ -824,6 +845,7 @@ public:
         limitLabel.setBounds(ceilingRow.removeFromLeft(145));
         ceilingControl.setBounds(ceilingRow.removeFromLeft(220));
         connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
+        remoteReviewPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,630),260));
         aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
         pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
     }
@@ -3078,6 +3100,11 @@ public:
     IDWPianoRoll pianoRoll;
     IDWAIApprovalPanel aiPanel;
     IDWConnectPanel connectPanel;
+    juce::TextButton remoteReviewButton;
+    idw::daw::remote::HostApprovalQueue remoteApprovalQueue;
+    idw::daw::remote::HostReviewController remoteReviewController{remoteApprovalQueue};
+    idw::daw::remote::Grant remoteReviewGrant; // disconnected until authenticated transport integration
+    idw::daw::remote::HostReviewPanel remoteReviewPanel;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
     IDWLoopbackCapture loopbackCapture;
