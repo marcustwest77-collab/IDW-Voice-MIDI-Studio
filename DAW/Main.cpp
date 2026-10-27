@@ -124,7 +124,7 @@ public:
             remoteReviewPanel.toFront(false);
         };
         remoteReviewPanel.onRevokeControl=[this] {
-            const bool revoked=remoteSessionReviews.revokeControl();
+            const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
             remoteReviewPanel.setApprovalEnabled(false);
             remoteReviewPanel.setConnectionStatus(revoked
                 ? "Remote control revoked; pending requests cleared"
