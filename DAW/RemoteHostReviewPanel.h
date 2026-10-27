@@ -13,8 +13,12 @@ public:
     // refresh live grant/track state and use HostReviewController::approve.
     std::function<void(const std::string&, bool approve)> onHostDecision;
 
-    HostReviewPanel() { addAndMakeVisible(header_); header_.setText(
-        "Remote Studio - Host Approval", juce::dontSendNotification); }
+    HostReviewPanel() {
+        addAndMakeVisible(header_);
+        header_.setText("Remote Studio - Host Approval", juce::dontSendNotification);
+        addAndMakeVisible(status_);
+        status_.setText("Offline: remote approvals unavailable", juce::dontSendNotification);
+    }
 
     void setApprovalEnabled(bool enabled) {
         approvalEnabled_ = enabled;
@@ -46,6 +50,7 @@ public:
     void resized() override {
         auto area = getLocalBounds().reduced(8);
         header_.setBounds(area.removeFromTop(30));
+        status_.setBounds(area.removeFromTop(24));
         for (auto& row : rows_) row->setBounds(area.removeFromTop(36));
     }
 private:
@@ -65,7 +70,7 @@ private:
         }
     };
     bool approvalEnabled_ = false; // deny by default until live authenticated DAW integration
-    juce::Label header_;
+    juce::Label header_, status_;
     std::vector<std::unique_ptr<ReviewRow>> rows_;
 };
 }
