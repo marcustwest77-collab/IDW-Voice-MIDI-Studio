@@ -17,6 +17,10 @@ int main() {
  Request current;current.trackCount=3;
  assert(admitted.stageInspected(pending,current));
  assert(admitted.pending().size()==1);
+ assert(admitted.revokeControl());
+ assert(admitted.pending().empty());
+ assert(!admitted.session().privileges().controlGranted);
+ assert(!admitted.stageInspected(pending,current));
 
  assert(!admitted.session().privileges().recordingGranted);
  admitted.disconnect();

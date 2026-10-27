@@ -47,6 +47,14 @@ public:
         }
         return true;
     }
+    // Local host withdrawal invalidates all outstanding requests immediately.
+    // Transport shutdown should call disconnect() separately.
+    bool revokeControl() noexcept {
+        const auto grant=session_.privileges();
+        if (!grant.connected) return false;
+        reviews_.disconnect();
+        return session_.setPrivileges(false, false);
+    }
     void disconnect() noexcept {
         session_.disconnect();
         reviews_.disconnect();
