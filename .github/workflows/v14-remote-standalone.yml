@@ -83,3 +83,7 @@ jobs:
       - name: Test mTLS approved client certificate pinning
         shell: bash
         run: python DAW/network/test_tls_client_pin.py
+
+      - name: Test per-command host approval ledger
+        shell: bash
+        run: python DAW/network/test_host_approval_ledger.py
