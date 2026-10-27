@@ -30,4 +30,13 @@ int main() {
  grant.connected=false;
  assert(!dispatch.dispatchAfterHostClick("r52",grant,live,adapter));
  assert(adapter.calls==1);
+ // A privileged recording command must never reach the adapter even if reviewed.
+ grant.connected=true;
+ grant.recordingGranted=true;
+ command.action=Action::start_recording;
+ command.requestId="r53";
+ command.sequence=4;
+ assert(queue.stage(command,grant));
+ assert(!dispatch.dispatchAfterHostClick("r53",grant,live,adapter));
+ assert(adapter.calls==1);
 }
