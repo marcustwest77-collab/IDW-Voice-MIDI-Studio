@@ -50,6 +50,7 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             self.assertTrue(session.grant(control=True, recording=False))
             guard = ReplayGuard()
             ledger = HostApprovalLedger()
+            received_commands = []
 
             def exchange(payload, mapped_peer='guest', host_allowed=True):
                 with socket.socket() as probe:
@@ -67,7 +68,8 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                                        approved_client_sha256=fingerprint,
                                        approved_peer_by_sha256={fingerprint: mapped_peer},
                                        host_approval=lambda peer, epoch: host_allowed and peer == 'guest' and epoch == 45,
-                                       host_approval_ledger=ledger)
+                                       host_approval_ledger=ledger,
+                                       accepted_command_sink=lambda cmd, peer: received_commands.append((cmd, peer)))
                     except Exception as exc:
                         server_failures.append(exc)
 
@@ -95,6 +97,9 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             allowed, errors = exchange(b"1|45|1|arm_one|arm|1")
             self.assertEqual(allowed, b"1|45|1|arm_one|arm|1")
             self.assertFalse(errors)
+            self.assertEqual(len(received_commands), 1)
+            self.assertEqual(received_commands[0][0]["request_id"], "arm_one")
+            self.assertEqual(received_commands[0][1], "guest")
             denied, errors = exchange(b"1|45|2|not_approved|arm|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
