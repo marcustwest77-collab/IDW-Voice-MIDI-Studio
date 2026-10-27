@@ -59,3 +59,7 @@ jobs:
       - name: Test remote session identity binding
         shell: bash
         run: python DAW/network/test_session_admission.py
+
+      - name: Test trusted session channel binding
+        shell: bash
+        run: python DAW/network/test_channel_bound_session.py
