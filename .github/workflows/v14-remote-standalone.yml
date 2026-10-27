@@ -5,6 +5,7 @@ on:
       - 'ci/**'
       - 'feature/**'
       - 'fix/**'
+      - 'test/**'
   workflow_dispatch:
 permissions:
   contents: read
