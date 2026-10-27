@@ -105,9 +105,11 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             self.assertEqual(allowed, b"1|45|2|select_two|select|1")
             self.assertFalse(errors)
             ledger.approve("guest", 45, "record_two")
-            denied, errors = exchange(b"1|45|2|record_two|record|1")
+            denied, errors = exchange(b"1|45|3|record_two|record|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
+            # Forbidden actions cannot spend host approval ledger entries.
+            self.assertTrue(ledger.contains("guest", 45, "record_two"))
             denied, errors = exchange(b"1|45|1|arm_one|arm|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
