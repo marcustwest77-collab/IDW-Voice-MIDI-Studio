@@ -18,6 +18,8 @@ public:
         header_.setText("Remote Studio - Host Approval", juce::dontSendNotification);
         addAndMakeVisible(status_);
         status_.setText("Offline: remote approvals unavailable", juce::dontSendNotification);
+        addAndMakeVisible(emptyState_);
+        emptyState_.setText("No pending remote requests", juce::dontSendNotification);
     }
 
     void setApprovalEnabled(bool enabled) {
@@ -45,6 +47,7 @@ public:
             addAndMakeVisible(*row);
             rows_.push_back(std::move(row));
         }
+        emptyState_.setVisible(rows_.empty());
         resized();
         repaint();
     }
@@ -53,6 +56,7 @@ public:
         auto area = getLocalBounds().reduced(8);
         header_.setBounds(area.removeFromTop(30));
         status_.setBounds(area.removeFromTop(24));
+        emptyState_.setBounds(area.removeFromTop(rows_.empty() ? 30 : 0));
         for (auto& row : rows_) row->setBounds(area.removeFromTop(36));
     }
 private:
@@ -72,7 +76,7 @@ private:
         }
     };
     bool approvalEnabled_ = false; // deny by default until live authenticated DAW integration
-    juce::Label header_, status_;
+    juce::Label header_, status_, emptyState_;
     std::vector<std::unique_ptr<ReviewRow>> rows_;
 };
 }
