@@ -1966,7 +1966,15 @@ private:
         Request state;
         state.actor=Role::guest;
         state.trackCount=session.tracks.size();
-        state.trackIsAudio=true; // recomputed by the per-track adapter before arming
+        // Resolve the reviewed command before policy checks; never assume
+        // a guest-selected track is audio or even exists.
+        const auto pending=remoteReviewController.pending(verifiedGrant);
+        const auto request=std::find_if(pending.begin(),pending.end(),
+            [&requestId](const auto& item){return item.requestId==requestId;});
+        if (request==pending.end() || request->trackIndex>=session.tracks.size())
+            return false;
+        state.trackIsAudio=
+            session.tracks[request->trackIndex].type==idw::daw::TrackType::audio;
         state.transportBusy=playing.load() || exportRunning.load();
         state.recordingActive=recorder.isRecording() || multiRecorder.isRecording();
         auto adapter=makeRemoteTrackAdapter();
