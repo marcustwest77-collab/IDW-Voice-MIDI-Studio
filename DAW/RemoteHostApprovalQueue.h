@@ -14,7 +14,8 @@ public:
             (command.action!=Action::select_track && command.action!=Action::arm_track) ||
             command.sessionEpoch==0 ||
             !currentGrant.connected || !currentGrant.authenticated ||
-            !currentGrant.hostApproved || command.sessionEpoch!=currentGrant.sessionEpoch ||
+            !currentGrant.hostApproved || !currentGrant.controlGranted ||
+            command.sessionEpoch!=currentGrant.sessionEpoch ||
             command.sessionEpoch<=currentGrant.revokedEpoch) return false;
         for (const auto& existing : queue_)
             if (existing.sessionEpoch==command.sessionEpoch &&
