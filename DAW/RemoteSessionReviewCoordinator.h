@@ -5,7 +5,8 @@
 namespace idw::daw::remote {
 class SessionReviewCoordinator {
 public:
-    SessionController& session() noexcept { return session_; }
+    // No mutable session access outside this coordinator: callers must use the
+    // consent-checked admission, revoke and disconnect functions below.
     const SessionController& session() const noexcept { return session_; }
     HostReviewController& reviews() noexcept { return reviews_; }
     // Call only after the transport verifies the guest identity. The trusted
