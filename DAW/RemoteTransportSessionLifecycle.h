@@ -12,7 +12,7 @@ public:
    return coordinator_.beginHostApprovedSession(
        epoch, tlsIdentityVerified, hostConsented, allowTrackSelectionAndArm);
  }
- void onHostRevokedControl() noexcept { coordinator_.revokeControl(); }
+ bool onHostRevokedControl() noexcept { return coordinator_.revokeControl(); }
  void onPeerDisconnected() noexcept { coordinator_.disconnect(); }
  void onAuthenticationLost() noexcept { coordinator_.disconnect(); }
 private:
