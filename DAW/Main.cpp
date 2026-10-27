@@ -26,6 +26,7 @@
 #include "AIStatusSnapshot.h"
 #include "RemoteHostReviewPanel.h"
 #include "RemoteSessionReviewCoordinator.h"
+#include "RemoteTransportSessionLifecycle.h"
 #include "RemoteTrackControlAdapter.h"
 #include "RemoteRestrictedCommandDispatcher.h"
 #include <atomic>
@@ -3166,6 +3167,7 @@ public:
     IDWConnectPanel connectPanel;
     juce::TextButton remoteReviewButton;
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
+    idw::daw::remote::TransportSessionLifecycle remoteTransportLifecycle{remoteSessionReviews};
     idw::daw::remote::HostReviewPanel remoteReviewPanel;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
