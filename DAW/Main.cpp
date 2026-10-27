@@ -27,6 +27,8 @@
 #include "RemoteHostReviewPanel.h"
 #include "RemoteSessionReviewCoordinator.h"
 #include "RemoteTransportSessionLifecycle.h"
+#include "RemoteReviewMailbox.h"
+#include "RemoteValidatedCommandReviewReceiver.h"
 #include "RemoteTrackControlAdapter.h"
 #include "RemoteRestrictedCommandDispatcher.h"
 #include <atomic>
@@ -119,7 +121,7 @@ public:
         addChildComponent(remoteReviewPanel);
         remoteReviewPanel.setApprovalEnabled(false); // no verified session or dispatcher yet
         remoteReviewButton.onClick=[this] {
-            remoteReviewPanel.showPending(remoteSessionReviews.pending());
+            drainRemoteReviewMailbox();
             remoteReviewPanel.setVisible(!remoteReviewPanel.isVisible());
             remoteReviewPanel.toFront(false);
         };
@@ -1987,6 +1989,28 @@ private:
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
         return true;
     }
+    // Must run on JUCE's message thread. No transport is connected yet.
+    // Re-derive trusted DAW state for every queued command before review.
+    void drainRemoteReviewMailbox() {
+        idw::daw::remote::ValidatedCommandReviewReceiver receiver(remoteSessionReviews);
+        for (const auto& queued : remoteReviewMailbox.drain()) {
+            idw::daw::remote::CommandMessage command;
+            if (!idw::daw::remote::parseControlCommand(queued.payload, command))
+                continue;
+            if (command.sessionEpoch != queued.trustedEpoch ||
+                command.trackIndex >= session.tracks.size() ||
+                command.trackIndex >= armedTracks.size())
+                continue;
+            idw::daw::remote::Request live;
+            live.trackCount=session.tracks.size();
+            live.trackIsAudio=
+                session.tracks[command.trackIndex].type==idw::daw::TrackType::audio;
+            live.transportBusy=playing.load() || exportRunning.load();
+            live.recordingActive=recorder.isRecording() || multiRecorder.isRecording();
+            receiver.receive(queued.payload, live, queued.trustedEpoch);
+        }
+        remoteReviewPanel.showPending(remoteSessionReviews.pending());
+    }
     // Called only from a future verified LOCAL host decision handler. No network
     // entrypoint is connected. Approval remains disabled in the visible UI.
     bool dispatchApprovedTrackRequest(const std::string& requestId) {
@@ -3188,6 +3212,7 @@ public:
     juce::TextButton remoteReviewButton;
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
     idw::daw::remote::TransportSessionLifecycle remoteTransportLifecycle{remoteSessionReviews};
+    idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::HostReviewPanel remoteReviewPanel;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
