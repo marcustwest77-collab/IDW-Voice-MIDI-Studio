@@ -25,6 +25,24 @@ public:
         if (session_.inspect(command, liveState) != Decision::accepted) return false;
         return queue_.stage(command, grant);
     }
+    // Local host must explicitly bind a new authenticated transport to an
+    // epoch. An externally supplied boolean alone is not identity proof.
+    // This coordinator makes no claim about the underlying TLS peer.
+    bool beginHostApprovedSession(std::uint64_t epoch, bool peerVerifiedByTransport,
+                                  bool localHostApproved, bool allowTrackControl) {
+        // Fail closed unless all independent prerequisites are satisfied.
+        if (!peerVerifiedByTransport || !localHostApproved) return false;
+        if (!session_.open(epoch)) return false;
+        if (!session_.admitGuest(peerVerifiedByTransport, localHostApproved)) {
+            disconnect();
+            return false;
+        }
+        if (!session_.setPrivileges(allowTrackControl, false)) {
+            disconnect();
+            return false;
+        }
+        return true;
+    }
     void disconnect() noexcept {
         session_.disconnect();
         reviews_.disconnect();
