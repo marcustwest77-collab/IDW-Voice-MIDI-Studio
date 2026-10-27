@@ -16,6 +16,13 @@ from replay_guard import ReplayGuard
 
 
 class TLSServerTest(unittest.TestCase):
+    def test_missing_command_ledger_fails_before_listener(self):
+        from unittest.mock import MagicMock
+        with self.assertRaises(PermissionError):
+            serve_tls_once(38941, 'cert', 'key', session=MagicMock(),
+                           host_approval=lambda peer, epoch: True)
+
+
     def test_unpinned_protected_session_rejected_before_read(self):
         from unittest.mock import MagicMock
         session = MagicMock()

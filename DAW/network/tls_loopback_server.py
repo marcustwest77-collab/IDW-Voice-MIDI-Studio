@@ -29,8 +29,8 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
             raise ValueError('trusted certificate-to-peer mapping required')
         if not client_cafile:
             raise ValueError('certificate mapping requires mutual TLS')
-    if session is not None and host_approval is None:
-        raise PermissionError('protected session requires host approval callback')
+    if session is not None and (host_approval is None or host_approval_ledger is None):
+        raise PermissionError('protected session requires host approval and per-command ledger')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(certfile=certfile, keyfile=keyfile)
@@ -80,7 +80,7 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                         raise PermissionError('host approval denied or expired')
                     command = parse_command(payload)
                     replay_guard.inspect(session, payload, certificate_peer, verified_channel_id)
-                    if host_approval_ledger is not None and not host_approval_ledger.consume(
+                    if not host_approval_ledger.consume(
                         certificate_peer, command['session_epoch'], command['request_id']
                     ):
                         raise PermissionError('command lacks single-use host approval')
