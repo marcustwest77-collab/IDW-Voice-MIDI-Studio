@@ -98,6 +98,12 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             denied, errors = exchange(b"1|45|2|not_approved|arm|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
+            # Denied request must not consume sequence 2; a later approved
+            # command can use it without weakening replay prevention.
+            ledger.approve("guest", 45, "select_two")
+            allowed, errors = exchange(b"1|45|2|select_two|select|1")
+            self.assertEqual(allowed, b"1|45|2|select_two|select|1")
+            self.assertFalse(errors)
             ledger.approve("guest", 45, "record_two")
             denied, errors = exchange(b"1|45|2|record_two|record|1")
             self.assertIsNone(denied)
