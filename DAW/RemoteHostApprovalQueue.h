@@ -11,7 +11,7 @@ public:
     bool stage(const CommandMessage& command, const Grant& currentGrant) {
         if (queue_.size()>=capacity || command.protocolVersion!=1 ||
             command.sequence==0 || !validId(command.requestId) ||
-            command.action==Action::delete_track || command.action==Action::export_audio ||
+            (command.action!=Action::select_track && command.action!=Action::arm_track) ||
             command.sessionEpoch==0 ||
             !currentGrant.connected || !currentGrant.authenticated ||
             !currentGrant.hostApproved || command.sessionEpoch!=currentGrant.sessionEpoch ||

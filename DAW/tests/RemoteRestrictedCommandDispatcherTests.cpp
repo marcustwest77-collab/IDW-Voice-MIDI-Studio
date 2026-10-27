@@ -36,7 +36,7 @@ int main() {
  command.action=Action::start_recording;
  command.requestId="r53";
  command.sequence=4;
- assert(queue.stage(command,grant));
+ assert(!queue.stage(command,grant)); // recording requests rejected at intake
  assert(!dispatch.dispatchAfterHostClick("r53",grant,live,adapter));
  assert(adapter.calls==1);
 }
