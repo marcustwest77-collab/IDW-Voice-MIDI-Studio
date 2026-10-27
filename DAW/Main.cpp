@@ -489,7 +489,7 @@ public:
         // can feed the same dispatcher later; no always-listening mic is implied.
         addAndMakeVisible(voiceCommandInput);
         voiceCommandInput.setTextToShowWhenEmpty("type command",juce::Colours::grey);
-        voiceCommandInput.setTooltip("Say: IDW play, IDW stop, IDW arm track, IDW record vocals, IDW next track, IDW voice help. Windows: press Win+H to dictate.");
+        voiceCommandInput.setTooltip("Say: IDW play, IDW stop, IDW arm track three, IDW record vocals, IDW next track, IDW voice help. Windows: press Win+H to dictate.");
         addAndMakeVisible(runVoiceCommand);
         addAndMakeVisible(voiceHistoryButton);
         addAndMakeVisible(pushToTalkButton);
@@ -507,7 +507,7 @@ public:
             voiceCommandInput.grabKeyboardFocus();
             executeStudioCommand(voiceCommandInput.getText());
         };
-        runVoiceCommand.setTooltip("Voice-ready command input: on Windows press Win+H and dictate a command, then press Enter. Native speech recognition is not yet integrated.");
+        runVoiceCommand.setTooltip("On Windows use TALK for one-shot speech recognition, or Win+H in this field followed by Enter.");
         voiceCommandInput.onReturnKey=[this]{executeStudioCommand(voiceCommandInput.getText());};
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN / RECOVER");
@@ -1806,7 +1806,7 @@ private:
                 "Tracks: next track, previous track, select track 3, add audio track.\n"
                 "Mixing: mute/unmute, solo/unsolo, expand/collapse mixer.\n"
                 "Projects: save project.\n"
-                "Voice recognition uses Windows dictation; the DAW is not always listening.");
+                "TALK uses Windows one-shot speech recognition; the DAW is not always listening.");
             feedback="Voice command list displayed";
         }else if(command=="record status" || command=="input status" || command=="microphone status"){
             auto* device=deviceManager.getCurrentAudioDevice();
@@ -1839,6 +1839,37 @@ private:
         }else if(command=="play" || command=="start playback" || command=="play the beat"){
             if(!busy){play.triggerClick();feedback="PLAY requested";}
             else feedback="Playback command blocked: recording/export busy";
+        }else if(command.startsWith("arm track ") || command.startsWith("disarm track ")){
+            // Explicit numbered arming never falls back to the currently selected track.
+            const bool shouldArm=command.startsWith("arm track ");
+            const auto requested=command.fromFirstOccurrenceOf("track ",false,false).trim();
+            const juce::StringArray numberWords{"one","two","three","four","five",
+                                                "six","seven","eight","nine","ten"};
+            int trackNumber=0;
+            if(requested.isNotEmpty() && requested.containsOnly("0123456789")){
+                trackNumber=requested.getIntValue();
+            }else{
+                const int wordIndex=numberWords.indexOf(requested);
+                if(wordIndex>=0)trackNumber=wordIndex+1;
+            }
+            if(trackNumber<1 || (size_t)trackNumber>session.tracks.size() ||
+               (size_t)trackNumber>armedTracks.size()){
+                feedback="Invalid track number; no tracks were armed or disarmed";
+            }else if(busy || playing.load()){
+                feedback="Stop playback, recording or export before changing armed tracks";
+            }else{
+                const auto index=(size_t)(trackNumber-1);
+                if(session.tracks[index].type!=idw::daw::TrackType::audio){
+                    feedback="Track "+juce::String(trackNumber)+" is not an audio track";
+                }else{
+                    armedTracks[index]=shouldArm;
+                    selectedTrack=index;
+                    ensureSelectedTrackVisible();
+                    refreshMixer();repaint();
+                    feedback="Track "+juce::String(trackNumber)+
+                        (shouldArm ? " armed" : " disarmed");
+                }
+            }
         }else if(command=="arm track" || command=="arm input" || command=="disarm track" || command=="disarm input"){
             if(!busy && !playing.load() && selectedTrack<session.tracks.size() &&
                selectedTrack<armedTracks.size() &&
