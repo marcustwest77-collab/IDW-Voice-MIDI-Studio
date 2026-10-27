@@ -18,7 +18,8 @@ public:
     }
     // Authenticated is asserted by the calling transport; never infer it from an invite code.
     bool admitGuest(bool transportAuthenticated, bool hostApproved) noexcept {
-        if (grant_.sessionEpoch == 0 || !transportAuthenticated || !hostApproved)
+        if (grant_.sessionEpoch == 0 || grant_.revokedEpoch >= grant_.sessionEpoch ||
+            !transportAuthenticated || !hostApproved)
             return false;
         grant_.connected = true;
         grant_.authenticated = true;
