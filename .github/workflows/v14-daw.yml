@@ -2,6 +2,8 @@ name: V14 DAW Foundation Build
 on:
   push:
     branches: [v14-daw-foundation]
+  pull_request:
+    branches: [v14-daw-foundation, 'feature/**', 'fix/**']
   workflow_dispatch:
 jobs:
   foundation:

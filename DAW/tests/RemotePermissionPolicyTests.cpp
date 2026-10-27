@@ -1,4 +1,7 @@
 #include "../RemotePermissionPolicy.h"
+#ifdef NDEBUG
+#undef NDEBUG // This executable uses assert as its test runner, even in Release.
+#endif
 #include <cassert>
 using namespace idw::daw::remote;
 int main() {
