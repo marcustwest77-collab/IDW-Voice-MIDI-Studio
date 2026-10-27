@@ -1974,7 +1974,8 @@ private:
         using namespace idw::daw::remote;
         if (command.action!=Action::select_track && command.action!=Action::arm_track)
             return false;
-        if (command.trackIndex>=session.tracks.size()) return false;
+        if (command.trackIndex>=session.tracks.size() ||
+            command.trackIndex>=armedTracks.size()) return false;
         Request live;
         live.actor=Role::guest;
         live.trackCount=session.tracks.size();
@@ -2001,6 +2002,7 @@ private:
         const auto request=std::find_if(pending.begin(),pending.end(),
             [&requestId](const auto& item){return item.requestId==requestId;});
         if (request==pending.end() || request->trackIndex>=session.tracks.size() ||
+            request->trackIndex>=armedTracks.size() ||
             (request->action!=Action::select_track && request->action!=Action::arm_track))
             return false;
         state.trackIsAudio=
@@ -2015,7 +2017,7 @@ private:
     // Local-only callback adapter for future approved remote requests. The UI currently
     // has no authenticated transport and never invokes this adapter on peer messages.
     idw::daw::remote::TrackControlAdapter makeRemoteTrackAdapter() {
-        return {session.tracks.size(),
+        return {juce::jmin(session.tracks.size(), armedTracks.size()),
             [this](std::size_t index) {
                 if (index>=session.tracks.size() || playing.load() ||
                     recorder.isRecording() || multiRecorder.isRecording() ||
