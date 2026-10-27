@@ -46,3 +46,7 @@ jobs:
       - name: Test localhost TLS server configuration
         shell: bash
         run: python DAW/network/test_tls_loopback_server.py
+
+      - name: Test encrypted localhost TLS roundtrip
+        shell: bash
+        run: python DAW/network/test_tls_roundtrip.py
