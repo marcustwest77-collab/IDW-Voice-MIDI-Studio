@@ -12,6 +12,9 @@ int main() {
     CommandMessage cmd; cmd.sessionEpoch=11;cmd.sequence=1;cmd.requestId="r1";
     cmd.action=Action::arm_track;cmd.trackIndex=2;
     CommandMessage approved;
+    grant.controlGranted=false;
+    assert(!queue.stage(cmd,grant));
+    grant.controlGranted=true;
     assert(queue.stage(cmd,grant));
     assert(!queue.stage(cmd,grant)); // duplicate
     assert(queue.size()==1);
