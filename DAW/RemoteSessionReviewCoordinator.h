@@ -8,7 +8,9 @@ public:
     // No mutable session access outside this coordinator: callers must use the
     // consent-checked admission, revoke and disconnect functions below.
     const SessionController& session() const noexcept { return session_; }
+    // Host review handles approval; it cannot change session grants.
     HostReviewController& reviews() noexcept { return reviews_; }
+    const Grant& grant() const noexcept { return session_.privileges(); }
     // Call only after the transport verifies the guest identity. The trusted
     // DAW caller supplies current track/transport state, never peer assertions.
     bool stageInspected(const CommandMessage& command, const Request& liveState) {
