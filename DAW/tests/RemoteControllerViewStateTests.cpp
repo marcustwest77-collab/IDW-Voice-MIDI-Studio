@@ -1,4 +1,7 @@
 #include "../RemoteControllerViewState.h"
+#ifdef NDEBUG
+#undef NDEBUG // Assertions are the test runner, including in Release.
+#endif
 #include <cassert>
 using namespace idw::daw::remote;
 int main(){
