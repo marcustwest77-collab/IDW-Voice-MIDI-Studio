@@ -11,9 +11,18 @@ int main() {
  assert(!admitted.beginHostApprovedSession(200,true,false,true));
  assert(admitted.beginHostApprovedSession(200,true,true,true));
  assert(admitted.session().privileges().controlGranted);
+ assert(!admitted.beginHostApprovedSession(201,true,true,true)); // cannot replace live peer
+ CommandMessage pending;pending.sessionEpoch=200;pending.sequence=1;
+ pending.requestId="old";pending.action=Action::select_track;
+ Request current;current.trackCount=3;
+ assert(admitted.stageInspected(pending,current));
+ assert(admitted.pending().size()==1);
+
  assert(!admitted.session().privileges().recordingGranted);
  admitted.disconnect();
  assert(!admitted.beginHostApprovedSession(200,true,true,true));
+ assert(admitted.beginHostApprovedSession(201,true,true,true));
+ assert(admitted.pending().empty());
  assert(coordinator.session().open(100));
  assert(coordinator.session().admitGuest(true,true));
  assert(coordinator.session().setPrivileges(true,false));
