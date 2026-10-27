@@ -1961,8 +1961,9 @@ private:
     }
     // Called only from a future verified LOCAL host decision handler. No network
     // entrypoint is connected. Approval remains disabled in the visible UI.
-    bool dispatchApprovedTrackRequest(const std::string& requestId,
-                                      const idw::daw::remote::Grant& verifiedGrant) {
+    bool dispatchApprovedTrackRequest(const std::string& requestId) {
+        // Never trust a caller-provided grant; read the local session authority.
+        const auto& verifiedGrant=remoteSessionReviews.session().privileges();
         using namespace idw::daw::remote;
         Request state;
         state.actor=Role::guest;
