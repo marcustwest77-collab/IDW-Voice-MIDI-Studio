@@ -41,6 +41,17 @@ public:
         }
         return false;
     }
+    // A host can explicitly deny an individual request without approving it.
+    // Dismissed requests are removed, never executed.
+    bool deny(const std::string& requestId) {
+        for (auto it=queue_.begin(); it!=queue_.end(); ++it) {
+            if (it->requestId!=requestId) continue;
+            queue_.erase(it);
+            return true;
+        }
+        return false;
+    }
+    // On disconnect/revocation, all outstanding approvals are invalidated.
     void clear() noexcept { queue_.clear(); }
     std::size_t size() const noexcept { return queue_.size(); }
 private:
