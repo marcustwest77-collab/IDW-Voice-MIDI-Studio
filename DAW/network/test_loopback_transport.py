@@ -3,7 +3,6 @@
 import socket
 import threading
 import unittest
-from unittest import mock
 
 import loopback_transport as t
 
@@ -29,7 +28,7 @@ class TransportTest(unittest.TestCase):
                 t.send_frame(left, b"")
             with self.assertRaises(ValueError):
                 t.send_frame(left, b"x" * 4097)
-            right.sendall(b"\\xff\\xff\\xff\\xff")
+            right.sendall(bytes([255, 255, 255, 255]))
             with self.assertRaises(ValueError):
                 t.receive_frame(left)
         finally:
