@@ -113,6 +113,7 @@ public:
         addAndMakeVisible(remoteReviewButton);
         remoteReviewButton.setButtonText("REMOTE REVIEW");
         addChildComponent(remoteReviewPanel);
+        remoteReviewPanel.setApprovalEnabled(false); // no verified session or dispatcher yet
         remoteReviewButton.onClick=[this] {
             remoteReviewPanel.showPending(remoteReviewController.pending(remoteReviewGrant));
             remoteReviewPanel.setVisible(!remoteReviewPanel.isVisible());
