@@ -40,6 +40,11 @@ public:
         emptyState_.setText("No pending remote requests", juce::dontSendNotification);
     }
 
+    void setConnectionStatus(const juce::String& status) {
+        jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+        status_.setText(status, juce::dontSendNotification);
+    }
+
     void setApprovalEnabled(bool enabled) {
         approvalEnabled_ = enabled;
         for (auto& row : rows_) row->approve.setEnabled(enabled);
