@@ -63,3 +63,7 @@ jobs:
       - name: Test trusted session channel binding
         shell: bash
         run: python DAW/network/test_channel_bound_session.py
+
+      - name: Test guarded remote command intake
+        shell: bash
+        run: python DAW/network/test_guarded_command_intake.py
