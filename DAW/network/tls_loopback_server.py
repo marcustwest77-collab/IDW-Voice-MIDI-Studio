@@ -79,6 +79,11 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                     if not callable(host_approval) or host_approval(certificate_peer, session.epoch) is not True:
                         raise PermissionError('host approval denied or expired')
                     command = parse_command(payload)
+                    # Reject unapproved commands before committing anti-replay state.
+                    if not host_approval_ledger.contains(
+                        certificate_peer, command['session_epoch'], command['request_id']
+                    ):
+                        raise PermissionError('command lacks host approval')
                     replay_guard.inspect(session, payload, certificate_peer, verified_channel_id)
                     if not host_approval_ledger.consume(
                         certificate_peer, command['session_epoch'], command['request_id']
