@@ -12,6 +12,7 @@ public:
     // Called ONLY by an explicit local button click. Host integration must
     // refresh live grant/track state and use HostReviewController::approve.
     std::function<void(const std::string&, bool approve)> onHostDecision;
+    std::function<void()> onRevokeControl;
 
     static const char* actionName(Action action) noexcept {
         switch (action) {
@@ -32,6 +33,9 @@ public:
         header_.setText("Remote Studio - Host Approval", juce::dontSendNotification);
         addAndMakeVisible(status_);
         status_.setText("Offline: remote approvals unavailable", juce::dontSendNotification);
+        addAndMakeVisible(revokeButton_);
+        revokeButton_.setButtonText("REVOKE CONTROL");
+        revokeButton_.onClick=[this] { if (onRevokeControl) onRevokeControl(); };
         addAndMakeVisible(emptyState_);
         emptyState_.setText("No pending remote requests", juce::dontSendNotification);
     }
@@ -68,7 +72,9 @@ public:
 
     void resized() override {
         auto area = getLocalBounds().reduced(8);
-        header_.setBounds(area.removeFromTop(30));
+        auto headerArea=area.removeFromTop(30);
+        revokeButton_.setBounds(headerArea.removeFromRight(150).reduced(2));
+        header_.setBounds(headerArea);
         status_.setBounds(area.removeFromTop(24));
         emptyState_.setBounds(area.removeFromTop(rows_.empty() ? 30 : 0));
         for (auto& row : rows_) row->setBounds(area.removeFromTop(36));
@@ -90,6 +96,7 @@ private:
         }
     };
     bool approvalEnabled_ = false; // deny by default until live authenticated DAW integration
+    juce::TextButton revokeButton_;
     juce::Label header_, status_, emptyState_;
     std::vector<std::unique_ptr<ReviewRow>> rows_;
 };
