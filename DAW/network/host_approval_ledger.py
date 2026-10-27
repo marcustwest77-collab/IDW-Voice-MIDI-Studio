@@ -14,6 +14,9 @@ class HostApprovalLedger:
             raise ValueError("invalid approval request")
         self._approved.add((peer, epoch, request_id))
 
+    def contains(self, peer, epoch, request_id):
+        return (peer, epoch, request_id) in self._approved
+
     def consume(self, peer, epoch, request_id):
         key = (peer, epoch, request_id)
         if key not in self._approved:
