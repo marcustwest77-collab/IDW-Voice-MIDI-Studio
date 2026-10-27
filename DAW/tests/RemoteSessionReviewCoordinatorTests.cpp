@@ -6,6 +6,14 @@
 using namespace idw::daw::remote;
 int main() {
  SessionReviewCoordinator coordinator;
+ SessionReviewCoordinator admitted;
+ assert(!admitted.beginHostApprovedSession(200,false,true,true));
+ assert(!admitted.beginHostApprovedSession(200,true,false,true));
+ assert(admitted.beginHostApprovedSession(200,true,true,true));
+ assert(admitted.session().privileges().controlGranted);
+ assert(!admitted.session().privileges().recordingGranted);
+ admitted.disconnect();
+ assert(!admitted.beginHostApprovedSession(200,true,true,true));
  assert(coordinator.session().open(100));
  assert(coordinator.session().admitGuest(true,true));
  assert(coordinator.session().setPrivileges(true,false));
