@@ -79,3 +79,7 @@ jobs:
       - name: Test mutual TLS client certificate authentication
         shell: bash
         run: python DAW/network/test_mutual_tls.py
+
+      - name: Test mTLS approved client certificate pinning
+        shell: bash
+        run: python DAW/network/test_tls_client_pin.py
