@@ -67,3 +67,7 @@ jobs:
       - name: Test guarded remote command intake
         shell: bash
         run: python DAW/network/test_guarded_command_intake.py
+
+      - name: Test remote command replay guard
+        shell: bash
+        run: python DAW/network/test_replay_guard.py
