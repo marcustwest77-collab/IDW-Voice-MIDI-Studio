@@ -16,7 +16,7 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                    verified_peer_id=None, verified_channel_id=None, replay_guard=None,
                    client_cafile=None, approved_client_sha256=None,
                    approved_peer_by_sha256=None, host_approval=None,
-                   host_approval_ledger=None):
+                   host_approval_ledger=None, accepted_command_sink=None):
     if not (1024 <= port <= 65535) or not certfile or not keyfile:
         raise ValueError("port and TLS certificate/key are required")
     if approved_client_sha256 is not None:
@@ -31,6 +31,8 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
             raise ValueError('certificate mapping requires mutual TLS')
     if session is not None and (host_approval is None or host_approval_ledger is None):
         raise PermissionError('protected session requires host approval and per-command ledger')
+    if accepted_command_sink is not None and (session is None or not callable(accepted_command_sink)):
+        raise ValueError('command sink requires protected session and callable handler')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(certfile=certfile, keyfile=keyfile)
@@ -93,4 +95,9 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                         certificate_peer, command['session_epoch'], command['request_id']
                     ):
                         raise PermissionError('command lacks single-use host approval')
+                    # Trusted, synchronous handoff only after authentication, host
+                    # permission, replay inspection and one-time approval.
+                    # The sink must NOT execute commands or access JUCE off-thread.
+                    if accepted_command_sink is not None:
+                        accepted_command_sink(dict(command), certificate_peer)
                 send_frame(secure, payload)
