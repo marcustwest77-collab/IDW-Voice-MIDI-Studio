@@ -32,6 +32,10 @@ public:
                                   bool localHostApproved, bool allowTrackControl) {
         // Fail closed unless all independent prerequisites are satisfied.
         if (!peerVerifiedByTransport || !localHostApproved) return false;
+        // A new transport must explicitly terminate the previous session and
+        // discard its outstanding approvals before changing epochs.
+        if (session_.privileges().connected) return false;
+        reviews_.disconnect();
         if (!session_.open(epoch)) return false;
         if (!session_.admitGuest(peerVerifiedByTransport, localHostApproved)) {
             disconnect();
