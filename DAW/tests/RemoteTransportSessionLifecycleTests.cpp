@@ -15,6 +15,9 @@ int main(){
  Request state;state.trackCount=2;
  assert(c.stageInspected(cmd,state));
  assert(c.pending().size()==1);
+ lifecycle.onHostRevokedControl();
+ assert(c.pending().empty() && !c.grant().controlGranted);
+ assert(c.grant().connected);
  lifecycle.onAuthenticationLost();
  assert(c.pending().empty() && !c.grant().connected);
  assert(!lifecycle.onVerifiedPeerConnected(501,true,true,true));
