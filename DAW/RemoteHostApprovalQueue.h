@@ -9,7 +9,10 @@ public:
     // Caller must supply a command previously accepted by the receive pipeline.
     // A queue alone does not establish trust; it never dispatches.
     bool stage(const CommandMessage& command, const Grant& currentGrant) {
-        if (queue_.size()>=capacity || command.sessionEpoch==0 ||
+        if (queue_.size()>=capacity || command.protocolVersion!=1 ||
+            command.sequence==0 || !validId(command.requestId) ||
+            command.action==Action::delete_track || command.action==Action::export_audio ||
+            command.sessionEpoch==0 ||
             !currentGrant.connected || !currentGrant.authenticated ||
             !currentGrant.hostApproved || command.sessionEpoch!=currentGrant.sessionEpoch ||
             command.sessionEpoch<=currentGrant.revokedEpoch) return false;
