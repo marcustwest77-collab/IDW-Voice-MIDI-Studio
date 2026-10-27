@@ -15,6 +15,7 @@ from pathlib import Path
 
 from channel_bound_session import BoundSession
 from replay_guard import ReplayGuard
+from host_approval_ledger import HostApprovalLedger
 from tls_client import verified_tls_client
 from tls_loopback_server import serve_tls_once
 
@@ -48,6 +49,7 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             ))
             self.assertTrue(session.grant(control=True, recording=False))
             guard = ReplayGuard()
+            ledger = HostApprovalLedger()
 
             def exchange(payload, mapped_peer='guest', host_allowed=True):
                 with socket.socket() as probe:
@@ -64,7 +66,8 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                                        replay_guard=guard, client_cafile=str(client_cert),
                                        approved_client_sha256=fingerprint,
                                        approved_peer_by_sha256={fingerprint: mapped_peer},
-                                       host_approval=lambda peer, epoch: host_allowed and peer == 'guest' and epoch == 45)
+                                       host_approval=lambda peer, epoch: host_allowed and peer == 'guest' and epoch == 45,
+                                       host_approval_ledger=ledger)
                     except Exception as exc:
                         server_failures.append(exc)
 
@@ -88,9 +91,14 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             denied, errors = exchange(b"1|45|1|host_denied|arm|1", host_allowed=False)
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
+            ledger.approve("guest", 45, "arm_one")
             allowed, errors = exchange(b"1|45|1|arm_one|arm|1")
             self.assertEqual(allowed, b"1|45|1|arm_one|arm|1")
             self.assertFalse(errors)
+            denied, errors = exchange(b"1|45|2|not_approved|arm|1")
+            self.assertIsNone(denied)
+            self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
+            ledger.approve("guest", 45, "record_two")
             denied, errors = exchange(b"1|45|2|record_two|record|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
