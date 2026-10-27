@@ -26,6 +26,7 @@
 #include "AIStatusSnapshot.h"
 #include "RemoteHostReviewPanel.h"
 #include "RemoteSessionReviewCoordinator.h"
+#include "RemoteTransportSessionLifecycle.h"
 #include "RemoteTrackControlAdapter.h"
 #include "RemoteRestrictedCommandDispatcher.h"
 #include <atomic>
@@ -123,7 +124,7 @@ public:
             remoteReviewPanel.toFront(false);
         };
         remoteReviewPanel.onRevokeControl=[this] {
-            const bool revoked=remoteSessionReviews.revokeControl();
+            const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
             remoteReviewPanel.setApprovalEnabled(false);
             remoteReviewPanel.setConnectionStatus(revoked
                 ? "Remote control revoked; pending requests cleared"
@@ -3166,6 +3167,7 @@ public:
     IDWConnectPanel connectPanel;
     juce::TextButton remoteReviewButton;
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
+    idw::daw::remote::TransportSessionLifecycle remoteTransportLifecycle{remoteSessionReviews};
     idw::daw::remote::HostReviewPanel remoteReviewPanel;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
