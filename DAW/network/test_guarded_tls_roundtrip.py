@@ -62,7 +62,8 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                                        session=session, verified_peer_id="guest",
                                        verified_channel_id="test_channel_binding_12345",
                                        replay_guard=guard, client_cafile=str(client_cert),
-                                       approved_client_sha256=fingerprint)
+                                       approved_client_sha256=fingerprint,
+                                       approved_peer_by_sha256={fingerprint: 'guest'})
                     except Exception as exc:
                         server_failures.append(exc)
 
