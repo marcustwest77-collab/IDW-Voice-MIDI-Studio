@@ -21,6 +21,8 @@ class TLSServerTest(unittest.TestCase):
         session = MagicMock()
         with mock.patch("tls_loopback_server.ssl.SSLContext") as ctx, \
              mock.patch("tls_loopback_server.socket.socket") as make_socket:
+            listener = make_socket.return_value.__enter__.return_value
+            listener.accept.return_value = (mock.MagicMock(), ("127.0.0.1", 40000))
             secure = ctx.return_value.wrap_socket.return_value.__enter__.return_value
             with self.assertRaises(PermissionError):
                 serve_tls_once(38941, "cert", "key", session=session,
