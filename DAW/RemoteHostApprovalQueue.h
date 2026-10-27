@@ -51,6 +51,8 @@ public:
         }
         return false;
     }
+    // Read-only snapshot for the host UI; does not grant authorization.
+    std::deque<CommandMessage> pending() const { return queue_; }
     // On disconnect/revocation, all outstanding approvals are invalidated.
     void clear() noexcept { queue_.clear(); }
     std::size_t size() const noexcept { return queue_.size(); }
