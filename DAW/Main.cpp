@@ -489,7 +489,7 @@ public:
         // can feed the same dispatcher later; no always-listening mic is implied.
         addAndMakeVisible(voiceCommandInput);
         voiceCommandInput.setTextToShowWhenEmpty("type command",juce::Colours::grey);
-        voiceCommandInput.setTooltip("Say: IDW play, IDW stop, IDW arm track, IDW record vocals, IDW next track, IDW voice help. Windows: press Win+H to dictate.");
+        voiceCommandInput.setTooltip("Say: IDW play, IDW stop, IDW arm track three, IDW record vocals, IDW next track, IDW voice help. Windows: press Win+H to dictate.");
         addAndMakeVisible(runVoiceCommand);
         addAndMakeVisible(voiceHistoryButton);
         addAndMakeVisible(pushToTalkButton);
@@ -507,7 +507,7 @@ public:
             voiceCommandInput.grabKeyboardFocus();
             executeStudioCommand(voiceCommandInput.getText());
         };
-        runVoiceCommand.setTooltip("Voice-ready command input: on Windows press Win+H and dictate a command, then press Enter. Native speech recognition is not yet integrated.");
+        runVoiceCommand.setTooltip("On Windows use TALK for one-shot speech recognition, or Win+H in this field followed by Enter.");
         voiceCommandInput.onReturnKey=[this]{executeStudioCommand(voiceCommandInput.getText());};
         saveProject.setButtonText("SAVE PROJECT");
         openProject.setButtonText("OPEN / RECOVER");
@@ -1806,7 +1806,7 @@ private:
                 "Tracks: next track, previous track, select track 3, add audio track.\n"
                 "Mixing: mute/unmute, solo/unsolo, expand/collapse mixer.\n"
                 "Projects: save project.\n"
-                "Voice recognition uses Windows dictation; the DAW is not always listening.");
+                "TALK uses Windows one-shot speech recognition; the DAW is not always listening.");
             feedback="Voice command list displayed";
         }else if(command=="record status" || command=="input status" || command=="microphone status"){
             auto* device=deviceManager.getCurrentAudioDevice();
