@@ -122,6 +122,11 @@ public:
             remoteReviewPanel.setVisible(!remoteReviewPanel.isVisible());
             remoteReviewPanel.toFront(false);
         };
+        remoteReviewPanel.onRevokeControl=[this] {
+            remoteSessionReviews.revokeControl();
+            remoteReviewPanel.setApprovalEnabled(false);
+            remoteReviewPanel.showPending(remoteSessionReviews.pending());
+        };
         remoteReviewPanel.onHostDecision=[this](const std::string& id, bool approve) {
             if (approve) {
                 // No remote session is authenticated in this DAW window yet.
