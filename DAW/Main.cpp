@@ -25,6 +25,7 @@
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
 #include "RemoteHostReviewPanel.h"
+#include "RemoteTrackControlAdapter.h"
 #include <atomic>
 #include <memory>
 #include <map>
@@ -1955,6 +1956,32 @@ private:
         commandStatus.setText(feedback,juce::dontSendNotification);
         juce::Logger::writeToLog("IDW command: "+command+" -> "+feedback);
         voiceCommandInput.selectAll();
+    }
+    // Local-only callback adapter for future approved remote requests. The UI currently
+    // has no authenticated transport and never invokes this adapter on peer messages.
+    idw::daw::remote::TrackControlAdapter makeRemoteTrackAdapter() {
+        return {session.tracks.size(),
+            [this](std::size_t index) {
+                if (index>=session.tracks.size() || playing.load() ||
+                    recorder.isRecording() || multiRecorder.isRecording() ||
+                    exportRunning.load()) return false;
+                selectedTrack=index;
+                ensureSelectedTrackVisible();
+                refreshMixer();
+                repaint();
+                return true;
+            },
+            [this](std::size_t index) {
+                if (index>=session.tracks.size() || playing.load() ||
+                    recorder.isRecording() || multiRecorder.isRecording() ||
+                    exportRunning.load() ||
+                    session.tracks[index].type!=idw::daw::TrackType::audio)
+                    return false;
+                armedTracks[index]=true; // idempotent arm, never toggle
+                refreshMixer();
+                repaint();
+                return true;
+            }};
     }
     void selectTrack(int direction){
         if(playing.load() || session.tracks.empty())return;
