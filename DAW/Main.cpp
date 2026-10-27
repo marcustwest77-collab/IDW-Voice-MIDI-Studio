@@ -1971,7 +1971,8 @@ private:
         const auto pending=remoteReviewController.pending(verifiedGrant);
         const auto request=std::find_if(pending.begin(),pending.end(),
             [&requestId](const auto& item){return item.requestId==requestId;});
-        if (request==pending.end() || request->trackIndex>=session.tracks.size())
+        if (request==pending.end() || request->trackIndex>=session.tracks.size() ||
+            (request->action!=Action::select_track && request->action!=Action::arm_track))
             return false;
         state.trackIsAudio=
             session.tracks[request->trackIndex].type==idw::daw::TrackType::audio;
