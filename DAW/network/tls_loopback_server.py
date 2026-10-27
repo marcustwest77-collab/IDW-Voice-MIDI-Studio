@@ -4,6 +4,8 @@ TLS protects transport to a validated hostname, but provides NO account/guest
 authentication, host approval or DAW control. Never expose to LAN/Internet.
 """
 import socket
+import hashlib
+import hmac
 import ssl
 from loopback_transport import receive_frame, send_frame
 from replay_guard import ReplayGuard
@@ -11,9 +13,14 @@ from replay_guard import ReplayGuard
 
 def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                    verified_peer_id=None, verified_channel_id=None, replay_guard=None,
-                   client_cafile=None):
+                   client_cafile=None, approved_client_sha256=None):
     if not (1024 <= port <= 65535) or not certfile or not keyfile:
         raise ValueError("port and TLS certificate/key are required")
+    if approved_client_sha256 is not None:
+        if not client_cafile or len(approved_client_sha256) != 64 or any(
+            ch not in '0123456789abcdef' for ch in approved_client_sha256
+        ):
+            raise ValueError('client trust and lowercase SHA-256 fingerprint required')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.load_cert_chain(certfile=certfile, keyfile=keyfile)
@@ -33,6 +40,12 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
             with context.wrap_socket(raw, server_side=True) as secure:
                 if client_cafile and not secure.getpeercert(binary_form=True):
                     raise PermissionError("verified client certificate required")
+                if approved_client_sha256 is not None:
+                    peer_certificate = secure.getpeercert(binary_form=True)
+                    if not peer_certificate or not hmac.compare_digest(
+                        hashlib.sha256(peer_certificate).hexdigest(), approved_client_sha256
+                    ):
+                        raise PermissionError('unapproved client certificate')
                 payload = receive_frame(secure)
                 if session is not None:
                     if not verified_peer_id or not verified_channel_id:
