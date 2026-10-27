@@ -15,10 +15,10 @@ public:
                                 const Request& liveState, RemoteDawCommandAdapter& adapter) {
         CommandMessage approved;
         if (!gate_.approveForDispatch(id, grant, liveState, approved)) return false;
-        // Never dispatch dangerous actions, even with a staged approval.
-        if (approved.action == Action::delete_track ||
-            approved.action == Action::export_audio ||
-            approved.action == Action::view) return false;
+        // Default-deny: only reviewed track selection and arming are dispatchable.
+        // The permission gate already revalidated the action against live state.
+        if (approved.action != Action::select_track &&
+            approved.action != Action::arm_track) return false;
         return adapter.apply(approved); // no retry; approval has been consumed
     }
 private:
