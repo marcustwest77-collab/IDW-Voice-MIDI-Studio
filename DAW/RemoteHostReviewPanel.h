@@ -27,6 +27,8 @@ public:
 
     void showPending(const std::vector<PendingReview>& pending) {
         jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+        // Remove old child components before destroying their owning rows.
+        for (auto& row : rows_) removeChildComponent(row.get());
         rows_.clear();
         for (const auto& item : pending) {
             auto row = std::make_unique<ReviewRow>();
