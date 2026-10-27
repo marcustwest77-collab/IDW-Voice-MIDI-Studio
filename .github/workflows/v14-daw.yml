@@ -3,7 +3,7 @@ on:
   push:
     branches: [v14-daw-foundation]
   pull_request:
-    branches: [v14-daw-foundation, 'feature/**', 'fix/**']
+    branches: [v14-daw-foundation, 'feature/**', 'fix/**', 'ci/**']
   workflow_dispatch:
 jobs:
   foundation:
