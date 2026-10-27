@@ -75,3 +75,7 @@ jobs:
       - name: Exercise guarded localhost TLS roundtrip
         shell: bash
         run: python DAW/network/test_guarded_tls_roundtrip.py
+
+      - name: Test mutual TLS client certificate authentication
+        shell: bash
+        run: python DAW/network/test_mutual_tls.py
