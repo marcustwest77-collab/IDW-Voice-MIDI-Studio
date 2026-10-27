@@ -9,9 +9,14 @@ public:
  explicit ValidatedCommandReviewReceiver(SessionReviewCoordinator& coordinator)
      : coordinator_(coordinator) {}
  // Called by trusted DAW-side transport adapter with fresh local state.
- bool receive(const std::string& serialized, const Request& liveDawState) {
+ bool receive(const std::string& serialized, const Request& liveDawState,
+              std::uint64_t transportSessionEpoch) {
+     // This epoch must come from trusted local transport state, not the payload.
+     if (transportSessionEpoch == 0 || transportSessionEpoch != coordinator_.grant().sessionEpoch)
+         return false;
      CommandMessage command;
-     if (!parseControlCommand(serialized, command)) return false;
+     if (!parseControlCommand(serialized, command) || command.sessionEpoch != transportSessionEpoch)
+         return false;
      if (command.action != Action::select_track && command.action != Action::arm_track)
          return false;
      return coordinator_.stageInspected(command, liveDawState);
