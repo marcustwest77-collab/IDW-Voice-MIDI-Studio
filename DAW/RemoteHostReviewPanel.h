@@ -16,6 +16,11 @@ public:
     HostReviewPanel() { addAndMakeVisible(header_); header_.setText(
         "Remote Studio - Host Approval", juce::dontSendNotification); }
 
+    void setApprovalEnabled(bool enabled) {
+        approvalEnabled_ = enabled;
+        for (auto& row : rows_) row->approve.setEnabled(enabled);
+    }
+
     void showPending(const std::vector<PendingReview>& pending) {
         jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
         rows_.clear();
@@ -26,7 +31,10 @@ public:
                 juce::String(id) + " | action " + juce::String(static_cast<int>(item.action))
                 + " | track " + juce::String(static_cast<int>(item.trackIndex + 1)),
                 juce::dontSendNotification);
-            row->approve.onClick = [this, id] { if (onHostDecision) onHostDecision(id, true); };
+            row->approve.setEnabled(approvalEnabled_);
+            row->approve.onClick = [this, id] {
+                if (approvalEnabled_ && onHostDecision) onHostDecision(id, true);
+            };
             row->deny.onClick = [this, id] { if (onHostDecision) onHostDecision(id, false); };
             addAndMakeVisible(*row);
             rows_.push_back(std::move(row));
@@ -56,6 +64,7 @@ private:
             caption.setBounds(bounds);
         }
     };
+    bool approvalEnabled_ = false; // deny by default until live authenticated DAW integration
     juce::Label header_;
     std::vector<std::unique_ptr<ReviewRow>> rows_;
 };
