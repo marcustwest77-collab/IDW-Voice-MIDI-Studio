@@ -127,6 +127,8 @@ public:
         };
         remoteReviewPanel.onRevokeControl=[this] {
             const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
+            // Discard commands waiting in the transport mailbox as well as reviewed requests.
+            remoteReviewMailbox.clear();
             remoteReviewPanel.setApprovalEnabled(false);
             remoteReviewPanel.setConnectionStatus(revoked
                 ? "Remote control revoked; pending requests cleared"
