@@ -1,0 +1,32 @@
+name: V14 Remote Standalone C++ Tests
+on:
+  push:
+    branches:
+      - 'ci/**'
+      - 'feature/**'
+      - 'fix/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  remote-unit:
+    name: Remote C++17 tests / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run remote tests in Release-equivalent mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p remote-test-bin
+          for source in DAW/tests/Remote*Tests.cpp DAW/tests/ValidatedControlReceiverTests.cpp; do
+            name="$(basename "${source%.cpp}")"
+            echo "Compiling ${name}"
+            g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror "$source" -o "remote-test-bin/$name"
+            echo "Running ${name}"
+            "./remote-test-bin/$name"
+          done
