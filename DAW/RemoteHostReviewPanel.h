@@ -13,6 +13,20 @@ public:
     // refresh live grant/track state and use HostReviewController::approve.
     std::function<void(const std::string&, bool approve)> onHostDecision;
 
+    static const char* actionName(Action action) noexcept {
+        switch (action) {
+            case Action::select_track: return "Select track";
+            case Action::arm_track: return "Arm track";
+            case Action::start_recording: return "Start recording";
+            case Action::stop_recording: return "Stop recording";
+            case Action::set_gain: return "Set gain";
+            case Action::set_pan: return "Set pan";
+            case Action::delete_track: return "Delete track";
+            case Action::export_audio: return "Export audio";
+            case Action::view: return "View";
+        }
+        return "Unknown command";
+    }
     HostReviewPanel() {
         addAndMakeVisible(header_);
         header_.setText("Remote Studio - Host Approval", juce::dontSendNotification);
@@ -36,7 +50,7 @@ public:
             auto row = std::make_unique<ReviewRow>();
             const std::string id = item.requestId;
             row->caption.setText(
-                juce::String(id) + " | action " + juce::String(static_cast<int>(item.action))
+                juce::String(id) + " | " + juce::String(actionName(item.action))
                 + " | track " + juce::String(static_cast<int>(item.trackIndex + 1)),
                 juce::dontSendNotification);
             row->approve.setEnabled(approvalEnabled_);
