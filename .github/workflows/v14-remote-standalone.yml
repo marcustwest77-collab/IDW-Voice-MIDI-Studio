@@ -38,3 +38,7 @@ jobs:
       - name: Test loopback command parser
         shell: bash
         run: python DAW/network/test_command_protocol.py
+
+      - name: Test certificate-verified TLS client configuration
+        shell: bash
+        run: python DAW/network/test_tls_client.py
