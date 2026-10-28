@@ -14,6 +14,7 @@ int main() {
  assert(!box.enqueue("1|101|1|a|record|0",101));
  assert(box.enqueue("1|101|1|a|arm|0",101));
  assert(!box.enqueue("1|101|2|a|select|0",101));
+ assert(!box.enqueue("1|101|1|other|select|0",101));
  for(std::size_t i=1;i<RemoteReviewMailbox::capacity;++i)
    assert(box.enqueue("1|101|"+std::to_string(i+1)+"|id"+std::to_string(i)+"|arm|0",101));
  assert(!box.enqueue("1|101|2|b|select|0",101));
