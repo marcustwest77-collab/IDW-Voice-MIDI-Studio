@@ -29,6 +29,8 @@ int main(){
  assert(c.stageInspected(cmd,state));
  assert(c.pending().size()==1);
  assert(mailbox.enqueue("1|501|2|queued501|arm|0",501));
+ // Commands queued immediately before host revocation must be purged.
+ assert(lifecycle.onAuthenticatedTrackCommand("1|501|5|before_revoke|arm|0",501));
  lifecycle.onHostRevokedControl();
  assert(!lifecycle.onAuthenticatedTrackCommand("1|501|4|revoked|arm|0",501));
  assert(mailbox.drain().empty());
