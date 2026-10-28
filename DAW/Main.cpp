@@ -1991,6 +1991,16 @@ private:
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
         return true;
     }
+    // Future TLS adapter must hand over verified data on JUCE's message thread.
+    // No socket or externally callable listener is installed by this method.
+    bool submitVerifiedRemoteTrackCommandOnMessageThread(
+        const std::string& wire, std::uint64_t verifiedTransportEpoch) {
+        auto* messageManager=juce::MessageManager::getInstanceWithoutCreating();
+        if (messageManager==nullptr ||
+            !messageManager->isThisTheMessageThread()) return false;
+        return remoteTransportLifecycle.onAuthenticatedTrackCommand(
+            wire, verifiedTransportEpoch);
+    }
     // Must run on JUCE's message thread. No transport is connected yet.
     // Re-derive trusted DAW state for every queued command before review.
     void drainRemoteReviewMailbox() {
