@@ -27,7 +27,8 @@ public:
   if (queue_.size()>=capacity) return false;
   // Retain the last accepted sequence even after the review UI drains this queue.
   // Otherwise a replay with a lower sequence can enter an empty mailbox.
-  if (trustedEpoch==lastEpoch_ && parsed.sequence<=lastSequence_) return false;
+  if (trustedEpoch<lastEpoch_ ||
+      (trustedEpoch==lastEpoch_ && parsed.sequence<=lastSequence_)) return false;
   for (const auto& pending : queue_) {
    CommandMessage existing;
    if (pending.trustedEpoch==trustedEpoch &&
