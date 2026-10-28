@@ -44,4 +44,14 @@ int main() {
     "1|43|9|delayed|arm|0"}));
  queue.clear();
  assert(queue.drain().empty());
+ // A rejected admission cannot advance the epoch and invalidate current control.
+ TrustedTransportEventQueue saturated;
+ assert(saturated.push({Kind::connected,60,true,true,true,{}}));
+ for(std::size_t i=1;i<TrustedTransportEventQueue::capacity;++i)
+   assert(saturated.push({Kind::command,60,false,false,false,
+      "1|60|"+std::to_string(i)+"|q"+std::to_string(i)+"|arm|0"}));
+ assert(!saturated.push({Kind::connected,61,true,true,true,{}}));
+ saturated.drain();
+ assert(saturated.push({Kind::command,60,false,false,false,"1|60|33|still_valid|arm|0"}));
+ assert(saturated.drain().size()==1);
 }
