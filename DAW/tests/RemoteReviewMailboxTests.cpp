@@ -30,6 +30,9 @@ int main() {
  assert(box.enqueue("1|101|17|fresh|arm|0",101));
  assert(box.drain().size()==1);
  assert(box.enqueue("1|102|1|c|select|0",102));
+ assert(!box.enqueue("1|101|18|old_epoch|arm|0",101));
+ assert(box.drain().size()==1);
+ assert(!box.enqueue("1|101|19|old_after_drain|arm|0",101));
  box.clear();
  assert(box.drain().empty());
  // Exercise producer/consumer access concurrently with distinct IDs.
