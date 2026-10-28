@@ -24,6 +24,11 @@ int main() {
  assert(items.size()==RemoteReviewMailbox::capacity);
  assert(items.front().trustedEpoch==101);
  assert(box.drain().empty());
+ // Draining the UI queue is not a new session: old wire frames stay rejected.
+ assert(!box.enqueue("1|101|16|replayed|arm|0",101));
+ assert(!box.enqueue("1|101|2|replayed_low|arm|0",101));
+ assert(box.enqueue("1|101|17|fresh|arm|0",101));
+ assert(box.drain().size()==1);
  assert(box.enqueue("1|102|1|c|select|0",102));
  box.clear();
  assert(box.drain().empty());
