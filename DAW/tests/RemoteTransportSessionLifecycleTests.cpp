@@ -7,12 +7,16 @@ using namespace idw::daw::remote;
 int main(){
  SessionReviewCoordinator c; RemoteReviewMailbox mailbox;
  TransportSessionLifecycle lifecycle(c, mailbox);
+ assert(!lifecycle.onAuthenticatedTrackCommand("1|501|1|early|arm|0",501));
  assert(!lifecycle.onVerifiedPeerConnected(501,false,true,true));
  assert(!lifecycle.onVerifiedPeerConnected(501,true,false,true));
  assert(mailbox.enqueue("1|501|1|pre_admission|arm|0",501));
  assert(lifecycle.onVerifiedPeerConnected(501,true,true,true));
  assert(mailbox.drain().empty());
  assert(c.grant().connected && c.grant().controlGranted);
+ assert(!lifecycle.onAuthenticatedTrackCommand("1|501|1|wrong|arm|0",502));
+ assert(lifecycle.onAuthenticatedTrackCommand("1|501|1|allowed|arm|0",501));
+ assert(mailbox.drain().size()==1);
  // An unsolicited second peer must not replace the session or erase its inbox.
  assert(mailbox.enqueue("1|501|1|kept501|arm|0",501));
  assert(!lifecycle.onVerifiedPeerConnected(502,true,true,true));
@@ -26,6 +30,7 @@ int main(){
  assert(c.pending().size()==1);
  assert(mailbox.enqueue("1|501|2|queued501|arm|0",501));
  lifecycle.onHostRevokedControl();
+ assert(!lifecycle.onAuthenticatedTrackCommand("1|501|4|revoked|arm|0",501));
  assert(mailbox.drain().empty());
  assert(c.pending().empty() && !c.grant().controlGranted);
  assert(c.grant().connected);
