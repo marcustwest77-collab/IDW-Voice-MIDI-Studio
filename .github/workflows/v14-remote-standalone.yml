@@ -78,9 +78,11 @@ jobs:
         shell: bash
         run: python DAW/network/test_replay_guard.py
 
-      - name: Exercise guarded localhost TLS roundtrip
+      - name: Exercise guarded localhost TLS roundtrip through C++ review fixture
         shell: bash
-        run: python DAW/network/test_guarded_tls_roundtrip.py
+        run: |
+          g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteCrossLanguageHandoffFixture.cpp -o remote-test-bin/handoff-fixture -pthread
+          IDW_CPP_REVIEW_FIXTURE=remote-test-bin/handoff-fixture python DAW/network/test_guarded_tls_roundtrip.py
 
       - name: Test mutual TLS client certificate authentication
         shell: bash
