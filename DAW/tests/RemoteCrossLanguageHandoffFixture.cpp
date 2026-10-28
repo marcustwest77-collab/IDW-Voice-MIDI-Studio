@@ -15,6 +15,11 @@ int main() {
  std::string wire;
  while (std::getline(std::cin,wire)) {
    // Test-only control event: exercise host revocation in the same process.
+   if (wire=="__TEST_DISCONNECT__") {
+     lifecycle.onPeerDisconnected();
+     std::cout<<"DISCONNECTED"<<std::endl;
+     continue;
+   }
    if (wire=="__TEST_REVOKE__") {
      lifecycle.onHostRevokedControl();
      std::cout<<"REVOKED"<<std::endl;
