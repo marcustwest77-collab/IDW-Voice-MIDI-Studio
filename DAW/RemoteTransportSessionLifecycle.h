@@ -18,6 +18,15 @@ public:
    mailbox_.clear();
    return true;
  }
+ // Called ONLY by a trusted transport adapter after cryptographic peer verification.
+ // A wire command cannot authorize itself; state is owned by the local coordinator.
+ bool onAuthenticatedTrackCommand(std::string payload, std::uint64_t trustedEpoch) {
+   const auto& grant=coordinator_.grant();
+   if (!grant.connected || !grant.authenticated || !grant.hostApproved ||
+       !grant.controlGranted || trustedEpoch==0 || trustedEpoch!=grant.sessionEpoch ||
+       trustedEpoch<=grant.revokedEpoch) return false;
+   return mailbox_.enqueue(std::move(payload),trustedEpoch);
+ }
  bool onHostRevokedControl() noexcept {
    mailbox_.clear();
    return coordinator_.revokeControl();
