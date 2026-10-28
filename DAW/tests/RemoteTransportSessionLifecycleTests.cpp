@@ -13,6 +13,12 @@ int main(){
  assert(lifecycle.onVerifiedPeerConnected(501,true,true,true));
  assert(mailbox.drain().empty());
  assert(c.grant().connected && c.grant().controlGranted);
+ // An unsolicited second peer must not replace the session or erase its inbox.
+ assert(mailbox.enqueue("1|501|1|kept501|arm|0",501));
+ assert(!lifecycle.onVerifiedPeerConnected(502,true,true,true));
+ auto preserved=mailbox.drain();
+ assert(preserved.size()==1 && preserved.front().trustedEpoch==501);
+ assert(c.grant().sessionEpoch==501 && c.grant().controlGranted);
  CommandMessage cmd;cmd.sessionEpoch=501;cmd.sequence=1;cmd.requestId="select501";
  cmd.action=Action::select_track;cmd.trackIndex=0;
  Request state;state.trackCount=2;
