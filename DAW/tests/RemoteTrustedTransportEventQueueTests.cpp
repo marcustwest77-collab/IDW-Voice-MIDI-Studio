@@ -21,7 +21,17 @@ int main() {
  assert(queue.drain().empty());
  for(std::size_t i=0;i<TrustedTransportEventQueue::capacity;++i)
    assert(queue.push({Kind::authenticationLost,42,false,false,false,{}}));
- assert(!queue.push({Kind::authenticationLost,42,false,false,false,{}}));
+ assert(queue.push({Kind::authenticationLost,42,false,false,false,{}}));
+ auto terminalEvents=queue.drain();
+ assert(terminalEvents.size()==TrustedTransportEventQueue::capacity);
+ assert(terminalEvents.back().kind==Kind::authenticationLost);
+ for(std::size_t i=0;i<TrustedTransportEventQueue::capacity;++i)
+   assert(queue.push({Kind::command,43,false,false,false,
+       "1|43|"+std::to_string(i+1)+"|id"+std::to_string(i)+"|arm|0"}));
+ assert(queue.push({Kind::disconnected,43,false,false,false,{}}));
+ terminalEvents=queue.drain();
+ assert(terminalEvents.size()==1);
+ assert(terminalEvents.front().kind==Kind::disconnected);
  queue.clear();
  assert(queue.drain().empty());
 }
