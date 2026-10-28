@@ -27,6 +27,7 @@
 #include "RemoteHostReviewPanel.h"
 #include "RemoteSessionReviewCoordinator.h"
 #include "RemoteTransportSessionLifecycle.h"
+#include "RemoteTrustedTransportEventQueue.h"
 #include "RemoteReviewMailbox.h"
 #include "RemoteValidatedCommandReviewReceiver.h"
 #include "RemoteTrackControlAdapter.h"
@@ -2026,6 +2027,27 @@ private:
         remoteReviewPanel.setConnectionStatus("Offline: remote session ended");
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
     }
+    // Called on the JUCE message thread only. The network transport is not
+    // connected yet; producer must supply authenticated facts, not peer claims.
+    void drainTrustedTransportEventsOnMessageThread() {
+        auto* manager=juce::MessageManager::getInstanceWithoutCreating();
+        if (!manager || !manager->isThisTheMessageThread()) return;
+        using Event=idw::daw::remote::TrustedTransportEvent;
+        for (auto& event : remoteTransportEvents.drain()) {
+            if (event.kind==Event::Kind::connected) {
+                onVerifiedRemoteSessionConnectedOnMessageThread(
+                    event.epoch,event.tlsVerified,event.hostConsented,
+                    event.trackControlGranted);
+            } else if (event.kind==Event::Kind::command) {
+                receiveVerifiedRemoteTrackCommandForReview(event.wire,event.epoch);
+            } else {
+                const auto& grant=remoteSessionReviews.grant();
+                if (grant.connected && grant.sessionEpoch==event.epoch)
+                    onRemoteSessionEndedOnMessageThread(
+                        event.kind==Event::Kind::authenticationLost);
+            }
+        }
+    }
     // Future TLS adapter must hand over verified data on JUCE's message thread.
     // No socket or externally callable listener is installed by this method.
     bool submitVerifiedRemoteTrackCommandOnMessageThread(
@@ -3282,6 +3304,7 @@ public:
     juce::TextButton remoteReviewButton;
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
+    idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
     idw::daw::remote::TransportSessionLifecycle remoteTransportLifecycle{remoteSessionReviews, remoteReviewMailbox};
     idw::daw::remote::HostReviewPanel remoteReviewPanel;
     IDWTakeRecorder recorder;
