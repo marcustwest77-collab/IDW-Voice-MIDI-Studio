@@ -5,6 +5,7 @@ not derived from the TLS connection. No DAW control is performed.
 """
 import shutil
 import hashlib
+import os
 import socket
 import ssl
 import subprocess
@@ -51,6 +52,16 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             guard = ReplayGuard()
             ledger = HostApprovalLedger()
             received_commands = []
+            cpp_results = []
+            def handoff(cmd, peer):
+                received_commands.append((cmd, peer))
+                fixture = os.environ.get('IDW_CPP_REVIEW_FIXTURE')
+                if fixture:
+                    wire = (f"1|{cmd['session_epoch']}|{cmd['sequence']}|"
+                            f"{cmd['request_id']}|{cmd['action']}|{cmd['track_index']}\n")
+                    result = subprocess.run([fixture], input=wire, text=True,
+                                            capture_output=True, check=True, timeout=10)
+                    cpp_results.append(result.stdout.strip())
 
             def exchange(payload, mapped_peer='guest', host_allowed=True):
                 with socket.socket() as probe:
@@ -69,7 +80,7 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                                        approved_peer_by_sha256={fingerprint: mapped_peer},
                                        host_approval=lambda peer, epoch: host_allowed and peer == 'guest' and epoch == 45,
                                        host_approval_ledger=ledger,
-                                       accepted_command_sink=lambda cmd, peer: received_commands.append((cmd, peer)))
+                                       accepted_command_sink=handoff)
                     except Exception as exc:
                         server_failures.append(exc)
 
@@ -100,6 +111,8 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             self.assertEqual(len(received_commands), 1)
             self.assertEqual(received_commands[0][0]["request_id"], "arm_one")
             self.assertEqual(received_commands[0][1], "guest")
+            if os.environ.get("IDW_CPP_REVIEW_FIXTURE"):
+                self.assertEqual(cpp_results, ["REVIEW"])
             denied, errors = exchange(b"1|45|2|not_approved|arm|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
@@ -109,6 +122,8 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             allowed, errors = exchange(b"1|45|2|select_two|select|1")
             self.assertEqual(allowed, b"1|45|2|select_two|select|1")
             self.assertFalse(errors)
+            if os.environ.get("IDW_CPP_REVIEW_FIXTURE"):
+                self.assertEqual(cpp_results, ["REVIEW", "REVIEW"])
             ledger.approve("guest", 45, "record_two")
             denied, errors = exchange(b"1|45|3|record_two|record|1")
             self.assertIsNone(denied)

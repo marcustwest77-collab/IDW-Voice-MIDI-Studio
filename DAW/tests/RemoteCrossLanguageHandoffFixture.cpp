@@ -12,10 +12,10 @@ int main() {
  Request state;state.trackCount=4;state.trackIsAudio=true;
  std::string wire;
  while (std::getline(std::cin,wire)) {
-   if (!mailbox.enqueue(wire,45)) { std::cout<<"DENY\n";continue; }
+   if (!mailbox.enqueue(wire,45)) { std::cout<<"DENY"<<std::endl;continue; }
    bool accepted=false;
    for(const auto& item:mailbox.drain())
      accepted=receiver.receive(item.payload,state,item.trustedEpoch)||accepted;
-   std::cout<<(accepted?"REVIEW":"DENY")<<"\n";
+   std::cout<<(accepted?"REVIEW":"DENY")<<std::endl;
  }
 }
