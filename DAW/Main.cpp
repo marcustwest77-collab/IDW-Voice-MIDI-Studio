@@ -2029,6 +2029,12 @@ private:
         remoteReviewPanel.setConnectionStatus("Offline: remote session ended");
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
     }
+    // Restricted data-only handoff for a future authenticated transport worker.
+    // The caller must attest TLS identity independently; this is NOT a network listener.
+    bool enqueueVerifiedTransportEvent(
+        idw::daw::remote::TrustedTransportEvent event) {
+        return remoteTransportEvents.push(std::move(event));
+    }
     // Called on the JUCE message thread only. The network transport is not
     // connected yet; producer must supply authenticated facts, not peer claims.
     void drainTrustedTransportEventsOnMessageThread() {
