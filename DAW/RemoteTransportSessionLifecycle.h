@@ -25,6 +25,8 @@ public:
    if (!grant.connected || !grant.authenticated || !grant.hostApproved ||
        !grant.controlGranted || trustedEpoch==0 || trustedEpoch!=grant.sessionEpoch ||
        trustedEpoch<=grant.revokedEpoch) return false;
+   // The mailbox independently parses the message and checks epoch/action.
+   // Network threads may never touch JUCE controls or review UI directly.
    return mailbox_.enqueue(std::move(payload),trustedEpoch);
  }
  bool onHostRevokedControl() noexcept {
