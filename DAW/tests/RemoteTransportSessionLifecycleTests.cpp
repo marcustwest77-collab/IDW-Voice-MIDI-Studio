@@ -9,7 +9,9 @@ int main(){
  TransportSessionLifecycle lifecycle(c, mailbox);
  assert(!lifecycle.onVerifiedPeerConnected(501,false,true,true));
  assert(!lifecycle.onVerifiedPeerConnected(501,true,false,true));
+ assert(mailbox.enqueue("1|501|1|pre_admission|arm|0",501));
  assert(lifecycle.onVerifiedPeerConnected(501,true,true,true));
+ assert(mailbox.drain().empty());
  assert(c.grant().connected && c.grant().controlGranted);
  CommandMessage cmd;cmd.sessionEpoch=501;cmd.sequence=1;cmd.requestId="select501";
  cmd.action=Action::select_track;cmd.trackIndex=0;
@@ -26,7 +28,9 @@ int main(){
  assert(mailbox.drain().empty());
  assert(c.pending().empty() && !c.grant().connected);
  assert(!lifecycle.onVerifiedPeerConnected(501,true,true,true));
+ assert(mailbox.enqueue("1|501|4|stale_old|arm|0",501));
  assert(lifecycle.onVerifiedPeerConnected(502,true,true,true));
+ assert(mailbox.drain().empty());
  assert(mailbox.enqueue("1|502|1|queued503|arm|0",502));
  lifecycle.onPeerDisconnected();
  assert(mailbox.drain().empty());
