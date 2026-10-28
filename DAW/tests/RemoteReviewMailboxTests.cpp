@@ -4,6 +4,8 @@
 #endif
 #include <cassert>
 #include <string>
+#include <thread>
+#include <atomic>
 using namespace idw::daw::remote;
 int main() {
  RemoteReviewMailbox box;
@@ -25,4 +27,28 @@ int main() {
  assert(box.enqueue("1|102|1|c|select|0",102));
  box.clear();
  assert(box.drain().empty());
+ // Exercise producer/consumer access concurrently with distinct IDs.
+ RemoteReviewMailbox concurrent;
+ std::atomic<bool> producerDone{false};
+ std::atomic<int> accepted{0};
+ std::atomic<int> delivered{0};
+ std::thread producer([&] {
+   for (int i=1;i<=100;++i) {
+     const auto wire="1|900|"+std::to_string(i)+"|req"+std::to_string(i)+"|arm|0";
+     if (concurrent.enqueue(wire,900)) ++accepted;
+     std::this_thread::yield();
+   }
+   producerDone=true;
+ });
+ std::thread consumer([&] {
+   while (!producerDone.load()) {
+     delivered+=static_cast<int>(concurrent.drain().size());
+     std::this_thread::yield();
+   }
+   delivered+=static_cast<int>(concurrent.drain().size());
+ });
+ producer.join(); consumer.join();
+ assert(accepted==delivered);
+ assert(accepted>0);
+ assert(concurrent.drain().empty());
 }
