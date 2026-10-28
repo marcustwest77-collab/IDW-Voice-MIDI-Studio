@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <deque>
 #include <mutex>
+#include <unordered_set>
 #include <string>
 #include <utility>
 namespace idw::daw::remote {
@@ -27,9 +28,12 @@ public:
   if (event.kind==TrustedTransportEvent::Kind::connected &&
       (!event.tlsVerified || !event.hostConsented)) return false;
   std::lock_guard<std::mutex> lock(mutex_);
+  if (event.kind==TrustedTransportEvent::Kind::command &&
+      terminatedEpochs_.count(event.epoch)!=0) return false;
   const bool terminal=event.kind==TrustedTransportEvent::Kind::disconnected ||
                       event.kind==TrustedTransportEvent::Kind::authenticationLost;
   if (terminal) {
+   terminatedEpochs_.insert(event.epoch);
    // Drop queued commands from the terminated epoch before delivering the
    // stop event. A flooded queue must not block authentication loss.
    for (auto it=queue_.begin();it!=queue_.end();) {
@@ -52,5 +56,6 @@ public:
 private:
  std::mutex mutex_;
  std::deque<TrustedTransportEvent> queue_;
+ std::unordered_set<std::uint64_t> terminatedEpochs_;
 };
 }

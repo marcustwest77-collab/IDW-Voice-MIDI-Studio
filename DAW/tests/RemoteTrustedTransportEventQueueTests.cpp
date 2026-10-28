@@ -32,6 +32,11 @@ int main() {
  terminalEvents=queue.drain();
  assert(terminalEvents.size()==1);
  assert(terminalEvents.front().kind==Kind::disconnected);
+ assert(!queue.push({Kind::command,43,false,false,false,
+    "1|43|99|late|arm|0"}));
+ assert(queue.push({Kind::connected,44,true,true,true,{}}));
+ assert(queue.push({Kind::command,44,false,false,false,
+    "1|44|1|fresh|arm|0"}));
  queue.clear();
  assert(queue.drain().empty());
 }
