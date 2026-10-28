@@ -137,10 +137,14 @@ public:
         };
         remoteReviewPanel.onHostDecision=[this](const std::string& id, bool approve) {
             if (approve) {
-                // No remote session is authenticated in this DAW window yet.
-                // Fail closed until the transport supplies verified live state.
-                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
-                    "Remote approval unavailable", "No authenticated remote session is connected.");
+                const auto& grant=remoteSessionReviews.grant();
+                if (!grant.connected || !grant.authenticated ||
+                    !grant.hostApproved || !grant.controlGranted ||
+                    !dispatchApprovedTrackRequest(id)) {
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                        "Remote command denied",
+                        "No authorized session or the track action is no longer permitted.");
+                }
             } else {
                 remoteSessionReviews.reviews().deny(id);
             }
@@ -2036,6 +2040,10 @@ private:
             live.recordingActive=recorder.isRecording() || multiRecorder.isRecording();
             receiver.receive(queued.payload, live, queued.trustedEpoch);
         }
+        const auto& grant=remoteSessionReviews.grant();
+        remoteReviewPanel.setApprovalEnabled(
+            grant.connected && grant.authenticated && grant.hostApproved &&
+            grant.controlGranted);
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
     }
     // Called only from a future verified LOCAL host decision handler. No network
