@@ -1999,6 +1999,30 @@ private:
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
         return true;
     }
+    // The future authenticated transport adapter must invoke these on the JUCE
+    // message thread after completing certificate verification and host consent.
+    // These functions do not themselves establish TLS identity.
+    bool onVerifiedRemoteSessionConnectedOnMessageThread(
+        std::uint64_t epoch, bool tlsVerified, bool hostConsented) {
+        auto* manager=juce::MessageManager::getInstanceWithoutCreating();
+        if (!manager || !manager->isThisTheMessageThread()) return false;
+        const bool connected=remoteTransportLifecycle.onVerifiedPeerConnected(
+            epoch,tlsVerified,hostConsented,true);
+        if (!connected) return false;
+        remoteReviewPanel.setApprovalEnabled(true);
+        remoteReviewPanel.setConnectionStatus("Authenticated guest: track selection/arming only");
+        remoteReviewPanel.showPending(remoteSessionReviews.pending());
+        return true;
+    }
+    void onRemoteSessionEndedOnMessageThread(bool authenticationLost) {
+        auto* manager=juce::MessageManager::getInstanceWithoutCreating();
+        if (!manager || !manager->isThisTheMessageThread()) return;
+        if (authenticationLost) remoteTransportLifecycle.onAuthenticationLost();
+        else remoteTransportLifecycle.onPeerDisconnected();
+        remoteReviewPanel.setApprovalEnabled(false);
+        remoteReviewPanel.setConnectionStatus("Offline: remote session ended");
+        remoteReviewPanel.showPending(remoteSessionReviews.pending());
+    }
     // Future TLS adapter must hand over verified data on JUCE's message thread.
     // No socket or externally callable listener is installed by this method.
     bool submitVerifiedRemoteTrackCommandOnMessageThread(
