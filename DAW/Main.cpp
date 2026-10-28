@@ -1996,6 +1996,12 @@ private:
     void drainRemoteReviewMailbox() {
         idw::daw::remote::ValidatedCommandReviewReceiver receiver(remoteSessionReviews);
         for (const auto& queued : remoteReviewMailbox.drain()) {
+            // A trusted transport epoch must match a currently authorized local
+            // session. Do not inspect stale commands from a previous peer.
+            const auto& grant=remoteSessionReviews.grant();
+            if (!grant.connected || !grant.authenticated || !grant.hostApproved ||
+                !grant.controlGranted || queued.trustedEpoch != grant.sessionEpoch)
+                continue;
             idw::daw::remote::CommandMessage command;
             if (!idw::daw::remote::parseControlCommand(queued.payload, command))
                 continue;
