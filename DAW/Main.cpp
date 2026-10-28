@@ -2001,6 +2001,15 @@ private:
         return remoteTransportLifecycle.onAuthenticatedTrackCommand(
             wire, verifiedTransportEpoch);
     }
+    // A future verified TLS adapter can deliver a command while Remote Review
+    // is visible; explicit message-thread dispatch refreshes host review only.
+    void receiveVerifiedRemoteTrackCommandForReview(
+        const std::string& wire, std::uint64_t verifiedTransportEpoch) {
+        if (!submitVerifiedRemoteTrackCommandOnMessageThread(wire, verifiedTransportEpoch))
+            return;
+        if (remoteReviewPanel.isVisible())
+            drainRemoteReviewMailbox();
+    }
     // Must run on JUCE's message thread. No transport is connected yet.
     // Re-derive trusted DAW state for every queued command before review.
     void drainRemoteReviewMailbox() {
