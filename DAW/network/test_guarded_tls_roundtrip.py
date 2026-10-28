@@ -61,7 +61,10 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                             f"{cmd['request_id']}|{cmd['action']}|{cmd['track_index']}\n")
                     result = subprocess.run([fixture], input=wire, text=True,
                                             capture_output=True, check=True, timeout=10)
-                    cpp_results.append(result.stdout.strip())
+                    decision = result.stdout.strip()
+                    cpp_results.append(decision)
+                    if decision != "REVIEW":
+                        raise PermissionError("C++ host review rejected command")
 
             def exchange(payload, mapped_peer='guest', host_allowed=True):
                 with socket.socket() as probe:
