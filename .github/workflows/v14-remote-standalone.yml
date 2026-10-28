@@ -32,6 +32,12 @@ jobs:
             "./remote-test-bin/$name"
           done
 
+      - name: Test Python wire protocol through C++ review receiver
+        shell: bash
+        run: |
+          g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteCrossLanguageHandoffFixture.cpp -o remote-test-bin/handoff-fixture -pthread
+          python DAW/network/test_cpp_command_handoff.py remote-test-bin/handoff-fixture
+
       - name: Test loopback-only Python TCP transport
         shell: bash
         run: python DAW/network/test_loopback_transport.py
