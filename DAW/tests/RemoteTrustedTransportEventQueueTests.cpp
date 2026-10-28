@@ -44,6 +44,18 @@ int main() {
     "1|43|9|delayed|arm|0"}));
  queue.clear();
  assert(queue.drain().empty());
+ // A full queue containing a terminal event and lower-priority commands
+ // must preserve that terminal event when another disconnect arrives.
+ TrustedTransportEventQueue mixed;
+ assert(mixed.push({Kind::authenticationLost,71,false,false,false,{}}));
+ for(std::size_t i=1;i<TrustedTransportEventQueue::capacity;++i)
+   assert(mixed.push({Kind::command,72,false,false,false,
+      "1|72|"+std::to_string(i)+"|m"+std::to_string(i)+"|arm|0"}));
+ assert(mixed.push({Kind::disconnected,72,false,false,false,{}}));
+ auto mixedEvents=mixed.drain();
+ assert(mixedEvents.size()==2);
+ assert(mixedEvents.front().kind==Kind::authenticationLost);
+ assert(mixedEvents.back().kind==Kind::disconnected);
  // A rejected admission cannot advance the epoch and invalidate current control.
  TrustedTransportEventQueue saturated;
  assert(saturated.push({Kind::connected,60,true,true,true,{}}));
