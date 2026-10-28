@@ -13,11 +13,13 @@ class CrossLanguageHandoff(unittest.TestCase):
             "1|45|3|recording|record|1",
             "1|46|4|wrong_epoch|arm|1",
             "1|45|4|third|arm|2",
+            "__TEST_REVOKE__",
+            "1|45|5|after_revoke|select|0",
         ]
         result=subprocess.run([fixture],input="\n".join(packets)+"\n",
             text=True,capture_output=True,check=True,timeout=10)
         self.assertEqual(result.stdout.splitlines(),
-            ["REVIEW","DENY","REVIEW","DENY","DENY","REVIEW"])
+            ["REVIEW","DENY","REVIEW","DENY","DENY","REVIEW","REVOKED","DENY"])
         self.assertFalse(result.stderr)
 
 if __name__=="__main__":
