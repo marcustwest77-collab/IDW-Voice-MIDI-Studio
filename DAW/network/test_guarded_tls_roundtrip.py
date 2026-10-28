@@ -66,7 +66,7 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                     if decision != "REVIEW":
                         raise PermissionError("C++ host review rejected command")
 
-            def exchange(payload, mapped_peer='guest', host_allowed=True):
+            def exchange(payload, mapped_peer='guest', host_allowed=True, sink_override=None):
                 with socket.socket() as probe:
                     probe.bind(("127.0.0.1", 0))
                     port = probe.getsockname()[1]
@@ -83,7 +83,7 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                                        approved_peer_by_sha256={fingerprint: mapped_peer},
                                        host_approval=lambda peer, epoch: host_allowed and peer == 'guest' and epoch == 45,
                                        host_approval_ledger=ledger,
-                                       accepted_command_sink=handoff)
+                                       accepted_command_sink=handoff if sink_override is None else sink_override)
                     except Exception as exc:
                         server_failures.append(exc)
 
@@ -105,6 +105,15 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
             denied, errors = exchange(b"1|45|1|host_denied|arm|1", host_allowed=False)
+            self.assertIsNone(denied)
+            self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
+            # A receiver rejection must prevent a success echo to the TLS client.
+            def reject_handoff(_command, _peer):
+                raise PermissionError("C++ review denied")
+            ledger.approve("guest", 45, "denied_by_cpp")
+            denied, errors = exchange(
+                b"1|45|1|denied_by_cpp|arm|1", sink_override=reject_handoff
+            )
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
             ledger.approve("guest", 45, "arm_one")
