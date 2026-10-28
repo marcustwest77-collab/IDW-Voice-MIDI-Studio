@@ -25,6 +25,12 @@ public:
       return false;
   std::lock_guard<std::mutex> lock(mutex_);
   if (queue_.size()>=capacity) return false;
+  for (const auto& pending : queue_) {
+   CommandMessage existing;
+   if (pending.trustedEpoch==trustedEpoch &&
+       parseControlCommand(pending.payload, existing) &&
+       existing.requestId==parsed.requestId) return false;
+  }
   queue_.push_back({std::move(serialized),trustedEpoch});
   return true;
  }
