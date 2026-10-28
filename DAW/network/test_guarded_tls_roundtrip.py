@@ -66,7 +66,7 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                     if decision != "REVIEW":
                         raise PermissionError("C++ host review rejected command")
 
-            def exchange(payload, mapped_peer='guest', host_allowed=True):
+            def exchange(payload, mapped_peer='guest', host_allowed=True, sink_override=None):
                 with socket.socket() as probe:
                     probe.bind(("127.0.0.1", 0))
                     port = probe.getsockname()[1]
@@ -83,7 +83,7 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                                        approved_peer_by_sha256={fingerprint: mapped_peer},
                                        host_approval=lambda peer, epoch: host_allowed and peer == 'guest' and epoch == 45,
                                        host_approval_ledger=ledger,
-                                       accepted_command_sink=handoff)
+                                       accepted_command_sink=handoff if sink_override is None else sink_override)
                     except Exception as exc:
                         server_failures.append(exc)
 
@@ -107,33 +107,42 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             denied, errors = exchange(b"1|45|1|host_denied|arm|1", host_allowed=False)
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
+            # A receiver rejection must prevent a success echo to the TLS client.
+            def reject_handoff(_command, _peer):
+                raise PermissionError("C++ review denied")
+            ledger.approve("guest", 45, "denied_by_cpp")
+            denied, errors = exchange(
+                b"1|45|1|denied_by_cpp|arm|1", sink_override=reject_handoff
+            )
+            self.assertIsNone(denied)
+            self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
             ledger.approve("guest", 45, "arm_one")
-            allowed, errors = exchange(b"1|45|1|arm_one|arm|1")
-            self.assertEqual(allowed, b"1|45|1|arm_one|arm|1")
+            allowed, errors = exchange(b"1|45|2|arm_one|arm|1")
+            self.assertEqual(allowed, b"1|45|2|arm_one|arm|1")
             self.assertFalse(errors)
             self.assertEqual(len(received_commands), 1)
             self.assertEqual(received_commands[0][0]["request_id"], "arm_one")
             self.assertEqual(received_commands[0][1], "guest")
             if os.environ.get("IDW_CPP_REVIEW_FIXTURE"):
                 self.assertEqual(cpp_results, ["REVIEW"])
-            denied, errors = exchange(b"1|45|2|not_approved|arm|1")
+            denied, errors = exchange(b"1|45|3|not_approved|arm|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
-            # Denied request must not consume sequence 2; a later approved
+            # Denied request must not consume sequence 3; a later approved
             # command can use it without weakening replay prevention.
             ledger.approve("guest", 45, "select_two")
-            allowed, errors = exchange(b"1|45|2|select_two|select|1")
-            self.assertEqual(allowed, b"1|45|2|select_two|select|1")
+            allowed, errors = exchange(b"1|45|3|select_two|select|1")
+            self.assertEqual(allowed, b"1|45|3|select_two|select|1")
             self.assertFalse(errors)
             if os.environ.get("IDW_CPP_REVIEW_FIXTURE"):
                 self.assertEqual(cpp_results, ["REVIEW", "REVIEW"])
             ledger.approve("guest", 45, "record_two")
-            denied, errors = exchange(b"1|45|3|record_two|record|1")
+            denied, errors = exchange(b"1|45|4|record_two|record|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
             # Forbidden actions cannot spend host approval ledger entries.
             self.assertTrue(ledger.contains("guest", 45, "record_two"))
-            denied, errors = exchange(b"1|45|1|arm_one|arm|1")
+            denied, errors = exchange(b"1|45|2|arm_one|arm|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
 
