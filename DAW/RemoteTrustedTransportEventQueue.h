@@ -30,6 +30,13 @@ public:
   if ((event.kind==TrustedTransportEvent::Kind::command ||
        event.kind==TrustedTransportEvent::Kind::connected) &&
       event.epoch<=lastTerminatedEpoch_) return false;
+  // Once a newer authenticated admission is queued, a delayed older
+  // command must never be placed after it and processed as current.
+  if ((event.kind==TrustedTransportEvent::Kind::command ||
+       event.kind==TrustedTransportEvent::Kind::connected) &&
+      event.epoch<highestAdmittedEpoch_) return false;
+  if (event.kind==TrustedTransportEvent::Kind::connected &&
+      event.epoch>highestAdmittedEpoch_) highestAdmittedEpoch_=event.epoch;
   const bool terminal=event.kind==TrustedTransportEvent::Kind::disconnected ||
                       event.kind==TrustedTransportEvent::Kind::authenticationLost;
   if (terminal) {
@@ -58,5 +65,6 @@ private:
  std::mutex mutex_;
  std::deque<TrustedTransportEvent> queue_;
  std::uint64_t lastTerminatedEpoch_=0;
+ std::uint64_t highestAdmittedEpoch_=0;
 };
 }
