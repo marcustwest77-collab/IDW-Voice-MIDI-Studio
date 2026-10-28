@@ -2003,14 +2003,17 @@ private:
     // message thread after completing certificate verification and host consent.
     // These functions do not themselves establish TLS identity.
     bool onVerifiedRemoteSessionConnectedOnMessageThread(
-        std::uint64_t epoch, bool tlsVerified, bool hostConsented) {
+        std::uint64_t epoch, bool tlsVerified, bool hostConsented,
+        bool hostAllowsTrackControl) {
         auto* manager=juce::MessageManager::getInstanceWithoutCreating();
         if (!manager || !manager->isThisTheMessageThread()) return false;
         const bool connected=remoteTransportLifecycle.onVerifiedPeerConnected(
-            epoch,tlsVerified,hostConsented,true);
+            epoch,tlsVerified,hostConsented,hostAllowsTrackControl);
         if (!connected) return false;
-        remoteReviewPanel.setApprovalEnabled(true);
-        remoteReviewPanel.setConnectionStatus("Authenticated guest: track selection/arming only");
+        remoteReviewPanel.setApprovalEnabled(hostAllowsTrackControl);
+        remoteReviewPanel.setConnectionStatus(hostAllowsTrackControl
+            ? "Authenticated guest: track selection/arming only"
+            : "Authenticated guest: view-only, track control disabled");
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
         return true;
     }
