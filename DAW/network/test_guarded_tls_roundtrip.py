@@ -117,32 +117,32 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
             ledger.approve("guest", 45, "arm_one")
-            allowed, errors = exchange(b"1|45|1|arm_one|arm|1")
-            self.assertEqual(allowed, b"1|45|1|arm_one|arm|1")
+            allowed, errors = exchange(b"1|45|2|arm_one|arm|1")
+            self.assertEqual(allowed, b"1|45|2|arm_one|arm|1")
             self.assertFalse(errors)
             self.assertEqual(len(received_commands), 1)
             self.assertEqual(received_commands[0][0]["request_id"], "arm_one")
             self.assertEqual(received_commands[0][1], "guest")
             if os.environ.get("IDW_CPP_REVIEW_FIXTURE"):
                 self.assertEqual(cpp_results, ["REVIEW"])
-            denied, errors = exchange(b"1|45|2|not_approved|arm|1")
+            denied, errors = exchange(b"1|45|3|not_approved|arm|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
-            # Denied request must not consume sequence 2; a later approved
+            # Denied request must not consume sequence 3; a later approved
             # command can use it without weakening replay prevention.
             ledger.approve("guest", 45, "select_two")
-            allowed, errors = exchange(b"1|45|2|select_two|select|1")
-            self.assertEqual(allowed, b"1|45|2|select_two|select|1")
+            allowed, errors = exchange(b"1|45|3|select_two|select|1")
+            self.assertEqual(allowed, b"1|45|3|select_two|select|1")
             self.assertFalse(errors)
             if os.environ.get("IDW_CPP_REVIEW_FIXTURE"):
                 self.assertEqual(cpp_results, ["REVIEW", "REVIEW"])
             ledger.approve("guest", 45, "record_two")
-            denied, errors = exchange(b"1|45|3|record_two|record|1")
+            denied, errors = exchange(b"1|45|4|record_two|record|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
             # Forbidden actions cannot spend host approval ledger entries.
             self.assertTrue(ledger.contains("guest", 45, "record_two"))
-            denied, errors = exchange(b"1|45|1|arm_one|arm|1")
+            denied, errors = exchange(b"1|45|2|arm_one|arm|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
 
