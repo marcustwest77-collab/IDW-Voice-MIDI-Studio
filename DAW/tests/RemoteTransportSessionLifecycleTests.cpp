@@ -25,6 +25,11 @@ int main(){
    assert(!readonly.onAuthenticatedTrackCommand("1|402|1|still_denied|select|0",402));
    assert(!readonly.onAuthenticatedTrackCommand("1|401|2|stale|arm|0",401));
    assert(readonlyMailbox.drain().empty());
+   // A host revoke in view-only mode must not grant control or admit commands.
+   readonly.onHostRevokedControl();
+   assert(!readonlyCoordinator.grant().controlGranted);
+   assert(!readonly.onAuthenticatedTrackCommand("1|402|2|after_revoke|arm|0",402));
+   assert(readonlyMailbox.drain().empty());
  }
  assert(!lifecycle.onAuthenticatedTrackCommand("1|501|1|early|arm|0",501));
  assert(!lifecycle.onVerifiedPeerConnected(501,false,true,true));
