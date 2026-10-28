@@ -169,6 +169,16 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             self.assertFalse(errors)
             if os.environ.get("IDW_CPP_REVIEW_FIXTURE"):
                 self.assertEqual(cpp_results, ["REVIEW", "REVIEW", "REVIEW"])
+            # A malformed command must not reach or kill the persistent receiver.
+            denied, errors = exchange(b"not_a_control_command")
+            self.assertIsNone(denied)
+            self.assertTrue(errors)
+            ledger.approve("guest", 45, "after_malformed")
+            allowed, errors = exchange(b"1|45|6|after_malformed|arm|2")
+            self.assertEqual(allowed, b"1|45|6|after_malformed|arm|2")
+            self.assertFalse(errors)
+            if os.environ.get("IDW_CPP_REVIEW_FIXTURE"):
+                self.assertEqual(cpp_results, ["REVIEW", "REVIEW", "REVIEW", "REVIEW"])
 
 
 if __name__ == "__main__":
