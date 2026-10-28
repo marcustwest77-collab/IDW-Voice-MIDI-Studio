@@ -14,6 +14,12 @@ int main() {
  Request state;state.trackCount=4;state.trackIsAudio=true;
  std::string wire;
  while (std::getline(std::cin,wire)) {
+   // Test-only control event: exercise host revocation in the same process.
+   if (wire=="__TEST_REVOKE__") {
+     lifecycle.onHostRevokedControl();
+     std::cout<<"REVOKED"<<std::endl;
+     continue;
+   }
    if (!lifecycle.onAuthenticatedTrackCommand(wire,45)) { std::cout<<"DENY"<<std::endl;continue; }
    bool accepted=false;
    for(const auto& item:mailbox.drain())
