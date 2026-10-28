@@ -29,6 +29,16 @@ class CrossLanguageHandoff(unittest.TestCase):
         self.assertEqual(disconnected.stdout.splitlines(),
             ["REVIEW","DISCONNECTED","DENY"])
         self.assertFalse(disconnected.stderr)
+        reconnected=subprocess.run([fixture],input=(
+            "1|45|1|before_disconnect|arm|1\n"
+            "__TEST_DISCONNECT__\n"
+            "__TEST_RECONNECT__\n"
+            "1|45|2|old_epoch|select|0\n"
+            "1|46|1|new_epoch|select|0\n"
+        ),text=True,capture_output=True,check=True,timeout=10)
+        self.assertEqual(reconnected.stdout.splitlines(),
+            ["REVIEW","DISCONNECTED","RECONNECTED","DENY","REVIEW"])
+        self.assertFalse(reconnected.stderr)
 
 if __name__=="__main__":
     unittest.main(argv=[sys.argv[0]])
