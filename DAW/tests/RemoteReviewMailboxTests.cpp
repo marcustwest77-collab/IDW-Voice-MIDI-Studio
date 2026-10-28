@@ -10,6 +10,8 @@ int main() {
  assert(!box.enqueue("",101));
  assert(!box.enqueue("1|101|1|a|arm|0",0));
  assert(!box.enqueue(std::string(4097,'x'),101));
+ assert(!box.enqueue("1|101|1|a|arm|0",102));
+ assert(!box.enqueue("1|101|1|a|record|0",101));
  for(std::size_t i=0;i<RemoteReviewMailbox::capacity;++i)
    assert(box.enqueue("1|101|1|a|arm|0",101));
  assert(!box.enqueue("1|101|2|b|select|0",101));
