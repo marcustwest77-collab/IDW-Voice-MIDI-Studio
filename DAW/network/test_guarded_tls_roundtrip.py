@@ -53,15 +53,31 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             ledger = HostApprovalLedger()
             received_commands = []
             cpp_results = []
+            fixture = os.environ.get('IDW_CPP_REVIEW_FIXTURE')
+            cpp_process = None
+            if fixture:
+                cpp_process = subprocess.Popen(
+                    [fixture], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, text=True, bufsize=1)
+                def close_fixture():
+                    if cpp_process.poll() is None:
+                        cpp_process.stdin.close()
+                        try:
+                            cpp_process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            cpp_process.kill()
+                            cpp_process.wait(timeout=5)
+                    cpp_process.stdout.close()
+                    cpp_process.stderr.close()
+                self.addCleanup(close_fixture)
             def handoff(cmd, peer):
                 received_commands.append((cmd, peer))
-                fixture = os.environ.get('IDW_CPP_REVIEW_FIXTURE')
-                if fixture:
+                if cpp_process is not None:
                     wire = (f"1|{cmd['session_epoch']}|{cmd['sequence']}|"
                             f"{cmd['request_id']}|{cmd['action']}|{cmd['track_index']}\n")
-                    result = subprocess.run([fixture], input=wire, text=True,
-                                            capture_output=True, check=True, timeout=10)
-                    decision = result.stdout.strip()
+                    cpp_process.stdin.write(wire)
+                    cpp_process.stdin.flush()
+                    decision = cpp_process.stdout.readline().strip()
                     cpp_results.append(decision)
                     if decision != "REVIEW":
                         raise PermissionError("C++ host review rejected command")
