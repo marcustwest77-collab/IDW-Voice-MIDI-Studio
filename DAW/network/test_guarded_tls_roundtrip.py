@@ -161,6 +161,14 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
             denied, errors = exchange(b"1|45|2|arm_one|arm|1")
             self.assertIsNone(denied)
             self.assertTrue(any(isinstance(e, PermissionError) for e in errors))
+            # Persistent C++ receiver must accept a later permitted command
+            # after an earlier replay was rejected by the TLS admission layer.
+            ledger.approve("guest", 45, "after_replay")
+            allowed, errors = exchange(b"1|45|5|after_replay|select|2")
+            self.assertEqual(allowed, b"1|45|5|after_replay|select|2")
+            self.assertFalse(errors)
+            if os.environ.get("IDW_CPP_REVIEW_FIXTURE"):
+                self.assertEqual(cpp_results, ["REVIEW", "REVIEW", "REVIEW"])
 
 
 if __name__ == "__main__":
