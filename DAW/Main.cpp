@@ -122,6 +122,7 @@ public:
         addChildComponent(remoteReviewPanel);
         remoteReviewPanel.setApprovalEnabled(false); // no verified session or dispatcher yet
         remoteReviewButton.onClick=[this] {
+            drainTrustedTransportEventsOnMessageThread();
             drainRemoteReviewMailbox();
             remoteReviewPanel.setVisible(!remoteReviewPanel.isVisible());
             remoteReviewPanel.toFront(false);
@@ -2168,6 +2169,8 @@ private:
         session.setTrackMix(selectedTrack,(float)gainControl.getValue(),(float)panControl.getValue());
     }
     void timerCallback() override {
+        // Drain queued transport facts only on JUCE's message thread.
+        drainTrustedTransportEventsOnMessageThread();
         if(loopbackCapture.consumeFailed()){
             liveCalibration.setEnabled(true);
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
