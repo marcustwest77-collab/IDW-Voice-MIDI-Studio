@@ -47,7 +47,16 @@ public:
          it->kind==TrustedTransportEvent::Kind::connected)) it=queue_.erase(it);
     else ++it;
    }
-   if (queue_.size()>=capacity) queue_.pop_front();
+   if (queue_.size()>=capacity) {
+    // Preserve older termination notifications: evict low-priority traffic
+    // first, rather than silently losing a prior authentication-loss event.
+    auto it=queue_.begin();
+    while (it!=queue_.end() &&
+           (it->kind==TrustedTransportEvent::Kind::disconnected ||
+            it->kind==TrustedTransportEvent::Kind::authenticationLost)) ++it;
+    if (it!=queue_.end()) queue_.erase(it);
+    else queue_.pop_front(); // Queue contains only terminal events.
+   }
   } else if (queue_.size()>=capacity) return false;
   if (event.kind==TrustedTransportEvent::Kind::connected &&
       event.epoch>highestAdmittedEpoch_) highestAdmittedEpoch_=event.epoch;
