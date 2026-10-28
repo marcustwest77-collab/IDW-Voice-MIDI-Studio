@@ -35,8 +35,6 @@ public:
   if ((event.kind==TrustedTransportEvent::Kind::command ||
        event.kind==TrustedTransportEvent::Kind::connected) &&
       event.epoch<highestAdmittedEpoch_) return false;
-  if (event.kind==TrustedTransportEvent::Kind::connected &&
-      event.epoch>highestAdmittedEpoch_) highestAdmittedEpoch_=event.epoch;
   const bool terminal=event.kind==TrustedTransportEvent::Kind::disconnected ||
                       event.kind==TrustedTransportEvent::Kind::authenticationLost;
   if (terminal) {
@@ -51,6 +49,8 @@ public:
    }
    if (queue_.size()>=capacity) queue_.pop_front();
   } else if (queue_.size()>=capacity) return false;
+  if (event.kind==TrustedTransportEvent::Kind::connected &&
+      event.epoch>highestAdmittedEpoch_) highestAdmittedEpoch_=event.epoch;
   queue_.push_back(std::move(event));
   return true;
  }
