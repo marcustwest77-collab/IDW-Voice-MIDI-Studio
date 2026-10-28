@@ -3219,8 +3219,8 @@ public:
     IDWConnectPanel connectPanel;
     juce::TextButton remoteReviewButton;
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
-    idw::daw::remote::TransportSessionLifecycle remoteTransportLifecycle{remoteSessionReviews};
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
+    idw::daw::remote::TransportSessionLifecycle remoteTransportLifecycle{remoteSessionReviews, remoteReviewMailbox};
     idw::daw::remote::HostReviewPanel remoteReviewPanel;
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
