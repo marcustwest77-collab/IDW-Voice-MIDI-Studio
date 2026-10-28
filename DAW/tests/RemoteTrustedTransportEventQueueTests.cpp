@@ -3,6 +3,8 @@
 #undef NDEBUG
 #endif
 #include <cassert>
+#include <thread>
+#include <atomic>
 using namespace idw::daw::remote;
 int main() {
  TrustedTransportEventQueue queue;
@@ -66,4 +68,27 @@ int main() {
  saturated.drain();
  assert(saturated.push({Kind::command,60,false,false,false,"1|60|33|still_valid|arm|0"}));
  assert(saturated.drain().size()==1);
+ // Concurrent command traffic must not survive authentication loss.
+ TrustedTransportEventQueue race;
+ assert(race.push({Kind::connected,80,true,true,true,{}}));
+ std::atomic<bool> start{false};
+ std::thread commands([&] {
+   while(!start.load()) std::this_thread::yield();
+   for(std::size_t i=1;i<=500;++i)
+     race.push({Kind::command,80,false,false,false,
+       "1|80|"+std::to_string(i)+"|race"+std::to_string(i)+"|arm|0"});
+ });
+ std::thread disconnect([&] {
+   start=true;
+   assert(race.push({Kind::authenticationLost,80,false,false,false,{}}));
+ });
+ commands.join();
+ disconnect.join();
+ auto remaining=race.drain();
+ bool terminated=false;
+ for(const auto& item:remaining) {
+   assert(item.kind!=Kind::command);
+   if(item.kind==Kind::authenticationLost) terminated=true;
+ }
+ assert(terminated);
 }
