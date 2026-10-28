@@ -29,7 +29,8 @@ public:
    CommandMessage existing;
    if (pending.trustedEpoch==trustedEpoch &&
        parseControlCommand(pending.payload, existing) &&
-       existing.requestId==parsed.requestId) return false;
+       (existing.requestId==parsed.requestId ||
+        parsed.sequence<=existing.sequence)) return false;
   }
   queue_.push_back({std::move(serialized),trustedEpoch});
   return true;
