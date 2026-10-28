@@ -12,8 +12,11 @@ public:
  bool onVerifiedPeerConnected(std::uint64_t epoch, bool tlsIdentityVerified,
                               bool hostConsented, bool allowTrackSelectionAndArm) {
    if (!tlsIdentityVerified || !hostConsented) return false;
-   return coordinator_.beginHostApprovedSession(
-       epoch, tlsIdentityVerified, hostConsented, allowTrackSelectionAndArm);
+   if (!coordinator_.beginHostApprovedSession(
+       epoch, tlsIdentityVerified, hostConsented, allowTrackSelectionAndArm)) return false;
+   // A newly admitted peer never inherits commands queued for a previous session.
+   mailbox_.clear();
+   return true;
  }
  bool onHostRevokedControl() noexcept {
    mailbox_.clear();
