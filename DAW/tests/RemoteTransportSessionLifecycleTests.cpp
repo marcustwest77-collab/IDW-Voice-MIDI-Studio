@@ -7,6 +7,18 @@ using namespace idw::daw::remote;
 int main(){
  SessionReviewCoordinator c; RemoteReviewMailbox mailbox;
  TransportSessionLifecycle lifecycle(c, mailbox);
+ // A TLS-authenticated guest without explicit host track consent is view-only.
+ {
+   SessionReviewCoordinator readonlyCoordinator;
+   RemoteReviewMailbox readonlyMailbox;
+   TransportSessionLifecycle readonly(readonlyCoordinator,readonlyMailbox);
+   assert(readonly.onVerifiedPeerConnected(401,true,true,false));
+   assert(readonlyCoordinator.grant().connected);
+   assert(!readonlyCoordinator.grant().controlGranted);
+   assert(!readonly.onAuthenticatedTrackCommand("1|401|1|forbidden|arm|0",401));
+   assert(readonlyMailbox.drain().empty());
+   readonly.onPeerDisconnected();
+ }
  assert(!lifecycle.onAuthenticatedTrackCommand("1|501|1|early|arm|0",501));
  assert(!lifecycle.onVerifiedPeerConnected(501,false,true,true));
  assert(!lifecycle.onVerifiedPeerConnected(501,true,false,true));
