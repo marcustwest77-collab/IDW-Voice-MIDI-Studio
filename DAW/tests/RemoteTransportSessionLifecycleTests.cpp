@@ -18,6 +18,13 @@ int main(){
    assert(!readonly.onAuthenticatedTrackCommand("1|401|1|forbidden|arm|0",401));
    assert(readonlyMailbox.drain().empty());
    readonly.onPeerDisconnected();
+   // Reconnection with a newer epoch does not silently elevate access.
+   assert(readonly.onVerifiedPeerConnected(402,true,true,false));
+   assert(readonlyCoordinator.grant().sessionEpoch==402);
+   assert(!readonlyCoordinator.grant().controlGranted);
+   assert(!readonly.onAuthenticatedTrackCommand("1|402|1|still_denied|select|0",402));
+   assert(!readonly.onAuthenticatedTrackCommand("1|401|2|stale|arm|0",401));
+   assert(readonlyMailbox.drain().empty());
  }
  assert(!lifecycle.onAuthenticatedTrackCommand("1|501|1|early|arm|0",501));
  assert(!lifecycle.onVerifiedPeerConnected(501,false,true,true));
