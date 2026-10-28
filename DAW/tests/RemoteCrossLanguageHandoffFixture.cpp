@@ -14,6 +14,11 @@ int main() {
  Request state;state.trackCount=4;state.trackIsAudio=true;
  std::string wire;
  while (std::getline(std::cin,wire)) {
+   if (wire=="TEST_AUTH_LOSS") {
+     lifecycle.onAuthenticationLost();
+     std::cout<<"DISCONNECTED"<<std::endl;
+     continue;
+   }
    if (!lifecycle.onAuthenticatedTrackCommand(wire,45)) { std::cout<<"DENY"<<std::endl;continue; }
    bool accepted=false;
    for(const auto& item:mailbox.drain())
