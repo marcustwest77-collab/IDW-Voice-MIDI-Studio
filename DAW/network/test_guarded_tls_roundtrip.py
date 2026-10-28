@@ -58,7 +58,7 @@ class GuardedTLSRoundtripTest(unittest.TestCase):
                 fixture = os.environ.get('IDW_CPP_REVIEW_FIXTURE')
                 if fixture:
                     wire = (f"1|{cmd['session_epoch']}|{cmd['sequence']}|"
-                            f"{cmd['request_id']}|{cmd['action']}|{cmd['track_index']}\\n")
+                            f"{cmd['request_id']}|{cmd['action']}|{cmd['track_index']}\n")
                     result = subprocess.run([fixture], input=wire, text=True,
                                             capture_output=True, check=True, timeout=10)
                     cpp_results.append(result.stdout.strip())
