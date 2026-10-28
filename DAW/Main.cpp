@@ -148,6 +148,10 @@ public:
             } else {
                 remoteSessionReviews.reviews().deny(id);
             }
+            const auto& currentGrant=remoteSessionReviews.grant();
+            remoteReviewPanel.setApprovalEnabled(
+                currentGrant.connected && currentGrant.authenticated &&
+                currentGrant.hostApproved && currentGrant.controlGranted);
             remoteReviewPanel.showPending(remoteSessionReviews.pending());
         };
         addAndMakeVisible(skinSelector);
