@@ -27,7 +27,8 @@ public:
   if (event.kind==TrustedTransportEvent::Kind::connected &&
       (!event.tlsVerified || !event.hostConsented)) return false;
   std::lock_guard<std::mutex> lock(mutex_);
-  if (event.kind==TrustedTransportEvent::Kind::command &&
+  if ((event.kind==TrustedTransportEvent::Kind::command ||
+       event.kind==TrustedTransportEvent::Kind::connected) &&
       event.epoch<=lastTerminatedEpoch_) return false;
   const bool terminal=event.kind==TrustedTransportEvent::Kind::disconnected ||
                       event.kind==TrustedTransportEvent::Kind::authenticationLost;
@@ -37,7 +38,8 @@ public:
    // stop event. A flooded queue must not block authentication loss.
    for (auto it=queue_.begin();it!=queue_.end();) {
     if (it->epoch==event.epoch &&
-        it->kind==TrustedTransportEvent::Kind::command) it=queue_.erase(it);
+        (it->kind==TrustedTransportEvent::Kind::command ||
+         it->kind==TrustedTransportEvent::Kind::connected)) it=queue_.erase(it);
     else ++it;
    }
    if (queue_.size()>=capacity) queue_.pop_front();
