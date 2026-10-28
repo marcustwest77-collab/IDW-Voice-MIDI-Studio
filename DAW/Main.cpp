@@ -2049,6 +2049,10 @@ private:
     // Called only from a future verified LOCAL host decision handler. No network
     // entrypoint is connected. Approval remains disabled in the visible UI.
     bool dispatchApprovedTrackRequest(const std::string& requestId) {
+        // All local track mutations and host approvals must run on the JUCE UI thread.
+        auto* messageManager=juce::MessageManager::getInstanceWithoutCreating();
+        if (messageManager==nullptr || !messageManager->isThisTheMessageThread())
+            return false;
         // Never trust a caller-provided grant; read the local session authority.
         const auto& verifiedGrant=remoteSessionReviews.grant();
         using namespace idw::daw::remote;
