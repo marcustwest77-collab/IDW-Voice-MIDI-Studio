@@ -105,6 +105,7 @@ public:
 class Workstation final : public juce::AudioAppComponent, private juce::Timer, private juce::ChangeListener {
 public:
     Workstation() {
+        remoteEventPollTimer.startTimerHz(15);
         setSize(1450,850);
         setLookAndFeel(&neoTheme);
         formats.registerBasicFormats();
@@ -3233,7 +3234,8 @@ public:
             "Recovery save failed","Save the project manually before closing. The window has been left open.");
         return false;
     }
-    ~Workstation() override {remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+    ~Workstation() override {
+        remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
     juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton,skinToolsButton;
@@ -3308,6 +3310,12 @@ public:
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
+    // Independent UI-thread poll remains active even when playback is stopped.
+    struct RemoteEventPollTimer final : juce::Timer {
+        Workstation& owner;
+        explicit RemoteEventPollTimer(Workstation& w) : owner(w) {}
+        void timerCallback() override { owner.drainTrustedTransportEventsOnMessageThread(); }
+    } remoteEventPollTimer{*this};
     idw::daw::remote::TransportSessionLifecycle remoteTransportLifecycle{remoteSessionReviews, remoteReviewMailbox};
     idw::daw::remote::HostReviewPanel remoteReviewPanel;
     IDWTakeRecorder recorder;
