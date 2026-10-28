@@ -15,6 +15,11 @@ int main() {
  std::string wire;
  while (std::getline(std::cin,wire)) {
    // Test-only control event: exercise host revocation in the same process.
+   if (wire=="__TEST_RECONNECT__") {
+     const bool admitted=lifecycle.onVerifiedPeerConnected(46,true,true,true);
+     std::cout<<(admitted?"RECONNECTED":"DENY")<<std::endl;
+     continue;
+   }
    if (wire=="__TEST_DISCONNECT__") {
      lifecycle.onPeerDisconnected();
      std::cout<<"DISCONNECTED"<<std::endl;
@@ -25,7 +30,8 @@ int main() {
      std::cout<<"REVOKED"<<std::endl;
      continue;
    }
-   if (!lifecycle.onAuthenticatedTrackCommand(wire,45)) { std::cout<<"DENY"<<std::endl;continue; }
+   const auto trustedEpoch=coordinator.grant().sessionEpoch;
+   if (!lifecycle.onAuthenticatedTrackCommand(wire,trustedEpoch)) { std::cout<<"DENY"<<std::endl;continue; }
    bool accepted=false;
    for(const auto& item:mailbox.drain())
      accepted=receiver.receive(item.payload,state,item.trustedEpoch)||accepted;
