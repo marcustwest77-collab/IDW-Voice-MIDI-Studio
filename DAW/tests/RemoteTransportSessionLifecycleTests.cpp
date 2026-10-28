@@ -18,7 +18,7 @@ int main(){
  assert(lifecycle.onAuthenticatedTrackCommand("1|501|1|allowed|arm|0",501));
  assert(mailbox.drain().size()==1);
  // An unsolicited second peer must not replace the session or erase its inbox.
- assert(mailbox.enqueue("1|501|1|kept501|arm|0",501));
+ assert(mailbox.enqueue("1|501|2|kept501|arm|0",501));
  assert(!lifecycle.onVerifiedPeerConnected(502,true,true,true));
  auto preserved=mailbox.drain();
  assert(preserved.size()==1 && preserved.front().trustedEpoch==501);
@@ -28,7 +28,7 @@ int main(){
  Request state;state.trackCount=2;
  assert(c.stageInspected(cmd,state));
  assert(c.pending().size()==1);
- assert(mailbox.enqueue("1|501|2|queued501|arm|0",501));
+ assert(mailbox.enqueue("1|501|3|queued501|arm|0",501));
  // Commands queued immediately before host revocation must be purged.
  assert(lifecycle.onAuthenticatedTrackCommand("1|501|5|before_revoke|arm|0",501));
  lifecycle.onHostRevokedControl();
