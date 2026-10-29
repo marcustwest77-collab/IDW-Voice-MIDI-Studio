@@ -84,6 +84,17 @@ jobs:
           g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteCrossLanguageHandoffFixture.cpp -o remote-test-bin/handoff-fixture -pthread
           IDW_CPP_REVIEW_FIXTURE=remote-test-bin/handoff-fixture python DAW/network/test_guarded_tls_roundtrip.py
 
+      - name: Test authenticated localhost IPC and persistent C++ host review
+        shell: bash
+        run: |
+          set -euo pipefail
+          python DAW/network/test_verified_event_producer.py
+          python DAW/network/test_local_receiver_auth.py
+          python DAW/network/test_local_command_bridge.py
+          python DAW/network/test_local_receiver_service.py
+          g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteCrossLanguageHandoffFixture.cpp -o remote-test-bin/handoff-fixture -pthread
+          IDW_CPP_REVIEW_FIXTURE=remote-test-bin/handoff-fixture python DAW/network/test_local_ipc_cpp_review.py
+
       - name: Test mutual TLS client certificate authentication
         shell: bash
         run: python DAW/network/test_mutual_tls.py
