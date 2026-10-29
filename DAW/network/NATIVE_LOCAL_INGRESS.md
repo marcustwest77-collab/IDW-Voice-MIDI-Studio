@@ -9,8 +9,8 @@ Enqueue success means queued, not approved or executed.
 
 `LocalSocketReceiver` now provides an explicitly started native TCP listener.
 It opens no socket and starts no session by default. Session setup generates a
-secret and calls a trusted in-process handoff; no cross-process provisioning
-channel is installed.
+secret and calls a trusted provisioner. An opt-in Windows private pipe channel
+is available for a host-selected bridge process; no bridge is launched by default.
 It does not replace the Python JSON receiver protocol. The installed Windows
 beta is unchanged. Live two-computer collaboration has not been demonstrated.
 
@@ -90,8 +90,9 @@ synchronous provisioner callback. That callback receives port, epoch, secret,
 peer fingerprint and connection ID as a temporary in-process bootstrap record.
 It must not retain the reference, log it, send it to a remote peer, or wait
 indefinitely. A process boundary requires an OS-protected channel to the intended
-local bridge. The callback's presence/return value cannot establish that channel
-is secure; no such channel is implemented yet.
+local bridge. On Windows, `WindowsBootstrapChannel` supplies that channel when
+the host provides trusted held process handles. A callback alone does not prove
+that its chosen channel or process is trusted.
 
 A false/throwing handoff stops the listener and revokes its epoch. Failed
 provisioning consumes the epoch, so retry needs a newer one and a fresh secret.
@@ -108,11 +109,65 @@ stop/clean up the owner before restarting. The external TLS implementation must
 actually invoke loss/revocation hooks; identity cannot be established by the
 boolean or connection ID alone.
 
+## Windows private bootstrap channel
+
+`WindowsBootstrapChannel::create` creates a single-instance, overlapped named
+pipe under `\\.\pipe\IDW-LocalBootstrap-` with a fresh random discovery suffix.
+The discovery name is not a credential. An explicit protected DACL grants access
+only to the current user SID; `PIPE_REJECT_REMOTE_CLIENTS` rejects remote clients
+and `FILE_FLAG_FIRST_PIPE_INSTANCE` rejects a pre-existing instance. No pipe
+handles are inherited. The host creates the endpoint before giving its name to
+the intended bridge. The session secret is never included in that name, argv,
+environment variables, logs or temporary files by this implementation.
+
+The host calls `deliverTo` with a held process handle for its intended bridge,
+not a PID supplied by the bridge. The handle must have query and SYNCHRONIZE
+rights. Before sending any secret bytes, the server compares Windows'
+`GetNamedPipeClientProcessId` result to that live process handle. It disconnects
+wrong clients without data and permits at most eight connection attempts.
+Holding the process handle through transfer also avoids relying on a recycled
+numeric PID. On the receiving side, `receiveWindowsBootstrap` checks
+`GetNamedPipeServerProcessId` against a trusted held host process handle before
+reading. Client SQOS limits the server to identification, not impersonation.
+See [Windows pipe creation](https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-createnamedpipew),
+[client process identity](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getnamedpipeclientprocessid),
+and [server process identity](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getnamedpipeserverprocessid).
+
+The fixed 207-byte binary record carries a magic/version, port, epoch and exactly
+64 lowercase hex bytes each for secret, peer fingerprint and connection ID.
+The consumer must validate/use the binding and return true before a fixed receipt
+is sent. This receipt acknowledges bootstrap consumption only. Failed/throwing
+consumers, bad records, missing receipts, peer exit, timeout or cancellation fail
+the provisioner; the session owner then revokes the listener and queued work.
+Each server instance is consumed on every delivery outcome. I/O uses a shared
+absolute deadline of 20..5000 ms (default two seconds) and checks cancellation
+and peer liveness while waiting. Pending I/O is canceled and drained before
+buffers/handles are released. A trusted consumer callback itself must be bounded.
+
+The channel plugs into the existing `LocalSessionOwner::Provisioner` by calling
+`channel.deliverTo(heldBridgeProcess, bootstrap)` in that callback. Host transport
+loss should stop the session owner and call `channel.cancel` if a handoff is still
+waiting. Code on other platforms fails closed; private provisioning there is not
+implemented. Windows tests launch a real child with no inherited handles, deliver
+a generated secret over this pipe, and submit its TCP command to the native queue.
+They also cover wrong client/server identity, rejected/throwing consumers,
+one-shot consumption, timeout and cancellation. These are local tests with
+synthetic TLS-owner evidence, not a two-machine demonstration.
+
+The host is still responsible for choosing and verifying the actual bridge
+executable and its process handles. This boundary does not defend against an
+administrator/debugger or a process already able to inject into/read the trusted
+host/bridge. It also cannot prevent a local process from denying service by
+consuming connection budgets. Do not enable it with untrusted process handles.
+
 ## Remaining production work
 
-Implement the OS-protected cross-process provisioning channel and connect the
-trusted binding/consent/loss hooks to the actual verified remote TLS transport.
-Current tests use synthetic TLS-owner evidence and in-process handoff only.
+Integrate a verified bridge launch/lifetime manager and connect its private
+bootstrap and trusted binding/consent/loss hooks to the actual verified remote
+TLS transport. Implement protected provisioning for Linux/macOS before enabling
+those platforms. Current tests use synthetic TLS-owner evidence; Windows has
+real child-process pipe/socket coverage, and other platforms test the codec and
+fail-closed unsupported path.
 The standalone native CI runs on Windows, Linux and macOS, including the real
 socket/session-owner tests. Foundation builds also compile/link the workstation
 and its session-owner test with the platform entropy library.

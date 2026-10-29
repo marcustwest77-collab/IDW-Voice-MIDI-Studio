@@ -42,6 +42,11 @@ jobs:
               if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32 -lbcrypt); fi
               if [[ "${{ runner.os }}" == "macOS" ]]; then compile+=(-framework Security); fi
             fi
+            if [[ "$name" == "RemoteWindowsBootstrapChannelTests" ]]; then
+              compile+=(DAW/RemoteWindowsBootstrapChannel.cpp DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
+              if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32 -lbcrypt -ladvapi32); fi
+              if [[ "${{ runner.os }}" == "macOS" ]]; then compile+=(-framework Security); fi
+            fi
             "${compile[@]}"
             echo "Running ${name}"
             "./remote-test-bin/$name"
