@@ -29,6 +29,7 @@
 #include "RemoteTransportSessionLifecycle.h"
 #include "RemoteTrustedTransportEventQueue.h"
 #include "RemoteVerifiedLocalCommandQueueAdapter.h"
+#include "RemoteAuthenticatedLocalIngress.h"
 #include "RemoteReviewMailbox.h"
 #include "RemoteValidatedCommandReviewReceiver.h"
 #include "RemoteTrackControlAdapter.h"
@@ -2043,6 +2044,18 @@ private:
         idw::daw::remote::TrustedTransportEvent event) {
         return remoteTransportEvents.push(std::move(event));
     }
+    // Trusted transport-owner hooks only. No listener or secret provisioning is
+    // enabled here. Remote peer input must never supply the admission booleans.
+    bool beginAuthenticatedLocalIngress(std::string secret, std::uint64_t epoch,
+                                       bool tlsVerified, bool hostConsented,
+                                       bool trackControlGranted) {
+        return remoteLocalIngress.beginSession(std::move(secret), epoch,
+            tlsVerified, hostConsented, trackControlGranted);
+    }
+    bool receiveAuthenticatedLocalFrame(const std::vector<std::uint8_t>& frame) {
+        return remoteLocalIngress.receiveFrame(frame);
+    }
+    void endAuthenticatedLocalIngress() { remoteLocalIngress.endSession(); }
     // Called on the JUCE message thread only. The network transport is not
     // connected yet; producer must supply authenticated facts, not peer claims.
     void drainTrustedTransportEventsOnMessageThread() {
@@ -3324,6 +3337,7 @@ public:
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
+    idw::daw::remote::AuthenticatedLocalIngress remoteLocalIngress{remoteTransportEvents};
     // Independent UI-thread poll remains active even when playback is stopped.
     struct RemoteEventPollTimer final : juce::Timer {
         Workstation& owner;
