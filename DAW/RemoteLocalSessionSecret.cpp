@@ -7,6 +7,8 @@
 #endif
 #include <windows.h>
 #include <bcrypt.h>
+#elif defined(__APPLE__)
+#include <Security/SecRandom.h>
 #else
 #include <unistd.h>
 #endif
@@ -19,6 +21,8 @@ bool generateLocalSessionSecret(std::string& output) {
 #if defined(_WIN32)
     if (BCryptGenRandom(nullptr, bytes.data(), static_cast<ULONG>(bytes.size()),
                        BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0) return false;
+#elif defined(__APPLE__)
+    if (SecRandomCopyBytes(kSecRandomDefault, bytes.size(), bytes.data()) != errSecSuccess) return false;
 #else
     if (getentropy(bytes.data(), bytes.size()) != 0) return false;
 #endif

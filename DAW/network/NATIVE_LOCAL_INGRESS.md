@@ -25,10 +25,12 @@ unverified transports and absent/revoked consent are rejected before listening.
 These structs do not verify TLS; none of their fields may come from remote IPC.
 
 `LocalSessionOwner` creates a fresh 256-bit secret using the operating system
-CSPRNG: `BCryptGenRandom` on Windows and `getentropy` on Linux/macOS. It uses no
+CSPRNG: `BCryptGenRandom` on Windows, `SecRandomCopyBytes` from Security.framework
+on macOS, and `getentropy` on Linux. It uses no
 weak fallback and encodes the result as 64 lowercase hex characters. The helper
 leaves its output unchanged if the OS call fails. See the
 [Windows API contract](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptgenrandom)
+the [Apple API contract](https://developer.apple.com/documentation/security/secrandomcopybytes(_:_:_:)),
 and [getentropy contract](https://man7.org/linux/man-pages/man3/getentropy.3.html).
 No secret is placed in queue events, logs, command-line arguments or files.
 
@@ -111,6 +113,9 @@ boolean or connection ID alone.
 Implement the OS-protected cross-process provisioning channel and connect the
 trusted binding/consent/loss hooks to the actual verified remote TLS transport.
 Current tests use synthetic TLS-owner evidence and in-process handoff only.
+The standalone native CI runs on Windows, Linux and macOS, including the real
+socket/session-owner tests. Foundation builds also compile/link the workstation
+and its session-owner test with the platform entropy library.
 Do not accept this bearer secret
 on a LAN/public listener or assume loopback establishes process identity. The
 current trusted-owner booleans are preconditions, not cryptographic identity
