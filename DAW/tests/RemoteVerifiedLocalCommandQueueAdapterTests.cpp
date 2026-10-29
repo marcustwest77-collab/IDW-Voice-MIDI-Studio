@@ -1,4 +1,7 @@
 #include "../RemoteVerifiedLocalCommandQueueAdapter.h"
+#ifdef NDEBUG
+#undef NDEBUG // Keep validation assertions active in the CI Release build.
+#endif
 #include <cassert>
 
 int main() {

@@ -27,7 +27,7 @@ jobs:
           for source in DAW/tests/Remote*Tests.cpp DAW/tests/ValidatedControlReceiverTests.cpp; do
             name="$(basename "${source%.cpp}")"
             echo "Compiling ${name}"
-            g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror "$source" -o "remote-test-bin/$name"
+            g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror "$source" -o "remote-test-bin/$name" -pthread
             echo "Running ${name}"
             "./remote-test-bin/$name"
           done
