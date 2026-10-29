@@ -3,6 +3,7 @@
 // This adapter does not authenticate TLS, JSON, tokens, peer identity or consent.
 // Only call after validation by the transport and active host session.
 #include "RemoteTrustedTransportEventQueue.h"
+#include "RemoteControlCommandParser.h"
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -17,6 +18,12 @@ public:
     bool submitValidatedCommand(const std::string& wire,
                                 std::uint64_t authenticatedEpoch) {
         if (authenticatedEpoch==0 || wire.empty() || wire.size()>4096)
+            return false;
+        CommandMessage parsed;
+        if (!parseControlCommand(wire, parsed) ||
+            parsed.sessionEpoch != authenticatedEpoch ||
+            (parsed.action != Action::select_track &&
+             parsed.action != Action::arm_track) || parsed.trackIndex >= 128)
             return false;
         TrustedTransportEvent event;
         event.kind=TrustedTransportEvent::Kind::command;
