@@ -29,8 +29,7 @@
 #include "RemoteTransportSessionLifecycle.h"
 #include "RemoteTrustedTransportEventQueue.h"
 #include "RemoteVerifiedLocalCommandQueueAdapter.h"
-#include "RemoteAuthenticatedLocalIngress.h"
-#include "RemoteLocalSocketReceiver.h"
+#include "RemoteLocalSessionOwner.h"
 #include "RemoteReviewMailbox.h"
 #include "RemoteValidatedCommandReviewReceiver.h"
 #include "RemoteTrackControlAdapter.h"
@@ -2033,42 +2032,25 @@ private:
         remoteReviewPanel.setConnectionStatus("Offline: remote session ended");
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
     }
-    // Restricted data-only handoff for a future authenticated transport worker.
-    // The caller must attest TLS identity independently; this is NOT a network listener.
-    // C++ receiver entrypoint; caller must independently authenticate the local
-    // IPC sender and verify the active remote session before invoking this.
-    bool enqueueAuthenticatedLocalCommand(const std::string& wire,
-                                           std::uint64_t verifiedEpoch) {
-        idw::daw::remote::VerifiedLocalCommandQueueAdapter adapter(remoteTransportEvents);
-        return adapter.submitValidatedCommand(wire,verifiedEpoch);
-    }
     bool enqueueVerifiedTransportEvent(
         idw::daw::remote::TrustedTransportEvent event) {
         return remoteTransportEvents.push(std::move(event));
     }
-    // Trusted transport-owner hooks only. No listener or secret provisioning is
-    // enabled here. Remote peer input must never supply the admission booleans.
-    bool beginAuthenticatedLocalIngress(std::string secret, std::uint64_t epoch,
-                                       bool tlsVerified, bool hostConsented,
-                                       bool trackControlGranted) {
-        return remoteLocalIngress.beginSession(std::move(secret), epoch,
-            tlsVerified, hostConsented, trackControlGranted);
-    }
-    bool receiveAuthenticatedLocalFrame(const std::vector<std::uint8_t>& frame) {
-        return remoteLocalIngress.receiveFrame(frame);
-    }
     void endAuthenticatedLocalIngress() {
-        remoteLocalSocketReceiver.stop();
-        remoteLocalIngress.endSession();
+        remoteLocalSession.stop();
     }
-    // Development-only trusted-owner hook. No UI/automatic start: secure
-    // secret provisioning and binding to the verified TLS owner remain required.
+    // Development-only trusted-owner hooks. The TLS implementation must supply
+    // real evidence and use a protected provisioning channel. No UI/auto start.
     bool startAuthenticatedLocalSocketReceiver(
             const idw::daw::remote::LocalSocketReceiver::Options& options,
-            std::string secret, std::uint64_t epoch, bool tlsVerified,
-            bool hostConsented, bool trackControlGranted) {
-        return remoteLocalSocketReceiver.start(options, std::move(secret), epoch,
-            tlsVerified, hostConsented, trackControlGranted);
+            const idw::daw::remote::LocalTransportBinding& transport,
+            const idw::daw::remote::LocalHostConsent& consent,
+            const idw::daw::remote::LocalSessionOwner::Provisioner& provision) {
+        return remoteLocalSession.start(options, transport, consent, provision);
+    }
+    bool onVerifiedLocalTransportLost(
+            const idw::daw::remote::LocalTransportBinding& transport) {
+        return remoteLocalSession.onTransportLost(transport);
     }
     // Called on the JUCE message thread only. The network transport is not
     // connected yet; producer must supply authenticated facts, not peer claims.
@@ -3276,7 +3258,7 @@ public:
         return false;
     }
     ~Workstation() override {
-        remoteLocalSocketReceiver.stop();
+        remoteLocalSession.stop();
         remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
@@ -3352,8 +3334,7 @@ public:
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
-    idw::daw::remote::AuthenticatedLocalIngress remoteLocalIngress{remoteTransportEvents};
-    idw::daw::remote::LocalSocketReceiver remoteLocalSocketReceiver{remoteLocalIngress};
+    idw::daw::remote::LocalSessionOwner remoteLocalSession{remoteTransportEvents};
     // Independent UI-thread poll remains active even when playback is stopped.
     struct RemoteEventPollTimer final : juce::Timer {
         Workstation& owner;

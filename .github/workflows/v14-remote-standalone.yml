@@ -33,6 +33,10 @@ jobs:
               extra_sources+=(DAW/RemoteLocalSocketReceiver.cpp)
               if [[ "${{ runner.os }}" == "Windows" ]]; then extra_libs+=(-lws2_32); fi
             fi
+            if [[ "$name" == "RemoteLocalSessionOwnerTests" ]]; then
+              extra_sources+=(DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
+              if [[ "${{ runner.os }}" == "Windows" ]]; then extra_libs+=(-lws2_32 -lbcrypt); fi
+            fi
             g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror "$source" "${extra_sources[@]}" -o "remote-test-bin/$name" -pthread "${extra_libs[@]}"
             echo "Running ${name}"
             "./remote-test-bin/$name"
