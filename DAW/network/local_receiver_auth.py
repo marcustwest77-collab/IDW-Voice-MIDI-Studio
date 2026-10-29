@@ -50,7 +50,8 @@ class LocalReceiverAuthenticator:
                 not fields[3] or len(fields[3]) > 128):
             return None
         sequence, track = int(fields[2]), int(fields[5])
-        if sequence <= self._highest_sequence or track >= 128:
+        if (sequence <= self._highest_sequence or track >= 128 or
+                fields[2] != str(sequence) or fields[5] != str(track)):
             return None
         self._highest_sequence = sequence
         return payload["wire"]
