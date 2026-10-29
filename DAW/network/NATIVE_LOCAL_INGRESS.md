@@ -2,24 +2,35 @@
 
 `AuthenticatedLocalIngress` accepts a complete native IPC frame and delivers
 only validated arm/select command data to `TrustedTransportEventQueue` through
-`VerifiedLocalCommandQueueAdapter`. Workstation owns this ingress alongside its
-queue; the existing JUCE message-thread timer drains events for host review.
+`VerifiedLocalCommandQueueAdapter`. Workstation owns a `LocalSessionOwner` around
+the ingress/listener alongside its queue; the existing JUCE message-thread timer
+drains events for host review.
 Enqueue success means queued, not approved or executed.
 
 `LocalSocketReceiver` now provides an explicitly started native TCP listener.
-It opens no socket and starts no session by default, and provisions no secret.
+It opens no socket and starts no session by default. Session setup generates a
+secret and calls a trusted in-process handoff; no cross-process provisioning
+channel is installed.
 It does not replace the Python JSON receiver protocol. The installed Windows
 beta is unchanged. Live two-computer collaboration has not been demonstrated.
 
 ## Trusted owner contract
 
-Before `beginSession`, independently verify the remote TLS peer, obtain local
-host consent and track-control permission, and generate a fresh 256-bit random
-secret represented by exactly 64 lowercase hexadecimal characters. Supply the
-secret over an OS-protected channel accessible only to the intended local
-process. Syntax checking cannot establish randomness or secure provisioning.
-Admission flags and epoch must come from trusted owner state, never socket input.
-The ingress does not itself verify TLS certificates or peer identity.
+Before starting the owner, independently verify the remote TLS peer and obtain
+local host consent and track-control permission. `LocalTransportBinding` names
+the epoch, lowercase SHA-256 peer certificate fingerprint, and fresh 64-hex
+connection ID supplied by the trusted TLS implementation. `LocalHostConsent`
+must name the exact same epoch, fingerprint and connection ID. Mismatches,
+unverified transports and absent/revoked consent are rejected before listening.
+These structs do not verify TLS; none of their fields may come from remote IPC.
+
+`LocalSessionOwner` creates a fresh 256-bit secret using the operating system
+CSPRNG: `BCryptGenRandom` on Windows and `getentropy` on Linux/macOS. It uses no
+weak fallback and encodes the result as 64 lowercase hex characters. The helper
+leaves its output unchanged if the OS call fails. See the
+[Windows API contract](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptgenrandom)
+and [getentropy contract](https://man7.org/linux/man-pages/man3/getentropy.3.html).
+No secret is placed in queue events, logs, command-line arguments or files.
 
 The native frame is a four-byte unsigned big-endian payload length (1..4096),
 followed by `secret + "\n" + commandWire`. The command wire retains the six-field
@@ -62,17 +73,45 @@ after automatic termination. New admission needs a newer epoch and fresh secret.
 Receipts are best effort, and the service can be denied by local processes
 exhausting its deliberately small budgets.
 
-Workstation owns the listener after its queue and ingress, stops it on host
-revocation and destruction, and exposes only a development trusted-owner start
-hook. No UI or automatic start is enabled. The existing JUCE timer still drains
+Workstation owns the session owner after its queue, stops it on host revocation
+and destruction, and exposes only development trusted-owner start/loss hooks.
+The older Workstation local bypass methods accepting caller-supplied secrets
+or command frames are removed. No UI or automatic start is enabled. The JUCE timer still drains
 the queue and revalidates/stages commands for explicit host review. Native
 loopback tests exercise TCP through that queue/lifecycle/mailbox/review path;
 they do not launch the DAW GUI or demonstrate a remote TLS peer.
 
+## Bootstrap and transport ownership
+
+The start hook accepts transport evidence, matching host consent, and a required
+synchronous provisioner callback. That callback receives port, epoch, secret,
+peer fingerprint and connection ID as a temporary in-process bootstrap record.
+It must not retain the reference, log it, send it to a remote peer, or wait
+indefinitely. A process boundary requires an OS-protected channel to the intended
+local bridge. The callback's presence/return value cannot establish that channel
+is secure; no such channel is implemented yet.
+
+A false/throwing handoff stops the listener and revokes its epoch. Failed
+provisioning consumes the epoch, so retry needs a newer one and a fresh secret.
+The callback runs without the owner mutex: host stop or transport loss can cancel
+the listener during a waiting handoff. Its eventual completion cannot return
+success for, or revoke, a newer session. Queued commands remain subject to host
+review and revocation throughout setup. Expiry during provisioning fails closed.
+
+`onTransportLost` stops only an owned session matching all three binding fields.
+An old callback for a different epoch, peer or connection cannot terminate its
+replacement. Stop is serialized with ownership changes; listener stop/join
+completes before that ownership is released. After automatic expiry, explicitly
+stop/clean up the owner before restarting. The external TLS implementation must
+actually invoke loss/revocation hooks; identity cannot be established by the
+boolean or connection ID alone.
+
 ## Remaining production work
 
-Provision the secret over an OS-protected channel and bind admission/revocation
-to the actual verified remote TLS transport. Do not accept this bearer secret
+Implement the OS-protected cross-process provisioning channel and connect the
+trusted binding/consent/loss hooks to the actual verified remote TLS transport.
+Current tests use synthetic TLS-owner evidence and in-process handoff only.
+Do not accept this bearer secret
 on a LAN/public listener or assume loopback establishes process identity. The
 current trusted-owner booleans are preconditions, not cryptographic identity
 verification. Enable a user flow only after provisioning and transport ownership
