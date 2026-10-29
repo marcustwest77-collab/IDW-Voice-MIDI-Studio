@@ -30,6 +30,7 @@
 #include "RemoteTrustedTransportEventQueue.h"
 #include "RemoteVerifiedLocalCommandQueueAdapter.h"
 #include "RemoteAuthenticatedLocalIngress.h"
+#include "RemoteLocalSocketReceiver.h"
 #include "RemoteReviewMailbox.h"
 #include "RemoteValidatedCommandReviewReceiver.h"
 #include "RemoteTrackControlAdapter.h"
@@ -131,6 +132,7 @@ public:
             remoteReviewPanel.toFront(false);
         };
         remoteReviewPanel.onRevokeControl=[this] {
+            endAuthenticatedLocalIngress();
             const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
             // Discard commands waiting in the transport mailbox as well as reviewed requests.
             remoteReviewMailbox.clear();
@@ -2055,7 +2057,19 @@ private:
     bool receiveAuthenticatedLocalFrame(const std::vector<std::uint8_t>& frame) {
         return remoteLocalIngress.receiveFrame(frame);
     }
-    void endAuthenticatedLocalIngress() { remoteLocalIngress.endSession(); }
+    void endAuthenticatedLocalIngress() {
+        remoteLocalSocketReceiver.stop();
+        remoteLocalIngress.endSession();
+    }
+    // Development-only trusted-owner hook. No UI/automatic start: secure
+    // secret provisioning and binding to the verified TLS owner remain required.
+    bool startAuthenticatedLocalSocketReceiver(
+            const idw::daw::remote::LocalSocketReceiver::Options& options,
+            std::string secret, std::uint64_t epoch, bool tlsVerified,
+            bool hostConsented, bool trackControlGranted) {
+        return remoteLocalSocketReceiver.start(options, std::move(secret), epoch,
+            tlsVerified, hostConsented, trackControlGranted);
+    }
     // Called on the JUCE message thread only. The network transport is not
     // connected yet; producer must supply authenticated facts, not peer claims.
     void drainTrustedTransportEventsOnMessageThread() {
@@ -3262,6 +3276,7 @@ public:
         return false;
     }
     ~Workstation() override {
+        remoteLocalSocketReceiver.stop();
         remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
@@ -3338,6 +3353,7 @@ public:
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
     idw::daw::remote::AuthenticatedLocalIngress remoteLocalIngress{remoteTransportEvents};
+    idw::daw::remote::LocalSocketReceiver remoteLocalSocketReceiver{remoteLocalIngress};
     // Independent UI-thread poll remains active even when playback is stopped.
     struct RemoteEventPollTimer final : juce::Timer {
         Workstation& owner;

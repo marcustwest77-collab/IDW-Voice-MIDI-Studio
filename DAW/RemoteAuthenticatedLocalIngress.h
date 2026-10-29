@@ -52,9 +52,9 @@ public:
         return true; // Queued for host review, never approval or execution.
     }
 
-    void endSession() {
+    void endSession(std::uint64_t expectedEpoch = 0) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!active_) return;
+        if (!active_ || (expectedEpoch != 0 && expectedEpoch != epoch_)) return;
         active_ = false;
         secret_.clear();
         queue_.push({TrustedTransportEvent::Kind::authenticationLost, epoch_,
