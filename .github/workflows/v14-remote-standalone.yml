@@ -27,7 +27,13 @@ jobs:
           for source in DAW/tests/Remote*Tests.cpp DAW/tests/ValidatedControlReceiverTests.cpp; do
             name="$(basename "${source%.cpp}")"
             echo "Compiling ${name}"
-            g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror "$source" -o "remote-test-bin/$name" -pthread
+            extra_sources=()
+            extra_libs=()
+            if [[ "$name" == "RemoteLocalSocketReceiverTests" ]]; then
+              extra_sources+=(DAW/RemoteLocalSocketReceiver.cpp)
+              if [[ "${{ runner.os }}" == "Windows" ]]; then extra_libs+=(-lws2_32); fi
+            fi
+            g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror "$source" "${extra_sources[@]}" -o "remote-test-bin/$name" -pthread "${extra_libs[@]}"
             echo "Running ${name}"
             "./remote-test-bin/$name"
           done
