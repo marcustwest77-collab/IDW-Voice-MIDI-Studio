@@ -10,6 +10,15 @@ import json
 import secrets
 
 
+def reject_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate IPC field")
+        result[key] = value
+    return result
+
+
 class LocalReceiverAuthenticator:
     def __init__(self, token: str, peer_id: str, epoch: int):
         if (not isinstance(token, str) or len(token) < 32 or
@@ -28,7 +37,7 @@ class LocalReceiverAuthenticator:
         if not isinstance(packet, bytes) or len(packet) > 4096:
             return None
         try:
-            payload = json.loads(packet.decode("utf-8"))
+            payload = json.loads(packet.decode("utf-8"), object_pairs_hook=reject_duplicate_keys)
         except (UnicodeError, ValueError):
             return None
         if not isinstance(payload, dict) or set(payload) != {
