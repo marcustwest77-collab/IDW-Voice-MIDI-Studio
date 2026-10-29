@@ -11,6 +11,8 @@ class ReceiverAuthTests(unittest.TestCase):
   self.assertIsNone(receiver.accept(encode({**body,"token":"x"*64})))
   self.assertIsNone(receiver.accept(encode({**body,"epoch":46})))
   self.assertIsNone(receiver.accept(encode({**body,"peer":"other"})))
+  self.assertIsNone(receiver.accept(encode({**body,"wire":"1|45|02|r|arm|1"})))
+  self.assertIsNone(receiver.accept(encode({**body,"wire":"1|45|2|r|arm|01"})))
   self.assertEqual(receiver.accept(encode(body)),body["wire"])
   self.assertIsNone(receiver.accept(encode(body)))
   self.assertEqual(receiver.accept(encode({**body,"wire":"1|45|3|r2|select|0"})),"1|45|3|r2|select|0")
