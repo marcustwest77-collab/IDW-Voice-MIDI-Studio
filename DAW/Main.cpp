@@ -28,6 +28,7 @@
 #include "RemoteSessionReviewCoordinator.h"
 #include "RemoteTransportSessionLifecycle.h"
 #include "RemoteTrustedTransportEventQueue.h"
+#include "RemoteVerifiedLocalCommandQueueAdapter.h"
 #include "RemoteReviewMailbox.h"
 #include "RemoteValidatedCommandReviewReceiver.h"
 #include "RemoteTrackControlAdapter.h"
@@ -2031,6 +2032,13 @@ private:
     }
     // Restricted data-only handoff for a future authenticated transport worker.
     // The caller must attest TLS identity independently; this is NOT a network listener.
+    // C++ receiver entrypoint; caller must independently authenticate the local
+    // IPC sender and verify the active remote session before invoking this.
+    bool enqueueAuthenticatedLocalCommand(const std::string& wire,
+                                           std::uint64_t verifiedEpoch) {
+        idw::daw::remote::VerifiedLocalCommandQueueAdapter adapter(remoteTransportEvents);
+        return adapter.submitValidatedCommand(wire,verifiedEpoch);
+    }
     bool enqueueVerifiedTransportEvent(
         idw::daw::remote::TrustedTransportEvent event) {
         return remoteTransportEvents.push(std::move(event));
