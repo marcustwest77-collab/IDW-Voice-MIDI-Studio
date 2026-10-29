@@ -30,18 +30,19 @@ jobs:
           for source in DAW/tests/Remote*Tests.cpp DAW/tests/ValidatedControlReceiverTests.cpp; do
             name="$(basename "${source%.cpp}")"
             echo "Compiling ${name}"
-            extra_sources=()
-            extra_libs=()
+            # Keep this array nonempty: macOS Bash 3.2 treats an empty array
+            # expansion as unbound under set -u.
+            compile=(g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror "$source" -o "remote-test-bin/$name" -pthread)
             if [[ "$name" == "RemoteLocalSocketReceiverTests" ]]; then
-              extra_sources+=(DAW/RemoteLocalSocketReceiver.cpp)
-              if [[ "${{ runner.os }}" == "Windows" ]]; then extra_libs+=(-lws2_32); fi
+              compile+=(DAW/RemoteLocalSocketReceiver.cpp)
+              if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32); fi
             fi
             if [[ "$name" == "RemoteLocalSessionOwnerTests" ]]; then
-              extra_sources+=(DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
-              if [[ "${{ runner.os }}" == "Windows" ]]; then extra_libs+=(-lws2_32 -lbcrypt); fi
-              if [[ "${{ runner.os }}" == "macOS" ]]; then extra_libs+=(-framework Security); fi
+              compile+=(DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
+              if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32 -lbcrypt); fi
+              if [[ "${{ runner.os }}" == "macOS" ]]; then compile+=(-framework Security); fi
             fi
-            g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror "$source" "${extra_sources[@]}" -o "remote-test-bin/$name" -pthread "${extra_libs[@]}"
+            "${compile[@]}"
             echo "Running ${name}"
             "./remote-test-bin/$name"
           done
