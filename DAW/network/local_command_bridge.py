@@ -12,11 +12,14 @@ from verified_event_producer import VerifiedCommandEvent
 
 
 class LocalCommandBridge:
-    def __init__(self, port: int, *, timeout: float = 2.0):
+    def __init__(self, port: int, *, session_token: str, timeout: float = 2.0):
         if type(port) is not int or not 1024 <= port <= 65535:
             raise ValueError("valid loopback port required")
         if not 0 < timeout <= 5:
             raise ValueError("bounded timeout required")
+        if not isinstance(session_token, str) or len(session_token) < 32:
+            raise ValueError("session authentication token required")
+        self._token = session_token
         self._port = port
         self._timeout = timeout
 
@@ -26,7 +29,8 @@ class LocalCommandBridge:
         if not event.peer_id or event.epoch <= 0 or not event.wire:
             return False
         packet = json.dumps({"type": "command", "epoch": event.epoch,
-                             "peer": event.peer_id, "wire": event.wire},
+                             "peer": event.peer_id, "wire": event.wire,
+                             "token": self._token},
                             separators=(",", ":")).encode("utf-8")
         if len(packet) > 4096:
             return False
