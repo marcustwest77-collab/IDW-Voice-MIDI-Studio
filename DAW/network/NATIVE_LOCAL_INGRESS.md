@@ -307,6 +307,21 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+Native TLS lease providers now receive `(identity, *, cancel, deadline)`: the
+actual session cancellation Event and absolute monotonic session deadline.
+Pass both through `receive_windows_native_lease` to the protected pipe consumer.
+The pipe wait/read/acknowledgment budget is the earlier of its local timeout and
+the caller's deadline; partial progress never resets it. Receiver close therefore
+interrupts pending Windows provisioning, including waiting for pipe discovery.
+An expired consent response is checked before ledger admission/provisioning.
+There is no fallback to one-argument providers that silently drop this context.
+Rollback retains its separately bounded revoke timeout so an expired setup can
+still attempt cleanup. This does not preempt arbitrary trusted host callbacks:
+they must still honor the lifetime contract and remain bounded themselves.
+Tests use real pinned localhost TLS and an actual Windows pipe discovery wait
+against a held living process, plus deadline/cancellation validation. They do
+not demonstrate production bridge launch or two-machine collaboration.
+
 The live native TLS session now requires `NativeCommandApprovalLedger` instead
 of the older request-ID-only prototype ledger. After verifying TLS and local host
 consent, the session admits its peer, epoch and fresh connection nonce to this
