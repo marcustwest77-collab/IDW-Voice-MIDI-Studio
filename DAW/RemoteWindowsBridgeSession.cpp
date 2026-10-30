@@ -18,6 +18,7 @@
 #include <array>
 #include <thread>
 #include <vector>
+#include <chrono>
 
 namespace idw::daw::remote {
 #if defined(_WIN32)
@@ -114,8 +115,14 @@ bool inspectWindowsBridgeSha256(const std::wstring& path, std::string& output) {
 
 struct WindowsBridgeSession::Impl {
     struct Operation {
-        explicit Operation(const LocalTransportBinding& value) : binding(value) {}
-        LocalTransportBinding binding;
+        explicit Operation(const LocalTransportBinding& value)
+            : binding(std::make_shared<const LocalTransportBinding>(value)) {}
+        std::shared_ptr<const LocalTransportBinding> binding;
+        bool matches(const LocalTransportBinding& value) const {
+            const auto current=std::atomic_load(&binding);
+            return current && current->epoch!=0 && value.epoch==current->epoch &&
+                value.peerSha256==current->peerSha256 && value.connectionId==current->connectionId;
+        }
         WindowsBootstrapChannel channel;
         std::atomic<bool> canceled{false};
     };
@@ -127,9 +134,56 @@ struct WindowsBridgeSession::Impl {
     std::atomic<std::uint64_t> stopSequence{0};
     std::thread monitor;
     LocalTransportBinding binding;
+    std::uint64_t highestOfferEpoch=0;
 #if defined(_WIN32)
     Handle process, job;
     std::uint32_t pid = 0;
+    bool launch(const std::wstring& canonical,const std::shared_ptr<Operation>& op,
+            std::uint64_t expectedStop,const wchar_t* mode,std::uint64_t offerEpoch) {
+        const auto directory=canonical.substr(0,canonical.find_last_of(L'\\'));
+        if (stopping.load() || op->canceled.load() || stopSequence.load() != expectedStop) return false;
+        job.reset(CreateJobObjectW(nullptr, nullptr));
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!job.value || !SetInformationJobObject(job.value, JobObjectExtendedLimitInformation,
+                                                    &limits, sizeof(limits))) return false;
+        auto command = std::wstring(L"\"") + canonical + L"\" " + std::wstring(mode) + L" " +
+            op->channel.name() + L" " + std::to_wstring(GetCurrentProcessId());
+        if(offerEpoch!=0) command+=L" "+std::to_wstring(offerEpoch);
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        startup.dwFlags = STARTF_USESHOWWINDOW;
+        startup.wShowWindow = SW_HIDE;
+        PROCESS_INFORMATION child{};
+        // Malformed/missing images must return an error, never open an OS
+        // error dialog that can stall this background helper launch.
+        DWORD previousMode = 0;
+        if (!SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX,
+                                &previousMode)) return false;
+        const auto launched = CreateProcessW(canonical.c_str(), &command[0], nullptr, nullptr, FALSE,
+            CREATE_SUSPENDED | CREATE_NO_WINDOW, nullptr, directory.c_str(), &startup, &child);
+        SetThreadErrorMode(previousMode, nullptr);
+        if (!launched) return false;
+        process.reset(child.hProcess);
+        Handle thread{child.hThread};
+        pid = child.dwProcessId;
+        // Never execute child code until its entire process tree is owned.
+        if (!AssignProcessToJobObject(job.value, process.value) || stopping.load() || op->canceled.load() ||
+            stopSequence.load() != expectedStop ||
+            ResumeThread(thread.value) == static_cast<DWORD>(-1)) return false;
+        return true;
+    }
+    void watch(const LocalTransportBinding& current,const std::shared_ptr<Operation>& op) {
+        monitor=std::thread([this,current,op] {
+            while(!stopping.load() && !op->canceled.load()) {
+                const auto status=WaitForSingleObject(process.value,10);
+                if(status!=WAIT_TIMEOUT || !owner.running()) {
+                    owner.onTransportLost(current);op->canceled.store(true);
+                    TerminateJobObject(job.value,0);break;
+                }
+            }
+        });
+    }
 #endif
     void cleanup() {
         stopping.store(true);
@@ -171,64 +225,74 @@ bool WindowsBridgeSession::start(const std::wstring& executable, const std::stri
     if (!openPinnedFile(executable, pinnedFile, canonical) || !hashFile(pinnedFile.value, observed) ||
         observed != approvedSha256 || canonical.size() < 4 ||
         _wcsicmp(canonical.c_str() + canonical.size() - 4, L".exe") != 0) { p.cleanup(); return false; }
-    const auto directory = canonical.substr(0, canonical.find_last_of(L'\\'));
     if (op->canceled.load() || p.stopSequence.load() != stopSequence || !op->channel.create()) {
         p.cleanup(); return false;
     }
     bool admitted = false;
     try {
         admitted = p.owner.start(options, transport, consent, [&](const LocalSessionBootstrap& bootstrap) {
-            if (p.stopping.load() || op->canceled.load() || p.stopSequence.load() != stopSequence) return false;
-            p.job.reset(CreateJobObjectW(nullptr, nullptr));
-            JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
-            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-            if (!p.job.value || !SetInformationJobObject(p.job.value, JobObjectExtendedLimitInformation,
-                                                        &limits, sizeof(limits))) return false;
-            auto command = std::wstring(L"\"") + canonical + L"\" --idw-native-bootstrap " +
-                op->channel.name() + L" " + std::to_wstring(GetCurrentProcessId());
-            STARTUPINFOW startup{};
-            startup.cb = sizeof(startup);
-            startup.dwFlags = STARTF_USESHOWWINDOW;
-            startup.wShowWindow = SW_HIDE;
-            PROCESS_INFORMATION child{};
-            // Malformed/missing images must return an error, never open an OS
-            // error dialog that can stall this background helper launch.
-            DWORD previousMode = 0;
-            if (!SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX,
-                                    &previousMode)) return false;
-            const auto launched = CreateProcessW(canonical.c_str(), &command[0], nullptr, nullptr, FALSE,
-                CREATE_SUSPENDED | CREATE_NO_WINDOW, nullptr, directory.c_str(), &startup, &child);
-            SetThreadErrorMode(previousMode, nullptr);
-            if (!launched) return false;
-            p.process.reset(child.hProcess);
-            Handle thread{child.hThread};
-            p.pid = child.dwProcessId;
-            // Never execute child code until its entire process tree is owned.
-            if (!AssignProcessToJobObject(p.job.value, p.process.value) || p.stopping.load() || op->canceled.load() ||
-                p.stopSequence.load() != stopSequence ||
-                ResumeThread(thread.value) == static_cast<DWORD>(-1)) return false;
+            if(!p.launch(canonical,op,stopSequence,L"--idw-native-bootstrap",0)) return false;
             return op->channel.deliverTo(p.process.value, bootstrap, timeoutMs);
         });
         if (!admitted || p.stopping.load() || op->canceled.load() || p.stopSequence.load() != stopSequence ||
             !alive(p.process.value)) { p.cleanup(); return false; }
-        const auto binding = p.binding;
-        p.monitor = std::thread([&p, binding, op] {
-            while (!p.stopping.load() && !op->canceled.load()) {
-                const auto status = WaitForSingleObject(p.process.value, 10);
-                if (status != WAIT_TIMEOUT || !p.owner.running()) {
-                    p.owner.onTransportLost(binding);
-                    op->canceled.store(true);
-                    TerminateJobObject(p.job.value, 0);
-                    break;
-                }
-            }
-        });
+        p.watch(p.binding,op);
     } catch (...) { p.cleanup(); return false; }
     return true;
 #else
     (void)stopSequence;
     (void)executable; (void)approvedSha256; (void)options; (void)transport; (void)consent; (void)timeoutMs;
     return false;
+#endif
+}
+bool WindowsBridgeSession::startWithOffer(const std::wstring& executable,const std::string& approvedSha256,
+        const LocalSocketReceiver::Options& options,std::uint64_t expectedEpoch,
+        const std::string& approvedPeerSha256,const OfferConsent& consentFor,unsigned timeoutMs) {
+    auto& p=*impl_;const auto stopSequence=p.stopSequence.load();
+    std::lock_guard<std::mutex> lock(p.mutex);
+#if defined(_WIN32)
+    if(p.monitor.joinable() || p.process.value!=INVALID_HANDLE_VALUE || !consentFor ||
+        expectedEpoch==0 || expectedEpoch<=p.highestOfferEpoch || !validBootstrapHex(approvedSha256) ||
+        !validBootstrapHex(approvedPeerSha256) || timeoutMs<20 || timeoutMs>5000) return false;
+    p.highestOfferEpoch=expectedEpoch; // Failed offers cannot reuse an epoch.
+    try {
+        const auto op=std::make_shared<Impl::Operation>(LocalTransportBinding{});
+        p.stopping.store(false);std::atomic_store(&p.operation,op);
+        Handle pinnedFile;std::wstring canonical;std::string observed;
+        if(!openPinnedFile(executable,pinnedFile,canonical) || !hashFile(pinnedFile.value,observed) ||
+            observed!=approvedSha256 || canonical.size()<4 ||
+            _wcsicmp(canonical.c_str()+canonical.size()-4,L".exe")!=0 ||
+            op->canceled.load() || p.stopSequence.load()!=stopSequence || !op->channel.create() ||
+            !p.launch(canonical,op,stopSequence,L"--idw-native-offer",expectedEpoch)) {
+            p.cleanup();return false;
+        }
+        LocalTLSOffer offer;
+        const auto offerDeadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(timeoutMs);
+        if(!op->channel.receiveOfferFrom(p.process.value,offer,timeoutMs) ||
+            offer.epoch!=expectedEpoch || offer.peerSha256!=approvedPeerSha256) {
+            p.cleanup();return false;
+        }
+        // Only the pinned, process-verified bridge reports this TLS evidence.
+        // Consent must come from the trusted local host, never from the offer.
+        p.binding={offer.epoch,offer.peerSha256,offer.connectionId,true};
+        std::atomic_store(&op->binding,std::make_shared<const LocalTransportBinding>(p.binding));
+        LocalHostConsent consent;
+        if(op->canceled.load() || p.stopSequence.load()!=stopSequence ||
+            !consentFor(offer,consent,op->canceled) || op->canceled.load() ||
+            p.stopSequence.load()!=stopSequence || std::chrono::steady_clock::now()>=offerDeadline ||
+            !alive(p.process.value) ||
+            !p.owner.start(options,p.binding,consent,[&](const LocalSessionBootstrap& bootstrap) {
+                if(op->canceled.load() || p.stopSequence.load()!=stopSequence) return false;
+                return op->channel.deliverTo(p.process.value,bootstrap,timeoutMs);
+            }) || op->canceled.load() || p.stopSequence.load()!=stopSequence || !alive(p.process.value)) {
+            p.cleanup();return false;
+        }
+        p.watch(p.binding,op);
+        return true;
+    } catch(...) {p.cleanup();return false;}
+#else
+    (void)stopSequence;(void)executable;(void)approvedSha256;(void)options;(void)expectedEpoch;
+    (void)approvedPeerSha256;(void)consentFor;(void)timeoutMs;return false;
 #endif
 }
 void WindowsBridgeSession::stop() {
@@ -247,13 +311,11 @@ bool WindowsBridgeSession::onTransportLost(const LocalTransportBinding& transpor
         // Do not lose a callback racing the initial publication of a startup.
         std::lock_guard<std::mutex> lock(p.mutex);
         op = std::atomic_load(&p.operation);
-        if (!op || transport.epoch != op->binding.epoch || transport.peerSha256 != op->binding.peerSha256 ||
-            transport.connectionId != op->binding.connectionId || op->binding.epoch == 0) return false;
+        if (!op || !op->matches(transport)) return false;
         p.cleanup();
         return true;
     }
-    if (!op || transport.epoch != op->binding.epoch || transport.peerSha256 != op->binding.peerSha256 ||
-        transport.connectionId != op->binding.connectionId || op->binding.epoch == 0) return false;
+    if (!op || !op->matches(transport)) return false;
     // Revoke without waiting for the process/pipe startup mutex. The snapshot's
     // channel is generation-specific, so a late callback cannot cancel a new one.
     op->canceled.store(true);

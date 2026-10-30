@@ -1,6 +1,9 @@
 #pragma once
 #include "RemoteLocalSessionOwner.h"
 #include <memory>
+#include <atomic>
+#include <functional>
+#include "RemoteTLSOfferWire.h"
 
 namespace idw::daw::remote {
 // Diagnostic hash calculation only. Its result is NOT automatic approval of an
@@ -18,6 +21,15 @@ public:
     bool start(const std::wstring& executable, const std::string& approvedSha256,
                const LocalSocketReceiver::Options&, const LocalTransportBinding&,
                const LocalHostConsent&, unsigned bootstrapTimeoutMs = 2000);
+    // Launch before TLS offer, then ask a trusted bounded local controller for
+    // exact-binding consent. Run off the UI thread. Callback must not re-enter
+    // this manager or retain references and must honor cancellation. No peer
+    // message may supply this callback or its host consent decision.
+    using OfferConsent=std::function<bool(const LocalTLSOffer&,LocalHostConsent&,const std::atomic<bool>&)>;
+    bool startWithOffer(const std::wstring& executable,const std::string& approvedSha256,
+                       const LocalSocketReceiver::Options&,std::uint64_t expectedEpoch,
+                       const std::string& approvedPeerSha256,const OfferConsent&,
+                       unsigned timeoutMs=2000);
     bool onTransportLost(const LocalTransportBinding&);
     void stop();
     bool running() const;

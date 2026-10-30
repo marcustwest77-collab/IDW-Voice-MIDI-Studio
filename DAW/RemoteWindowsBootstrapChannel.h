@@ -32,5 +32,5 @@ private:
 // It must not log secrets, retain the reference, or block indefinitely.
 bool receiveWindowsBootstrap(const std::wstring& name, void* expectedServerProcess,
                              const LocalSessionOwner::Provisioner& consume,
-                             unsigned timeoutMs = 2000);
+                             unsigned timeoutMs = 2000, const LocalTLSOffer* offer = nullptr);
 }
