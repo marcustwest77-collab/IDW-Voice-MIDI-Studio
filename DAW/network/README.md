@@ -1,5 +1,11 @@
 # Local-only TCP transport experiment
 
+The echo script below is the earliest transport experiment. For the newer
+authenticated native queue/host-review path, see [native ingress development notes](NATIVE_LOCAL_INGRESS.md).
+`native_local_bridge.py` connects the verified Python TLS sink to that native
+receiver. Its localhost mTLS integration stages requests for host review only;
+it does not demonstrate two-machine collaboration or execute DAW actions.
+
 This Python script is intentionally a **network proof-of-concept**, not a DAW client or a secure collaboration service. It binds only to 127.0.0.1 and accepts **one** TCP connection, echoes a bounded (1–4096 bytes) frame, then exits. It does not parse commands, record audio, provide authentication, use TLS, connect to the Internet, or perform any DAW action.
 
 ## Local developer test
