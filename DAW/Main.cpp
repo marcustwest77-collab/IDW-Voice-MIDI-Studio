@@ -142,6 +142,8 @@ public:
             remoteReviewPanel.showPending(remoteSessionReviews.pending());
         };
         remoteReviewPanel.onHostDecision=[this](const std::string& id, bool approve) {
+            // Reflect queued loss/replacement before reading the UI grant.
+            drainTrustedTransportEventsOnMessageThread();
             if (approve) {
                 const auto& grant=remoteSessionReviews.grant();
                 if (!grant.connected || !grant.authenticated ||
@@ -2124,13 +2126,13 @@ private:
             grant.controlGranted);
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
     }
-    // Called only from a future verified LOCAL host decision handler. No network
-    // entrypoint is connected. Approval remains disabled in the visible UI.
+    // Explicit LOCAL host decision only. A transport worker can never approve.
     bool dispatchApprovedTrackRequest(const std::string& requestId) {
         // All local track mutations and host approvals must run on the JUCE UI thread.
         auto* messageManager=juce::MessageManager::getInstanceWithoutCreating();
         if (messageManager==nullptr || !messageManager->isThisTheMessageThread())
             return false;
+        drainTrustedTransportEventsOnMessageThread();
         // Never trust a caller-provided grant; read the local session authority.
         const auto& verifiedGrant=remoteSessionReviews.grant();
         using namespace idw::daw::remote;
@@ -2153,7 +2155,15 @@ private:
         auto adapter=makeRemoteTrackAdapter();
         HostApprovalDispatchGate gate(remoteSessionReviews.reviews());
         RestrictedCommandDispatcher dispatcher(gate);
-        return dispatcher.dispatchAfterHostClick(requestId, verifiedGrant, state, adapter);
+        const bool dispatched=dispatcher.dispatchWithActiveTransport(
+            requestId, verifiedGrant, state, adapter, remoteTransportEvents);
+        if (dispatched) {
+            // Never hold the transport queue lock while touching device/UI work.
+            ensureSelectedTrackVisible();
+            refreshMixer();
+            repaint();
+        }
+        return dispatched;
     }
     // Local-only callback adapter for future approved remote requests. The UI currently
     // has no authenticated transport and never invokes this adapter on peer messages.
@@ -2164,9 +2174,6 @@ private:
                     recorder.isRecording() || multiRecorder.isRecording() ||
                     exportRunning.load()) return false;
                 selectedTrack=index;
-                ensureSelectedTrackVisible();
-                refreshMixer();
-                repaint();
                 return true;
             },
             [this](std::size_t index) {
@@ -2176,8 +2183,6 @@ private:
                     session.tracks[index].type!=idw::daw::TrackType::audio)
                     return false;
                 armedTracks[index]=true; // idempotent arm, never toggle
-                refreshMixer();
-                repaint();
                 return true;
             }};
     }

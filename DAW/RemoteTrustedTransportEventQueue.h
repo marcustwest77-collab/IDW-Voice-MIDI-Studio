@@ -58,8 +58,10 @@ public:
     else queue_.pop_front(); // Queue contains only terminal events.
    }
   } else if (queue_.size()>=capacity) return false;
-  if (event.kind==TrustedTransportEvent::Kind::connected &&
-      event.epoch>highestAdmittedEpoch_) highestAdmittedEpoch_=event.epoch;
+  if (event.kind==TrustedTransportEvent::Kind::connected) {
+   highestAdmittedEpoch_=event.epoch;
+   admittedTrackControl_=event.trackControlGranted;
+  }
   queue_.push_back(std::move(event));
   return true;
  }
@@ -70,10 +72,22 @@ public:
   return out;
  }
  void clear() { std::lock_guard<std::mutex> lock(mutex_);queue_.clear(); }
+ // Final local-host dispatch boundary. Serialize a short, synchronous action
+ // with admission/termination so a stale UI grant cannot outlive accepted facts.
+ // Callback must not re-enter this queue, perform I/O, or wait for a producer.
+ // UI refresh happens after this returns. Caller enforces JUCE message-thread use.
+ template <typename Callback>
+ bool withActiveControlEpoch(std::uint64_t epoch, Callback&& callback) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (epoch==0 || epoch!=highestAdmittedEpoch_ || epoch<=lastTerminatedEpoch_ ||
+      !admittedTrackControl_) return false;
+  return std::forward<Callback>(callback)();
+ }
 private:
  std::mutex mutex_;
  std::deque<TrustedTransportEvent> queue_;
  std::uint64_t lastTerminatedEpoch_=0;
  std::uint64_t highestAdmittedEpoch_=0;
+ bool admittedTrackControl_=false;
 };
 }
