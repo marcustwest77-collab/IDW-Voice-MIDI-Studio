@@ -6,6 +6,7 @@ provide_native_lease callback after real TLS verification and local host consent
 import math
 import re
 import threading
+import time
 
 from native_tls_session import TLSConnectionIdentity, native_socket_lease
 from windows_native_bootstrap import receive_windows_bootstrap
@@ -20,7 +21,7 @@ class NativeLeaseRollbackError(ConnectionError):
 
 
 def receive_windows_native_lease(name, expected_server_handle, identity, *,
-                                 timeout=2.0, revoke_timeout=1.0, cancel=None):
+                                 timeout=2.0, revoke_timeout=1.0, cancel=None, deadline=None):
     """Acknowledge only after constructing a lease bound to the actual TLS owner.
 
     Caller supplies trusted pipe discovery, a held server handle valid through
@@ -39,6 +40,8 @@ def receive_windows_native_lease(name, expected_server_handle, identity, *,
             identity.tls_version not in ("TLSv1.2", "TLSv1.3") or
             type(revoke_timeout) not in (int, float) or not 0 < revoke_timeout <= 5 or
             not math.isfinite(revoke_timeout) or
+            (deadline is not None and (type(deadline) not in (int, float) or
+                not -1e12 <= deadline <= 1e12 or not math.isfinite(deadline))) or
             (cancel is not None and not isinstance(cancel, threading.Event))):
         raise ValueError("invalid native lease identity or revocation configuration")
     cancel = cancel if cancel is not None else threading.Event()
@@ -47,19 +50,25 @@ def receive_windows_native_lease(name, expected_server_handle, identity, *,
         nonlocal lease
         if cancel.is_set():
             return False
+        if deadline is not None and time.monotonic() >= deadline:
+            return False
         lease = native_socket_lease(bootstrap, identity, timeout=revoke_timeout)
         return True
     try:
         if cancel.is_set():
             raise ConnectionAbortedError("native lease provisioning canceled")
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("native lease provisioning deadline")
         accepted = receive_windows_bootstrap(name, expected_server_handle,
             expected_epoch=identity.epoch, expected_peer_sha256=identity.peer_sha256,
             expected_connection_id=identity.connection_id, consume=consume,
-            timeout=timeout, cancel=cancel)
-        if not accepted or lease is None:
-            raise ConnectionError("native private bootstrap was not acknowledged")
+            timeout=timeout, cancel=cancel, deadline=deadline)
         if cancel.is_set():
             raise ConnectionAbortedError("native lease provisioning canceled")
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("native lease provisioning deadline")
+        if not accepted or lease is None:
+            raise ConnectionError("native private bootstrap was not acknowledged")
         return lease
     except BaseException as error:
         if lease is not None:

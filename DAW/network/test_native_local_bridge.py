@@ -104,7 +104,8 @@ class NativeBridgeUnitTests(unittest.TestCase):
 
 class NativeFixture:
     """Test-only stdio control. Credentials stay in private captured pipes."""
-    def __init__(self, fingerprint, channel, *, private_bootstrap=False, receive=None, lease_identity=None):
+    def __init__(self, fingerprint, channel, *, private_bootstrap=False, receive=None, lease_identity=None,
+                 lease_cancel=None, lease_deadline=None):
         self.native_lease = None
         arguments = [os.environ["IDW_NATIVE_LOCAL_FIXTURE"]]
         if private_bootstrap:
@@ -124,7 +125,7 @@ class NativeFixture:
                 if lease_identity is not None:
                     from windows_native_lease import receive_windows_native_lease
                     self.native_lease = receive_windows_native_lease(discovery[5:-1].decode("ascii"),
-                        int(self.process._handle), lease_identity)
+                        int(self.process._handle), lease_identity, cancel=lease_cancel, deadline=lease_deadline)
                     self.bootstrap = self.native_lease.bootstrap
                 elif not (receive or receive_windows_bootstrap)(discovery[5:-1].decode("ascii"),
                         int(self.process._handle), expected_epoch=45, expected_peer_sha256=fingerprint,

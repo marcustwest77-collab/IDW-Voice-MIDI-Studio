@@ -94,6 +94,9 @@ def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, 
     Only a real server-side SSLSocket with mandatory peer verification is accepted.
     Socket ownership transfers here. Native lease/consent hooks are trusted local
     callbacks, never remote fields. Their execution must be bounded by the owner.
+    provide_native_lease must accept (identity, *, cancel, deadline), passing the
+    session Event and absolute monotonic deadline through protected provisioning.
+    The owner cannot preempt arbitrary blocking trusted callbacks.
     Returns the number of queue receipts, not host approvals or executed actions.
     """
     if not isinstance(secure, ssl.SSLSocket):
@@ -185,10 +188,14 @@ def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, 
         check(deadline)
         if host_consent(identity) is not True:
             raise PermissionError("host consent denied")
+        check(deadline)
         if not host_approval_ledger.begin_session(identity.peer_id, identity.epoch, identity.connection_id):
             raise PermissionError("approval ledger session admission rejected")
         ledger_admitted = True
-        lease = provide_native_lease(identity)
+        # Trusted providers must accept this lifetime context. No fallback to a
+        # one-argument provider that can silently ignore cancellation/deadlines.
+        check(deadline)
+        lease = provide_native_lease(identity, cancel=cancel, deadline=deadline)
         if not isinstance(lease, NativeTLSLease):
             raise ValueError("native lease required")
         # Epoch must also match, not only the fingerprint/connection nonce.

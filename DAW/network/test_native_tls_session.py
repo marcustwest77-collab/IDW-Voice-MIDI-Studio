@@ -72,11 +72,13 @@ class NativeLeaseTests(unittest.TestCase):
 class SessionHarness:
     def __init__(self, cert, key, guest_cert, guest_key, *, pin=None, allowed=True, mismatch=None,
                  verify_mode=ssl.CERT_REQUIRED, owned_receiver=False, private_bootstrap=False,
-                 socket_revocation=False, transactional_lease=False, revoke_failure=False, **limits):
+                 socket_revocation=False, transactional_lease=False, revoke_failure=False,
+                 provision_hook=None, **limits):
         self.cert, self.guest_cert, self.guest_key = cert, guest_cert, guest_key
         self.fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(guest_cert.read_text())).hexdigest()
         self.pin = pin if pin is not None else self.fingerprint
         self.allowed, self.mismatch = allowed, mismatch
+        self.consent_hook = None
         self.ledger = NativeCommandApprovalLedger()
         self.cancel = threading.Event()
         self.native_ready = threading.Event()
@@ -106,12 +108,15 @@ class SessionHarness:
             self.listener.listen(1)
             self.listener.settimeout(3)
 
-        def provide(identity):
+        def provide(identity, *, cancel, deadline):
             self.identities.append(identity)
+            if provision_hook is not None:
+                return provision_hook(identity, cancel=cancel, deadline=deadline)
             # Native admission happens only after the real TLS pin check and
             # trusted test consent callback, using this socket's fresh identity.
             self.fixture = NativeFixture(identity.peer_sha256, identity.connection_id,
-                private_bootstrap=private_bootstrap, lease_identity=identity if transactional_lease else None)
+                private_bootstrap=private_bootstrap, lease_identity=identity if transactional_lease else None,
+                lease_cancel=cancel, lease_deadline=deadline)
             bootstrap = self.fixture.bootstrap
             if self.mismatch == "epoch": bootstrap = replace(bootstrap, epoch=46)
             if self.mismatch == "pin": bootstrap = replace(bootstrap, peer_sha256="0" * 64)
@@ -133,7 +138,8 @@ class SessionHarness:
 
         def serve():
             session_options = dict(expected_peer_id="guest", approved_client_sha256=self.pin,
-                epoch=45, host_consent=lambda _: self.allowed, provide_native_lease=provide,
+                epoch=45, host_consent=lambda identity: self.consent_hook(identity) if self.consent_hook else self.allowed,
+                provide_native_lease=provide,
                 host_approval_ledger=self.ledger, **options)
             try:
                 if self.receiver is not None:

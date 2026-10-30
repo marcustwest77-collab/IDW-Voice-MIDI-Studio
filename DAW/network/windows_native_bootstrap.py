@@ -51,7 +51,7 @@ if os.name == "nt":
 
 def receive_windows_bootstrap(name, expected_server_handle, *, expected_epoch,
                               expected_peer_sha256, expected_connection_id, consume,
-                              timeout=2.0, cancel=None):
+                              timeout=2.0, cancel=None, deadline=None):
     """Read exactly one bootstrap, verify binding, consume, then acknowledge.
 
     Returns False on rejection, cancellation, timeout or OS failure. The borrowed
@@ -61,6 +61,7 @@ def receive_windows_bootstrap(name, expected_server_handle, *, expected_epoch,
     this binding. If acknowledgment fails, the server rolls back its session;
     the caller must discard any captured bootstrap when this returns False.
     Callback exceptions propagate with no acknowledgment. No secure Python wipe.
+    An optional absolute monotonic deadline caps, never extends, the local timeout.
     """
     if (not isinstance(name, str) or not _NAME.fullmatch(name) or
             type(expected_server_handle) is not int or not 0 < expected_server_handle < 2**(8 * ctypes.sizeof(ctypes.c_void_p)) or
@@ -68,16 +69,20 @@ def receive_windows_bootstrap(name, expected_server_handle, *, expected_epoch,
             any(not isinstance(s, str) or not _HEX.fullmatch(s)
                 for s in (expected_peer_sha256, expected_connection_id)) or not callable(consume) or
             type(timeout) not in (int, float) or not .02 <= timeout <= 5 or not math.isfinite(timeout) or
+            (deadline is not None and (type(deadline) not in (int, float) or
+                not -1e12 <= deadline <= 1e12 or not math.isfinite(deadline))) or
             (cancel is not None and not isinstance(cancel, threading.Event))):
         raise ValueError("invalid private bootstrap configuration")
     if os.name != "nt":
         return False # No TCP, stdio, or insecure cross-platform fallback.
     cancel = cancel if cancel is not None else threading.Event()
+    deadline = min(time.monotonic() + timeout, deadline) if deadline is not None else time.monotonic() + timeout
+    if cancel.is_set() or time.monotonic() >= deadline:
+        return False
     peer = wintypes.HANDLE()
     if not _duplicate(_current(), expected_server_handle, _current(), ctypes.byref(peer), 0, False, 2):
         return False
     pipe = None
-    deadline = time.monotonic() + timeout
     def active():
         return not cancel.is_set() and time.monotonic() < deadline and _wait(peer, 0) == 258
     try:
