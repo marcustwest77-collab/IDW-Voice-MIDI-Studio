@@ -307,6 +307,26 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+The live native TLS session now requires `NativeCommandApprovalLedger` instead
+of the older request-ID-only prototype ledger. After verifying TLS and local host
+consent, the session admits its peer, epoch and fresh connection nonce to this
+ledger before requesting a native lease. Only a trusted host controller may
+approve the exact immutable canonical arm/select payload. Approval covers the
+sequence, request ID, action and track; a peer cannot substitute those fields
+under an approved request ID. Consumption is atomic across threads. Capacity is
+32 approvals, control actions/track bounds are restricted, and reviewed payloads
+cannot be overwritten under the same pending ID.
+Teardown clears approvals and closes the ledger session before attempting native
+revocation, including when the native hook fails. Late UI approval callbacks and
+stale connection callbacks are rejected; a reused ledger requires a strictly
+newer epoch for a new session. A second active connection cannot rebind it.
+Legacy Python protocol demonstrations retain their separate prototype ledger;
+they are not used by `run_native_tls_session`. This preapproval only authorizes
+delivery into native pending review. It never replaces the final local JUCE host
+decision or its native transport dispatch guard. Host revocation must still
+close native authority; clearing Python approvals alone does not revoke an
+already-delivered native request.
+
 `windows_native_lease.receive_windows_native_lease` now composes protected pipe
 delivery and socket-backed revocation for a trusted `provide_native_lease`
 callback. It takes pipe discovery and a held server process handle from the

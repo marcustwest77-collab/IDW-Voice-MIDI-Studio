@@ -11,7 +11,7 @@ import threading
 import time
 import unittest
 
-from host_approval_ledger import HostApprovalLedger
+from native_command_approval import NativeCommandApprovalLedger
 from loopback_transport import send_frame, receive_frame
 from native_local_bridge import NativeLocalBootstrap
 from native_tls_session import NativeTLSLease, run_native_tls_session
@@ -47,7 +47,7 @@ class NativeLeaseTests(unittest.TestCase):
             with self.assertRaises(TypeError):
                 run_native_tls_session(raw, expected_peer_id="guest", approved_client_sha256="a" * 64,
                     epoch=45, host_consent=lambda _: True, provide_native_lease=lambda _: None,
-                    host_approval_ledger=HostApprovalLedger())
+                    host_approval_ledger=NativeCommandApprovalLedger())
 
     def test_concurrent_close_waits_for_native_revocation(self):
         entered, release, finished = threading.Event(), threading.Event(), threading.Event()
@@ -72,12 +72,12 @@ class NativeLeaseTests(unittest.TestCase):
 class SessionHarness:
     def __init__(self, cert, key, guest_cert, guest_key, *, pin=None, allowed=True, mismatch=None,
                  verify_mode=ssl.CERT_REQUIRED, owned_receiver=False, private_bootstrap=False,
-                 socket_revocation=False, transactional_lease=False, **limits):
+                 socket_revocation=False, transactional_lease=False, revoke_failure=False, **limits):
         self.cert, self.guest_cert, self.guest_key = cert, guest_cert, guest_key
         self.fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(guest_cert.read_text())).hexdigest()
         self.pin = pin if pin is not None else self.fingerprint
         self.allowed, self.mismatch = allowed, mismatch
-        self.ledger = HostApprovalLedger()
+        self.ledger = NativeCommandApprovalLedger()
         self.cancel = threading.Event()
         self.native_ready = threading.Event()
         self.errors, self.results, self.identities = [], [], []
@@ -121,6 +121,8 @@ class SessionHarness:
                 from native_tls_session import native_socket_lease
                 native_lease = native_socket_lease(self.fixture.bootstrap, identity)
             def revoke():
+                if revoke_failure:
+                    raise RuntimeError("test native revocation hook failure")
                 if native_lease is not None:
                     native_lease.close()
                 else:
@@ -159,8 +161,10 @@ class SessionHarness:
         return self.client_socket
 
     def command(self, sequence, request, action="arm"):
-        self.ledger.approve("guest", 45, request)
         payload = f"1|45|{sequence}|{request}|{action}|1".encode("ascii")
+        identity = self.identities[0]
+        if not self.ledger.approve(identity.peer_id, identity.epoch, identity.connection_id, payload):
+            raise RuntimeError("test host approval rejected")
         send_frame(self.client_socket, payload)
         return receive_frame(self.client_socket)
 
