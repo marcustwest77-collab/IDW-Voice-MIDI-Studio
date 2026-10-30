@@ -307,6 +307,24 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+`native_tls_receiver.NativeTLSLoopbackReceiver` now owns the explicit, single-use
+IPv4 localhost accept and mTLS handshake before calling the live session owner.
+Construction binds an ephemeral port; importing the module opens nothing. There
+is no CLI or default workstation activation. The host supplies an exclusively
+controlled TLS server context with mandatory client verification and TLS 1.2 or
+newer, approved peer pin, epoch, consent, approval ledger and native lease hooks.
+No native lease is requested until handshake, pin and host consent pass.
+Accept and handshake each have absolute deadlines (up to ten seconds); partial
+handshake progress cannot extend them. The listener closes after one accepted
+connection, including rejected handshakes. Reconnection needs a fresh receiver
+and host-allocated epoch. `close()` requests cancellation during accept,
+handshake or the active session; the caller must join its worker before disposing
+host callbacks. Active-session cancellation uses the existing native revocation
+hook and clears pending native review. Certificate loading/trust policy and
+bounded, transactional host callbacks remain the caller's responsibility.
+Tests exercise real localhost TLS through the C++ review fixture, plus stalled
+and partial handshakes, cancellation, context downgrade and single-use teardown.
+
 Supply the real bridge executable and trusted artifact pin/distribution policy,
 then integrate the live TLS session owner with its private bootstrap and trusted
 host controller. The Python/native protocol and live connection-lifetime handoffs
