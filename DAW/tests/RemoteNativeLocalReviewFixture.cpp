@@ -45,7 +45,8 @@ bool readControl(std::string& line) {
 }
 int main(int argc, char** argv) {
     if (!privateStdio()) return 2; // Never print a credential to a terminal/file.
-    const bool privateBootstrap=argc==3 && std::string(argv[1])=="--private-bootstrap";
+    const bool privateOffer=argc==3 && std::string(argv[1])=="--private-offer";
+    const bool privateBootstrap=privateOffer || (argc==3 && std::string(argv[1])=="--private-bootstrap");
     if (argc!=1 && !privateBootstrap) return 2;
     WindowsBootstrapChannel channel;
 #if defined(_WIN32)
@@ -64,6 +65,21 @@ int main(int argc, char** argv) {
     if (!readControl(setup) || setup.size() != 129 || setup[64] != '|' ||
         !validBootstrapHex(setup.substr(0, 64)) || !validBootstrapHex(setup.substr(65))) return 3;
     LocalTransportBinding transport{45, setup.substr(0, 64), setup.substr(65), true};
+#if defined(_WIN32)
+    auto emitPipe=[&] {
+        const auto name=channel.name();std::string ascii;
+        for(const auto c:name) {if(c>127) return false;ascii.push_back(static_cast<char>(c));}
+        std::cout << "PIPE " << ascii << '\n' << std::flush;return bool(std::cout);
+    };
+    if(privateOffer) {
+        LocalTLSOffer offer;
+        if(!emitPipe() || !channel.receiveOfferFrom(peer.value,offer) ||
+            offer.epoch!=45 || offer.peerSha256!=setup.substr(0,64)) return 6;
+        // Trusted test bridge owns the actual TLS socket. This fixture policy
+        // checks its approved pin/epoch; production still needs real host consent.
+        transport={offer.epoch,offer.peerSha256,offer.connectionId,true};
+    }
+#endif
     LocalHostConsent consent{45, transport.peerSha256, transport.connectionId, true, true};
     TrustedTransportEventQueue events;
     LocalSessionOwner owner(events);
@@ -72,10 +88,7 @@ int main(int argc, char** argv) {
     if (!owner.start(options, transport, consent, [&](const LocalSessionBootstrap& bootstrap) {
 #if defined(_WIN32)
         if (privateBootstrap) {
-            const auto name=channel.name();
-            std::string ascii;
-            for (const auto c:name) { if(c>127) return false;ascii.push_back(static_cast<char>(c)); }
-            std::cout << "PIPE " << ascii << '\n' << std::flush;
+            if(!privateOffer && !emitPipe()) return false;
             return channel.deliverTo(peer.value,bootstrap);
         }
 #endif

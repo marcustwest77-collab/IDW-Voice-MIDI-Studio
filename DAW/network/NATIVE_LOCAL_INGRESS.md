@@ -307,6 +307,28 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+The private Windows channel now supports a two-stage session offer. The trusted
+bridge sends a fixed 142-byte `IDWO` version-1 record (host-assigned epoch, actual
+peer certificate fingerprint, fresh connection nonce and TLS 1.2/1.3 version).
+Python verifies the held server process before sending even this non-secret
+offer. Native `receiveOfferFrom` verifies the intended held client process before
+reading it, retains a duplicated process handle, and leaves that same pipe open
+for the host's policy/consent decision. Only then should the owner start native
+ingress and call `deliverTo`. Delivery must match the offered epoch, fingerprint
+and nonce and the still-living process; the original shared deadline also caps
+host decision plus bootstrap/acknowledgment. Cancellation closes failed offers.
+This data record does not verify TLS, map peers, or grant consent. The host must
+trust the pinned bridge's TLS implementation, check the approved certificate and
+epoch, and obtain exact-binding local consent. No remote claim can replace those
+requirements. Legacy one-stage channel callers remain unchanged.
+`receive_windows_native_lease(..., send_offer=True)` composes the offer with the
+existing transactional bootstrap/lease path. Windows integration tests send the
+actual live localhost TLS identity over the private pipe; test stdio supplies
+only approved host policy and non-secret discovery, not the connection nonce or
+credentials. These tests stage native pending review and revoke it through the
+authenticated socket. The managed launcher and real host UI still need a
+production two-stage controller and packaged TLS bridge before activation.
+
 Native TLS lease providers now receive `(identity, *, cancel, deadline)`: the
 actual session cancellation Event and absolute monotonic session deadline.
 Pass both through `receive_windows_native_lease` to the protected pipe consumer.

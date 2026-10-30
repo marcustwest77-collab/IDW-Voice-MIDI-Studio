@@ -73,7 +73,7 @@ class SessionHarness:
     def __init__(self, cert, key, guest_cert, guest_key, *, pin=None, allowed=True, mismatch=None,
                  verify_mode=ssl.CERT_REQUIRED, owned_receiver=False, private_bootstrap=False,
                  socket_revocation=False, transactional_lease=False, revoke_failure=False,
-                 provision_hook=None, **limits):
+                 provision_hook=None, private_offer=False, **limits):
         self.cert, self.guest_cert, self.guest_key = cert, guest_cert, guest_key
         self.fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(guest_cert.read_text())).hexdigest()
         self.pin = pin if pin is not None else self.fingerprint
@@ -116,7 +116,7 @@ class SessionHarness:
             # trusted test consent callback, using this socket's fresh identity.
             self.fixture = NativeFixture(identity.peer_sha256, identity.connection_id,
                 private_bootstrap=private_bootstrap, lease_identity=identity if transactional_lease else None,
-                lease_cancel=cancel, lease_deadline=deadline)
+                lease_cancel=cancel, lease_deadline=deadline, private_offer=private_offer)
             bootstrap = self.fixture.bootstrap
             if self.mismatch == "epoch": bootstrap = replace(bootstrap, epoch=46)
             if self.mismatch == "pin": bootstrap = replace(bootstrap, peer_sha256="0" * 64)

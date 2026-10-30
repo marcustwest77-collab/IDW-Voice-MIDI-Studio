@@ -10,6 +10,7 @@ import time
 
 from native_tls_session import TLSConnectionIdentity, native_socket_lease
 from windows_native_bootstrap import receive_windows_bootstrap
+from native_tls_offer import NativeTLSOffer
 
 
 class NativeLeaseRollbackError(ConnectionError):
@@ -21,7 +22,7 @@ class NativeLeaseRollbackError(ConnectionError):
 
 
 def receive_windows_native_lease(name, expected_server_handle, identity, *,
-                                 timeout=2.0, revoke_timeout=1.0, cancel=None, deadline=None):
+                                 timeout=2.0, revoke_timeout=1.0, cancel=None, deadline=None, send_offer=False):
     """Acknowledge only after constructing a lease bound to the actual TLS owner.
 
     Caller supplies trusted pipe discovery, a held server handle valid through
@@ -42,7 +43,7 @@ def receive_windows_native_lease(name, expected_server_handle, identity, *,
             not math.isfinite(revoke_timeout) or
             (deadline is not None and (type(deadline) not in (int, float) or
                 not -1e12 <= deadline <= 1e12 or not math.isfinite(deadline))) or
-            (cancel is not None and not isinstance(cancel, threading.Event))):
+            type(send_offer) is not bool or (cancel is not None and not isinstance(cancel, threading.Event))):
         raise ValueError("invalid native lease identity or revocation configuration")
     cancel = cancel if cancel is not None else threading.Event()
     lease = None
@@ -62,7 +63,9 @@ def receive_windows_native_lease(name, expected_server_handle, identity, *,
         accepted = receive_windows_bootstrap(name, expected_server_handle,
             expected_epoch=identity.epoch, expected_peer_sha256=identity.peer_sha256,
             expected_connection_id=identity.connection_id, consume=consume,
-            timeout=timeout, cancel=cancel, deadline=deadline)
+            timeout=timeout, cancel=cancel, deadline=deadline,
+            offer=NativeTLSOffer(identity.epoch,identity.peer_sha256,identity.connection_id,
+                                 identity.tls_version) if send_offer else None)
         if cancel.is_set():
             raise ConnectionAbortedError("native lease provisioning canceled")
         if deadline is not None and time.monotonic() >= deadline:

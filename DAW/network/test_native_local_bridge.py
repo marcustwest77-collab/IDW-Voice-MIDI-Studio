@@ -105,16 +105,16 @@ class NativeBridgeUnitTests(unittest.TestCase):
 class NativeFixture:
     """Test-only stdio control. Credentials stay in private captured pipes."""
     def __init__(self, fingerprint, channel, *, private_bootstrap=False, receive=None, lease_identity=None,
-                 lease_cancel=None, lease_deadline=None):
+                 lease_cancel=None, lease_deadline=None, private_offer=False):
         self.native_lease = None
         arguments = [os.environ["IDW_NATIVE_LOCAL_FIXTURE"]]
         if private_bootstrap:
-            arguments += ["--private-bootstrap", str(os.getpid())]
+            arguments += ["--private-offer" if private_offer else "--private-bootstrap", str(os.getpid())]
         self.process = subprocess.Popen(arguments,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
             close_fds=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         try:
-            self.process.stdin.write((fingerprint + "|" + channel + "\n").encode("ascii"))
+            self.process.stdin.write((fingerprint + "|" + ("0" * 64 if private_offer else channel) + "\n").encode("ascii"))
             self.process.stdin.flush()
             if private_bootstrap:
                 from windows_native_bootstrap import receive_windows_bootstrap
@@ -125,7 +125,8 @@ class NativeFixture:
                 if lease_identity is not None:
                     from windows_native_lease import receive_windows_native_lease
                     self.native_lease = receive_windows_native_lease(discovery[5:-1].decode("ascii"),
-                        int(self.process._handle), lease_identity, cancel=lease_cancel, deadline=lease_deadline)
+                        int(self.process._handle), lease_identity, cancel=lease_cancel,
+                        deadline=lease_deadline, send_offer=private_offer)
                     self.bootstrap = self.native_lease.bootstrap
                 elif not (receive or receive_windows_bootstrap)(discovery[5:-1].decode("ascii"),
                         int(self.process._handle), expected_epoch=45, expected_peer_sha256=fingerprint,

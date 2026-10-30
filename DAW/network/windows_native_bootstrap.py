@@ -13,6 +13,7 @@ import threading
 import time
 
 from native_local_bridge import NativeLocalBootstrap
+from native_tls_offer import NativeTLSOffer
 
 _NAME = re.compile(r"\\\\\.\\pipe\\IDW-LocalBootstrap-[0-9a-f]{64}\Z")
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -51,7 +52,7 @@ if os.name == "nt":
 
 def receive_windows_bootstrap(name, expected_server_handle, *, expected_epoch,
                               expected_peer_sha256, expected_connection_id, consume,
-                              timeout=2.0, cancel=None, deadline=None):
+                              timeout=2.0, cancel=None, deadline=None, offer=None):
     """Read exactly one bootstrap, verify binding, consume, then acknowledge.
 
     Returns False on rejection, cancellation, timeout or OS failure. The borrowed
@@ -73,6 +74,12 @@ def receive_windows_bootstrap(name, expected_server_handle, *, expected_epoch,
                 not -1e12 <= deadline <= 1e12 or not math.isfinite(deadline))) or
             (cancel is not None and not isinstance(cancel, threading.Event))):
         raise ValueError("invalid private bootstrap configuration")
+    offer_data = None
+    if offer is not None:
+        if (not isinstance(offer, NativeTLSOffer) or offer.epoch != expected_epoch or
+                offer.peer_sha256 != expected_peer_sha256 or offer.connection_id != expected_connection_id):
+            raise ValueError("native offer binding mismatch")
+        offer_data = bytearray(offer.encode())
     if os.name != "nt":
         return False # No TCP, stdio, or insecure cross-platform fallback.
     cancel = cancel if cancel is not None else threading.Event()
@@ -139,6 +146,8 @@ def receive_windows_bootstrap(name, expected_server_handle, *, expected_epoch,
                     _close(event)
             return offset == len(data) and active()
 
+        if offer_data is not None and not transfer(offer_data, True):
+            return False
         data = bytearray(207)
         if not transfer(data, False):
             return False

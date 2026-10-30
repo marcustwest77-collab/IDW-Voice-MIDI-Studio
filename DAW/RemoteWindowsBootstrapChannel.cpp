@@ -17,6 +17,7 @@
 #include <chrono>
 #include <mutex>
 #include <vector>
+#include <algorithm>
 
 namespace idw::daw::remote {
 #if defined(_WIN32)
@@ -115,6 +116,10 @@ struct WindowsBootstrapChannel::Impl {
     std::wstring name;
 #if defined(_WIN32)
     Handle pipe;
+    Handle offeredPeer;
+    LocalTLSOffer offer;
+    bool offerRead=false;
+    Clock::time_point offerDeadline{};
 #endif
 };
 WindowsBootstrapChannel::WindowsBootstrapChannel() : impl_(std::make_unique<Impl>()) {}
@@ -135,6 +140,7 @@ bool WindowsBootstrapChannel::create() {
         PIPE_REJECT_REMOTE_CLIENTS, 1, 4096, 4096, 0, &security));
     if (p.pipe.value == INVALID_HANDLE_VALUE) return false;
     p.name = path;
+    p.offerRead=false;p.offer={};p.offeredPeer.reset();
     p.canceled.store(false);
     return true;
 #else
@@ -151,8 +157,36 @@ void WindowsBootstrapChannel::close() {
     std::lock_guard<std::mutex> lock(impl_->mutex);
 #if defined(_WIN32)
     impl_->pipe.reset();
+    impl_->offeredPeer.reset();impl_->offerRead=false;
 #endif
     impl_->name.clear();
+}
+bool WindowsBootstrapChannel::receiveOfferFrom(void* expectedClientProcess,LocalTLSOffer& out,unsigned timeoutMs) {
+    auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
+#if defined(_WIN32)
+    bool success=false;
+    struct Cleanup { Impl& p;bool& success;~Cleanup(){if(!success){p.pipe.reset();p.offeredPeer.reset();}} } cleanup{p,success};
+    const auto peer=static_cast<HANDLE>(expectedClientProcess);
+    if(p.pipe.value==INVALID_HANDLE_VALUE || p.offerRead || p.canceled.load() ||
+       timeoutMs<20 || timeoutMs>5000 || !alive(peer) || GetProcessId(peer)==0 ||
+       GetProcessId(peer)==GetCurrentProcessId()) return false;
+    p.offerDeadline=Clock::now()+std::chrono::milliseconds(timeoutMs);
+    for(unsigned attempt=0;attempt<8 && !p.canceled.load();++attempt) {
+        if(!connectClient(p.pipe.value,p.offerDeadline,peer,p.canceled)) return false;
+        ULONG pid=0;
+        if(GetNamedPipeClientProcessId(p.pipe.value,&pid) && pid==GetProcessId(peer) && alive(peer)) {
+            LocalTLSOfferBytes bytes{};LocalTLSOffer offer;
+            if(!transfer(p.pipe.value,false,bytes.data(),bytes.size(),p.offerDeadline,peer,p.canceled) ||
+               !decodeTLSOffer(bytes,offer) || !DuplicateHandle(GetCurrentProcess(),peer,GetCurrentProcess(),
+                   &p.offeredPeer.value,0,FALSE,DUPLICATE_SAME_ACCESS)) return false;
+            p.offer=offer;out=std::move(offer);p.offerRead=true;success=true;return true;
+        }
+        DisconnectNamedPipe(p.pipe.value);
+    }
+    return false;
+#else
+    (void)expectedClientProcess;(void)out;(void)timeoutMs;return false;
+#endif
 }
 bool WindowsBootstrapChannel::deliverTo(void* expectedClientProcess,
         const LocalSessionBootstrap& bootstrap, unsigned timeoutMs) {
@@ -160,15 +194,19 @@ bool WindowsBootstrapChannel::deliverTo(void* expectedClientProcess,
     std::lock_guard<std::mutex> lock(p.mutex);
 #if defined(_WIN32)
     // Close the single-use instance on every outcome, including validation failure.
-    struct CloseOnReturn { Handle& pipe; ~CloseOnReturn() { pipe.reset(); } } cleanup{p.pipe};
+    struct CloseOnReturn { Handle& pipe;Handle& peer;~CloseOnReturn(){pipe.reset();peer.reset();} } cleanup{p.pipe,p.offeredPeer};
     const auto peer = static_cast<HANDLE>(expectedClientProcess);
     LocalBootstrapBytes bytes{};
     if (p.pipe.value == INVALID_HANDLE_VALUE || p.canceled.load() || timeoutMs < 20 || timeoutMs > 5000 ||
         !alive(peer) || GetProcessId(peer) == 0 || GetProcessId(peer) == GetCurrentProcessId() ||
         !encodeLocalBootstrap(bootstrap, bytes)) return false;
-    const auto deadline = Clock::now() + std::chrono::milliseconds(timeoutMs);
+    if(p.offerRead && (!alive(p.offeredPeer.value) || GetProcessId(p.offeredPeer.value)!=GetProcessId(peer) ||
+        bootstrap.epoch!=p.offer.epoch || bootstrap.peerSha256!=p.offer.peerSha256 ||
+        bootstrap.connectionId!=p.offer.connectionId)) return false;
+    auto deadline = Clock::now() + std::chrono::milliseconds(timeoutMs);
+    if(p.offerRead) deadline=std::min(deadline,p.offerDeadline);
     for (unsigned attempt = 0; attempt < 8 && !p.canceled.load(); ++attempt) {
-        if (!connectClient(p.pipe.value, deadline, peer, p.canceled)) return false;
+        if (!p.offerRead && !connectClient(p.pipe.value, deadline, peer, p.canceled)) return false;
         ULONG pid = 0;
         if (GetNamedPipeClientProcessId(p.pipe.value, &pid) && pid == GetProcessId(peer) && alive(peer)) {
             if (!transfer(p.pipe.value, true, bytes.data(), bytes.size(), deadline, peer, p.canceled)) return false;
@@ -176,6 +214,7 @@ bool WindowsBootstrapChannel::deliverTo(void* expectedClientProcess,
             if (!transfer(p.pipe.value, false, ack.data(), ack.size(), deadline, peer, p.canceled)) return false;
             return std::string(ack.begin(), ack.end()) == receipt;
         }
+        if(p.offerRead) return false;
         DisconnectNamedPipe(p.pipe.value); // Wrong PID receives no secret bytes.
     }
     return false;

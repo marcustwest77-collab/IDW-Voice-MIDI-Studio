@@ -1,5 +1,6 @@
 #pragma once
 #include "RemoteLocalSessionOwner.h"
+#include "RemoteTLSOfferWire.h"
 #include <memory>
 
 namespace idw::daw::remote {
@@ -14,6 +15,10 @@ public:
     WindowsBootstrapChannel& operator=(const WindowsBootstrapChannel&) = delete;
     bool create();
     std::wstring name() const; // Non-secret discovery path; never contains token.
+    // Optional two-stage handoff: verify the held client process, read its bounded
+    // TLS offer, then let the host check policy/consent before deliverTo. One shared
+    // deadline includes the host decision. Reading an offer does not authenticate TLS.
+    bool receiveOfferFrom(void* expectedClientProcess, LocalTLSOffer&, unsigned timeoutMs=2000);
     bool deliverTo(void* expectedClientProcess, const LocalSessionBootstrap&,
                    unsigned timeoutMs = 2000);
     void cancel(); // Safe while deliverTo is waiting; no raw handle is exposed.
