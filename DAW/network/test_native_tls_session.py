@@ -71,7 +71,8 @@ class NativeLeaseTests(unittest.TestCase):
 
 class SessionHarness:
     def __init__(self, cert, key, guest_cert, guest_key, *, pin=None, allowed=True, mismatch=None,
-                 verify_mode=ssl.CERT_REQUIRED, owned_receiver=False, private_bootstrap=False, **limits):
+                 verify_mode=ssl.CERT_REQUIRED, owned_receiver=False, private_bootstrap=False,
+                 socket_revocation=False, **limits):
         self.cert, self.guest_cert, self.guest_key = cert, guest_cert, guest_key
         self.fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(guest_cert.read_text())).hexdigest()
         self.pin = pin if pin is not None else self.fingerprint
@@ -115,8 +116,15 @@ class SessionHarness:
             if self.mismatch == "epoch": bootstrap = replace(bootstrap, epoch=46)
             if self.mismatch == "pin": bootstrap = replace(bootstrap, peer_sha256="0" * 64)
             if self.mismatch == "connection": bootstrap = replace(bootstrap, connection_id="f" * 64)
+            native_lease = None
+            if socket_revocation:
+                from native_tls_session import native_socket_lease
+                native_lease = native_socket_lease(self.fixture.bootstrap, identity)
             def revoke():
-                self.fixture.pending("REVOKE")
+                if native_lease is not None:
+                    native_lease.close()
+                else:
+                    self.fixture.pending("REVOKE")
                 self.revocations += 1
             self.native_ready.set()
             return NativeTLSLease(bootstrap, revoke)

@@ -155,6 +155,7 @@ struct LocalSocketReceiver::Impl {
                 if (peer.sin_family != AF_INET || ntohl(peer.sin_addr.s_addr) != INADDR_LOOPBACK) continue;
                 handle(client.value, std::min(sessionDeadline,
                     Clock::now() + std::chrono::milliseconds(options.frameTimeoutMs)));
+                if (!ingress.activeForEpoch(sessionEpoch)) break;
             }
         } catch (...) { /* Fail closed, including allocation failure. */ }
         ingress.endSession(sessionEpoch);

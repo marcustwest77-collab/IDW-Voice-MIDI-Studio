@@ -86,27 +86,46 @@ class NativeLocalCommandBridge:
                 if (command['session_epoch'] != bootstrap.epoch or wire != canonical or
                         command['action'] not in ("arm", "select") or command['track_index'] >= 128):
                     return False
-                payload = bootstrap._secret.encode("ascii") + b"\n" + wire
-                if len(payload) > 4096:
-                    return False
-                local_deadline = time.monotonic() + self._timeout
-                if deadline is not None:
-                    if type(deadline) not in (int, float) or not math.isfinite(deadline):
-                        return False
-                    local_deadline = min(local_deadline, deadline)
-
-                def remaining():
-                    value = local_deadline - time.monotonic()
-                    if value <= 0:
-                        raise TimeoutError("native handoff deadline")
-                    return value
-
-                with socket.create_connection(("127.0.0.1", bootstrap.port), timeout=remaining()) as connection:
-                    connection.settimeout(remaining())
-                    connection.sendall(len(payload).to_bytes(4, "big") + payload)
-                    connection.settimeout(remaining())
-                    connection.shutdown(socket.SHUT_WR)  # Native receiver requires one frame followed by FIN.
-                    connection.settimeout(remaining())
-                    return connection.recv(1) == b"1"  # Queued, never approval/execution.
+                return self._exchange(bootstrap, wire, deadline)
             except (OSError, ValueError, UnicodeError, OverflowError):
                 return False
+
+    def revoke(self, *, deadline=None) -> bool:
+        """Authenticate terminal native admission; retire credentials on every outcome.
+
+        A receipt means the native termination was admitted, never a DAW action.
+        Failure is observable and must not be treated as confirmed revocation.
+        """
+        with self._lock:
+            bootstrap, self._bootstrap = self._bootstrap, None
+            if bootstrap is None:
+                return False
+            try:
+                wire = f"IDW_REVOKE|1|{bootstrap.epoch}".encode("ascii")
+                return self._exchange(bootstrap, wire, deadline)
+            except (OSError, ValueError, UnicodeError, OverflowError):
+                return False
+
+    def _exchange(self, bootstrap, wire, deadline):
+        payload = bootstrap._secret.encode("ascii") + b"\n" + wire
+        if len(payload) > 4096:
+            return False
+        local_deadline = time.monotonic() + self._timeout
+        if deadline is not None:
+            if type(deadline) not in (int, float) or not math.isfinite(deadline):
+                return False
+            local_deadline = min(local_deadline, deadline)
+
+        def remaining():
+            value = local_deadline - time.monotonic()
+            if value <= 0:
+                raise TimeoutError("native handoff deadline")
+            return value
+
+        with socket.create_connection(("127.0.0.1", bootstrap.port), timeout=remaining()) as connection:
+            connection.settimeout(remaining())
+            connection.sendall(len(payload).to_bytes(4, "big") + payload)
+            connection.settimeout(remaining())
+            connection.shutdown(socket.SHUT_WR)  # Native receiver requires one frame followed by FIN.
+            connection.settimeout(remaining())
+            return connection.recv(1) == b"1"  # Queued, never approval/execution.

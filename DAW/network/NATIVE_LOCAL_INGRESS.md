@@ -307,6 +307,26 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+`native_socket_lease` now supplies a native revocation hook for a protected
+bootstrap and the current TLS identity. Closing the lease sends the distinct
+local lifecycle record `IDW_REVOKE|1|<epoch>` inside the existing secret-bearing
+frame. Native ingress checks its fresh secret and exact canonical epoch before
+terminating admission, purging queued commands and admitting authentication loss.
+This terminal record bypasses command backpressure but never bypasses secret or
+epoch checks. It is not a remote DAW action and cannot pass command delivery.
+The dispatch guard rejects the terminated epoch before acknowledgment is sent;
+the receiver then closes its listener. The lease reports failed acknowledgment
+instead of claiming revocation succeeded, retires its client credentials on every
+attempt, and never automatically retries. An acknowledgment lost after native
+termination remains an observable failure. Existing bounded listener expiry and
+host/process shutdown remain independent teardown paths.
+Tests exercise live localhost mTLS teardown through this authenticated revoke
+path, using protected private-pipe bootstrap on Windows. EOF, cancellation,
+malformed/replayed commands, consent loss, setup rejection and session budgets
+clear native pending review without sending the fixture's test `REVOKE` command.
+Other platform bootstrap remains a test-only stdio handoff. Packaging and trusted
+host-controller activation are still outstanding.
+
 `windows_native_bootstrap.receive_windows_bootstrap` consumes the existing C++
 private named-pipe protocol from Python. The trusted caller supplies a held server
 process handle (query and SYNCHRONIZE rights), plus the epoch, certificate pin
