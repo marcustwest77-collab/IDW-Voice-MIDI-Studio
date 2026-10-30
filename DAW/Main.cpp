@@ -29,7 +29,7 @@
 #include "RemoteTransportSessionLifecycle.h"
 #include "RemoteTrustedTransportEventQueue.h"
 #include "RemoteVerifiedLocalCommandQueueAdapter.h"
-#include "RemoteLocalSessionOwner.h"
+#include "RemoteWindowsBridgeSession.h"
 #include "RemoteReviewMailbox.h"
 #include "RemoteValidatedCommandReviewReceiver.h"
 #include "RemoteTrackControlAdapter.h"
@@ -2037,20 +2037,20 @@ private:
         return remoteTransportEvents.push(std::move(event));
     }
     void endAuthenticatedLocalIngress() {
-        remoteLocalSession.stop();
+        remoteLocalBridge.stop();
     }
     // Development-only trusted-owner hooks. The TLS implementation must supply
-    // real evidence and use a protected provisioning channel. No UI/auto start.
+    // real evidence and a trusted executable pin. No UI/automatic start.
     bool startAuthenticatedLocalSocketReceiver(
+            const std::wstring& executable, const std::string& approvedSha256,
             const idw::daw::remote::LocalSocketReceiver::Options& options,
             const idw::daw::remote::LocalTransportBinding& transport,
-            const idw::daw::remote::LocalHostConsent& consent,
-            const idw::daw::remote::LocalSessionOwner::Provisioner& provision) {
-        return remoteLocalSession.start(options, transport, consent, provision);
+            const idw::daw::remote::LocalHostConsent& consent) {
+        return remoteLocalBridge.start(executable, approvedSha256, options, transport, consent);
     }
     bool onVerifiedLocalTransportLost(
             const idw::daw::remote::LocalTransportBinding& transport) {
-        return remoteLocalSession.onTransportLost(transport);
+        return remoteLocalBridge.onTransportLost(transport);
     }
     // Called on the JUCE message thread only. The network transport is not
     // connected yet; producer must supply authenticated facts, not peer claims.
@@ -3258,7 +3258,7 @@ public:
         return false;
     }
     ~Workstation() override {
-        remoteLocalSession.stop();
+        remoteLocalBridge.stop();
         remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
@@ -3334,7 +3334,7 @@ public:
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
-    idw::daw::remote::LocalSessionOwner remoteLocalSession{remoteTransportEvents};
+    idw::daw::remote::WindowsBridgeSession remoteLocalBridge{remoteTransportEvents};
     // Independent UI-thread poll remains active even when playback is stopped.
     struct RemoteEventPollTimer final : juce::Timer {
         Workstation& owner;

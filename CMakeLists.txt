@@ -110,7 +110,8 @@ if(IDW_BUILD_DAW)
         BUNDLE_ID "com.idwent.idwdaw")
     juce_generate_juce_header(IDWDAW)
     target_sources(IDWDAW PRIVATE DAW/Main.cpp DAW/SessionModel.h
-        DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp DAW/RemoteWindowsBootstrapChannel.cpp)
+        DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp DAW/RemoteWindowsBootstrapChannel.cpp
+        DAW/RemoteWindowsBridgeSession.cpp)
     target_include_directories(IDWDAW PRIVATE DAW)
     target_link_libraries(IDWDAW PRIVATE juce::juce_gui_extra juce::juce_audio_utils
         juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
@@ -154,6 +155,18 @@ if(IDW_BUILD_DAW)
         endif()
         add_test(NAME IDWDAWWindowsBootstrapChannel COMMAND IDWDAWWindowsBootstrapChannelTests)
         set_tests_properties(IDWDAWWindowsBootstrapChannel PROPERTIES TIMEOUT 30)
+        add_executable(IDWDAWWindowsBridgeSessionTests DAW/tests/RemoteWindowsBridgeSessionTests.cpp
+            DAW/RemoteWindowsBridgeSession.cpp DAW/RemoteWindowsBootstrapChannel.cpp
+            DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
+        target_link_libraries(IDWDAWWindowsBridgeSessionTests PRIVATE Threads::Threads)
+        if(WIN32)
+            target_link_libraries(IDWDAWWindowsBridgeSessionTests PRIVATE ws2_32 bcrypt advapi32)
+        endif()
+        if(APPLE)
+            target_link_libraries(IDWDAWWindowsBridgeSessionTests PRIVATE "${IDW_SECURITY_FRAMEWORK}")
+        endif()
+        add_test(NAME IDWDAWWindowsBridgeSession COMMAND IDWDAWWindowsBridgeSessionTests)
+        set_tests_properties(IDWDAWWindowsBridgeSession PROPERTIES TIMEOUT 30)
         add_executable(IDWDAWRecordingTests DAW/tests/RecordingInterruptionTests.cpp)
         target_include_directories(IDWDAWRecordingTests PRIVATE DAW)
         target_link_libraries(IDWDAWRecordingTests PRIVATE juce::juce_audio_formats juce::juce_audio_devices)

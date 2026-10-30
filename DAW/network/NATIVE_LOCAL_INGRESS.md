@@ -3,7 +3,7 @@
 `AuthenticatedLocalIngress` accepts a complete native IPC frame and delivers
 only validated arm/select command data to `TrustedTransportEventQueue` through
 `VerifiedLocalCommandQueueAdapter`. Workstation owns a `LocalSessionOwner` around
-the ingress/listener alongside its queue; the existing JUCE message-thread timer
+the ingress/listener through a `WindowsBridgeSession` alongside its queue; the JUCE timer
 drains events for host review.
 Enqueue success means queued, not approved or executed.
 
@@ -75,7 +75,7 @@ after automatic termination. New admission needs a newer epoch and fresh secret.
 Receipts are best effort, and the service can be denied by local processes
 exhausting its deliberately small budgets.
 
-Workstation owns the session owner after its queue, stops it on host revocation
+Workstation owns the bridge/session manager after its queue, stops it on host revocation
 and destruction, and exposes only development trusted-owner start/loss hooks.
 The older Workstation local bypass methods accepting caller-supplied secrets
 or command frames are removed. No UI or automatic start is enabled. The JUCE timer still drains
@@ -85,8 +85,8 @@ they do not launch the DAW GUI or demonstrate a remote TLS peer.
 
 ## Bootstrap and transport ownership
 
-The start hook accepts transport evidence, matching host consent, and a required
-synchronous provisioner callback. That callback receives port, epoch, secret,
+The lower-level `LocalSessionOwner::start` accepts transport evidence, matching
+host consent, and a required synchronous provisioner callback. That callback receives port, epoch, secret,
 peer fingerprint and connection ID as a temporary in-process bootstrap record.
 It must not retain the reference, log it, send it to a remote peer, or wait
 indefinitely. A process boundary requires an OS-protected channel to the intended
@@ -160,11 +160,60 @@ administrator/debugger or a process already able to inject into/read the trusted
 host/bridge. It also cannot prevent a local process from denying service by
 consuming connection budgets. Do not enable it with untrusted process handles.
 
+## Managed Windows bridge launch
+
+Workstation's development start hook now accepts an explicitly selected absolute
+executable path and a separately approved lowercase SHA-256 pin, plus matching
+transport evidence/host consent. It uses `WindowsBridgeSession` rather than an
+arbitrary caller-supplied provisioner. No executable is selected or launched by
+default, and there is no UI activation. Linux/macOS fail closed.
+
+The launcher requires a local fixed-drive path and regular non-reparse file,
+opens it without write/delete sharing, computes SHA-256 with BCrypt, and checks
+the supplied pin. It launches the canonical `.exe` path explicitly, with its
+directory as the working directory, without a shell or PATH search. The image
+file handle stays locked through process creation and bootstrap. The only
+arguments are `--idw-native-bootstrap`, the non-secret pipe name, and host PID.
+No handles are inherited. The console is hidden.
+Launch-time OS error dialogs are suppressed with a temporary thread-local error
+mode, then the prior mode is restored, so an invalid image returns failure.
+
+The pin must come from a trusted manifest/policy. The diagnostic
+`inspectWindowsBridgeSha256` merely computes a digest; automatically trusting its
+result for an untrusted file would defeat pinning. This step is a file hash check,
+not publisher signature verification or a complete dependency integrity policy.
+The installation directory and the bridge's dependencies must also be trusted.
+
+The process starts suspended, is assigned to an unnamed kill-on-close job, then
+resumes and consumes its secret through the private pipe. Assignment/resume or
+bootstrap failure revokes the listener and cleans up the owned child. A monitor
+checks the child and listener lifetime: child exit, wait failure or receiver
+expiry revokes the matching epoch and terminates the owned job. Host stop/loss,
+revocation and destruction cancel pending bootstrap, join the monitor and stop
+the bridge and descendants before releasing handles. These controls only act
+on processes created by this manager; no arbitrary PID termination API is exposed.
+See [Windows job objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
+and [suspended process creation](https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags).
+
+Each startup has a separate cancellation/channel record. Transport-loss handling
+can revoke a waiting bootstrap without waiting for the launch mutex, and a stale
+record cannot cancel a replacement. The existing owner epoch/identity checks
+still apply. After automatic termination, call `stop` to release the old monitor
+and handles before restarting. Cleanup uses forced termination: the bridge is
+a disposable transport helper, never an owner of DAW recording/project data.
+
+Windows tests pin and launch a real test bridge, transfer its generated secret,
+and authenticate its TCP command into the native queue. They check a known
+SHA-256 vector, pin/path/consent rejection, correctly pinned invalid-image rollback, bridge exit, receiver expiry,
+bootstrap timeout, stop/loss during startup, stale loss, restart/destruction and
+termination of a real descendant process. These fixtures do not implement TLS.
+
 ## Remaining production work
 
-Integrate a verified bridge launch/lifetime manager and connect its private
-bootstrap and trusted binding/consent/loss hooks to the actual verified remote
-TLS transport. Implement protected provisioning for Linux/macOS before enabling
+Supply the real bridge executable and trusted artifact pin/distribution policy,
+then connect its private bootstrap and trusted binding/consent/loss hooks to the
+actual verified remote TLS transport. The managed launcher currently exercises
+native test bridge fixtures. Implement protected provisioning for Linux/macOS before enabling
 those platforms. Current tests use synthetic TLS-owner evidence; Windows has
 real child-process pipe/socket coverage, and other platforms test the codec and
 fail-closed unsupported path.
