@@ -118,7 +118,7 @@ struct WindowsBootstrapChannel::Impl {
 #endif
 };
 WindowsBootstrapChannel::WindowsBootstrapChannel() : impl_(std::make_unique<Impl>()) {}
-WindowsBootstrapChannel::~WindowsBootstrapChannel() { cancel(); }
+WindowsBootstrapChannel::~WindowsBootstrapChannel() { close(); }
 bool WindowsBootstrapChannel::create() {
     auto& p = *impl_;
     std::lock_guard<std::mutex> lock(p.mutex);
@@ -146,6 +146,14 @@ std::wstring WindowsBootstrapChannel::name() const {
     return impl_->name;
 }
 void WindowsBootstrapChannel::cancel() { impl_->canceled.store(true); }
+void WindowsBootstrapChannel::close() {
+    cancel();
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+#if defined(_WIN32)
+    impl_->pipe.reset();
+#endif
+    impl_->name.clear();
+}
 bool WindowsBootstrapChannel::deliverTo(void* expectedClientProcess,
         const LocalSessionBootstrap& bootstrap, unsigned timeoutMs) {
     auto& p = *impl_;

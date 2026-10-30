@@ -17,6 +17,7 @@ public:
     bool deliverTo(void* expectedClientProcess, const LocalSessionBootstrap&,
                    unsigned timeoutMs = 2000);
     void cancel(); // Safe while deliverTo is waiting; no raw handle is exposed.
+    void close(); // Cancel, drain any in-flight delivery, and release the endpoint.
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
