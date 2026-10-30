@@ -324,3 +324,17 @@ current trusted-owner booleans are preconditions, not cryptographic identity
 verification. Enable a user flow only after provisioning and transport ownership
 are integrated. A real two-machine TLS and host-consent demonstration remains
 separate work.
+
+## Final host dispatch boundary
+
+The JUCE host decision handler drains queued transport facts before reading its
+session grant. Final approval consumption and the short select/arm mutation also
+share the transport queue mutex with admission and termination. An accepted
+termination, replacement epoch, or control downgrade therefore blocks a stale UI
+grant even before the UI timer drains that event. Rejected full-queue admissions
+do not change this authority. UI refresh and device work happen after unlocking.
+Callbacks must not re-enter the queue, wait, or perform I/O. An action already
+inside the guard may finish before termination is accepted; this is an ordering
+guarantee at native queue admission, not instantaneous physical disconnect
+notification. Tests cover stale grants, capacity, one-shot approval, and concurrent
+mutation/termination ordering using a fake adapter; they do not execute DAW tracks.

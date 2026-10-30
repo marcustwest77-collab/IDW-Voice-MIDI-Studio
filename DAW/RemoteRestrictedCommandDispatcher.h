@@ -2,6 +2,7 @@
 // Restricted, synchronous dispatch bridge. No DAW operations are implemented here.
 // Only a trusted local host supplies the adapter after explicit approval.
 #include "RemoteHostApprovalDispatchGate.h"
+#include "RemoteTrustedTransportEventQueue.h"
 namespace idw::daw::remote {
 class RemoteDawCommandAdapter {
 public:
@@ -11,6 +12,15 @@ public:
 class RestrictedCommandDispatcher {
 public:
     explicit RestrictedCommandDispatcher(HostApprovalDispatchGate& gate) : gate_(gate) {}
+    // Production UI path: hold transport authority through approval consumption
+    // and the minimal adapter mutation, not through repaint/device/UI refresh.
+    bool dispatchWithActiveTransport(const std::string& id, const Grant& grant,
+                                    const Request& liveState, RemoteDawCommandAdapter& adapter,
+                                    TrustedTransportEventQueue& transport) {
+        return transport.withActiveControlEpoch(grant.sessionEpoch, [&] {
+            return dispatchAfterHostClick(id, grant, liveState, adapter);
+        });
+    }
     bool dispatchAfterHostClick(const std::string& id, const Grant& grant,
                                 const Request& liveState, RemoteDawCommandAdapter& adapter) {
         CommandMessage approved;
