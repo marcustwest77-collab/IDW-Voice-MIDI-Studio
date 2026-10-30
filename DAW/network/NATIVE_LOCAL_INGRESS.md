@@ -307,6 +307,24 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+`windows_native_bootstrap.receive_windows_bootstrap` consumes the existing C++
+private named-pipe protocol from Python. The trusted caller supplies a held server
+process handle (query and SYNCHRONIZE rights), plus the epoch, certificate pin
+and connection nonce from its actual TLS owner. The consumer duplicates the
+borrowed handle, validates the exact local pipe namespace, checks the pipe server
+PID against that still-living process before reading, then validates all bootstrap
+binding fields before invoking its transactional consumer. It acknowledges only
+after that callback returns True within the shared deadline. Overlapped reads and
+writes support cancellation and drain pending operations before freeing storage.
+No PID-based process opening, network fallback, command-line secret, or automatic
+activation is added. Python credential storage cannot promise a secure wipe.
+If delivery or acknowledgment fails, discard captured data; the native provider
+rolls back its session. The callback itself must be bounded by its trusted owner.
+Non-Windows consumers fail closed. Windows tests use the actual C++ pipe provider
+and live localhost mTLS/native review path; the fixture passes only non-secret pipe
+discovery over its captured stdout. Other platform tests retain their existing
+private test-stdio fixture and do not claim protected production provisioning.
+
 `native_tls_receiver.NativeTLSLoopbackReceiver` now owns the explicit, single-use
 IPv4 localhost accept and mTLS handshake before calling the live session owner.
 Construction binds an ephemeral port; importing the module opens nothing. There

@@ -132,14 +132,15 @@ jobs:
           set -euo pipefail
           fixture=remote-test-bin/native-local-review
           if [[ "${{ runner.os }}" == "Windows" ]]; then fixture+=.exe; fi
-          compile=(g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteNativeLocalReviewFixture.cpp DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp -o "$fixture" -pthread)
-          if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32 -lbcrypt); fi
+          compile=(g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteNativeLocalReviewFixture.cpp DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp DAW/RemoteWindowsBootstrapChannel.cpp -o "$fixture" -pthread)
+          if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32 -lbcrypt -ladvapi32); fi
           if [[ "${{ runner.os }}" == "macOS" ]]; then compile+=(-framework Security); fi
           "${compile[@]}"
           python -c "import shutil; assert shutil.which('openssl'), 'OpenSSL CLI required for integration coverage'"
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_native_local_bridge.py -v
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_native_tls_session.py -v
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_native_tls_receiver.py -v
+          IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_windows_native_bootstrap.py -v
 
       - name: Test mTLS approved client certificate pinning
         shell: bash

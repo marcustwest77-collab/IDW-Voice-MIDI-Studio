@@ -173,10 +173,10 @@ if(IDW_BUILD_DAW)
         set_tests_properties(IDWDAWWindowsBridgeSession PROPERTIES TIMEOUT 30)
         # Test fixture is driven by the Python mTLS integration test, never run alone.
         add_executable(IDWDAWNativeLocalReviewFixture DAW/tests/RemoteNativeLocalReviewFixture.cpp
-            DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
+            DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp DAW/RemoteWindowsBootstrapChannel.cpp)
         target_link_libraries(IDWDAWNativeLocalReviewFixture PRIVATE Threads::Threads)
         if(WIN32)
-            target_link_libraries(IDWDAWNativeLocalReviewFixture PRIVATE ws2_32 bcrypt)
+            target_link_libraries(IDWDAWNativeLocalReviewFixture PRIVATE ws2_32 bcrypt advapi32)
         endif()
         if(APPLE)
             target_link_libraries(IDWDAWNativeLocalReviewFixture PRIVATE "${IDW_SECURITY_FRAMEWORK}")

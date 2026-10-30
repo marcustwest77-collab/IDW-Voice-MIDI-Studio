@@ -15,9 +15,11 @@
 #include <unistd.h>
 #endif
 #include "../RemoteLocalBootstrapWire.h"
+#include "../RemoteWindowsBootstrapChannel.h"
 #include "../RemoteTransportSessionLifecycle.h"
 #include "../RemoteValidatedCommandReviewReceiver.h"
 #include <iostream>
+#include <cstdlib>
 using namespace idw::daw::remote;
 
 bool privateStdio() {
@@ -41,8 +43,23 @@ bool readControl(std::string& line) {
     }
     return false;
 }
-int main() {
+int main(int argc, char** argv) {
     if (!privateStdio()) return 2; // Never print a credential to a terminal/file.
+    const bool privateBootstrap=argc==3 && std::string(argv[1])=="--private-bootstrap";
+    if (argc!=1 && !privateBootstrap) return 2;
+    WindowsBootstrapChannel channel;
+#if defined(_WIN32)
+    struct PeerHandle { HANDLE value=nullptr; ~PeerHandle() { if(value) CloseHandle(value); } } peer;
+    if (privateBootstrap) {
+        char* end=nullptr;
+        const auto pid=std::strtoul(argv[2],&end,10);
+        if (!end || *end || pid==0 || pid==GetCurrentProcessId()) return 2;
+        peer.value=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,pid);
+        if (!peer.value || !channel.create()) return 2;
+    }
+#else
+    if (privateBootstrap) return 2;
+#endif
     std::string setup;
     if (!readControl(setup) || setup.size() != 129 || setup[64] != '|' ||
         !validBootstrapHex(setup.substr(0, 64)) || !validBootstrapHex(setup.substr(65))) return 3;
@@ -52,7 +69,16 @@ int main() {
     LocalSessionOwner owner(events);
     LocalSocketReceiver::Options options;
     options.sessionTimeoutMs = 60000;
-    if (!owner.start(options, transport, consent, [](const LocalSessionBootstrap& bootstrap) {
+    if (!owner.start(options, transport, consent, [&](const LocalSessionBootstrap& bootstrap) {
+#if defined(_WIN32)
+        if (privateBootstrap) {
+            const auto name=channel.name();
+            std::string ascii;
+            for (const auto c:name) { if(c>127) return false;ascii.push_back(static_cast<char>(c)); }
+            std::cout << "PIPE " << ascii << '\n' << std::flush;
+            return channel.deliverTo(peer.value,bootstrap);
+        }
+#endif
         LocalBootstrapBytes bytes{};
         if (!encodeLocalBootstrap(bootstrap, bytes)) return false;
         std::cout.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());

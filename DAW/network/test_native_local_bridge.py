@@ -104,14 +104,29 @@ class NativeBridgeUnitTests(unittest.TestCase):
 
 class NativeFixture:
     """Test-only stdio control. Credentials stay in private captured pipes."""
-    def __init__(self, fingerprint, channel):
-        self.process = subprocess.Popen([os.environ["IDW_NATIVE_LOCAL_FIXTURE"]],
+    def __init__(self, fingerprint, channel, *, private_bootstrap=False, receive=None):
+        arguments = [os.environ["IDW_NATIVE_LOCAL_FIXTURE"]]
+        if private_bootstrap:
+            arguments += ["--private-bootstrap", str(os.getpid())]
+        self.process = subprocess.Popen(arguments,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
             close_fds=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         try:
             self.process.stdin.write((fingerprint + "|" + channel + "\n").encode("ascii"))
             self.process.stdin.flush()
-            self.bootstrap = NativeLocalBootstrap.decode(self._read(207))
+            if private_bootstrap:
+                from windows_native_bootstrap import receive_windows_bootstrap
+                discovery = self._read()
+                if not discovery.startswith(b"PIPE ") or not discovery.endswith(b"\n"):
+                    raise RuntimeError("native pipe discovery unavailable")
+                accepted = []
+                if not (receive or receive_windows_bootstrap)(discovery[5:-1].decode("ascii"),
+                        int(self.process._handle), expected_epoch=45, expected_peer_sha256=fingerprint,
+                        expected_connection_id=channel, consume=lambda value: (accepted.append(value) or True)):
+                    raise RuntimeError("native private bootstrap rejected")
+                self.bootstrap = accepted[0]
+            else:
+                self.bootstrap = NativeLocalBootstrap.decode(self._read(207))
         except Exception:
             self.close()
             raise
