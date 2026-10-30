@@ -67,7 +67,8 @@ bool sendCommand(const LocalSessionBootstrap& bootstrap, const std::string& requ
 std::wstring startedEvent(DWORD parent) { return L"Local\\IDW-BridgeTestStarted-" + std::to_wstring(parent); }
 int childMain(int argc, char** argv) {
     if (argc == 2) { Sleep(15000); return 0; } // Owned descendant fixture.
-    if (argc != 4 || std::string(argv[1]) != "--idw-native-bootstrap") return 2;
+    const bool offerMode=argc==5 && std::string(argv[1])=="--idw-native-offer";
+    if (!offerMode && (argc != 4 || std::string(argv[1]) != "--idw-native-bootstrap")) return 2;
     const auto parentId = static_cast<DWORD>(std::strtoul(argv[3], nullptr, 10));
     const auto path = selfPath();
     if (path.find(L"-stall.exe") != std::wstring::npos) {
@@ -78,6 +79,9 @@ int childMain(int argc, char** argv) {
     Handle parent{OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, parentId)};
     if (!parent.value) return 3;
     const std::string ascii(argv[2]);
+    LocalTLSOffer offer;
+    if(offerMode) offer={std::strtoull(argv[4],nullptr,10),std::string(64,'a'),std::string(64,'b'),13};
+    if(offerMode && path.find(L"-wrong-epoch.exe")!=std::wstring::npos) ++offer.epoch;
     const bool result = receiveWindowsBootstrap(std::wstring(ascii.begin(), ascii.end()), parent.value,
         [&](const LocalSessionBootstrap& bootstrap) {
             std::string request = "managed_bridge";
@@ -92,7 +96,7 @@ int childMain(int argc, char** argv) {
             }
             return bootstrap.peerSha256 == std::string(64, 'a') &&
                    bootstrap.connectionId == std::string(64, 'b') && sendCommand(bootstrap, request);
-        }, 3000);
+        }, 3000,offerMode?&offer:nullptr);
     if (!result) return 4;
     Sleep(path.find(L"-exit.exe") != std::wstring::npos ? 100 : 15000);
     return 0;
@@ -225,11 +229,78 @@ int main(int argc, char** argv) {
       assert(scoped.start(executable, approved, options, transport, consent));
       scopedChild.value = OpenProcess(SYNCHRONIZE, FALSE, scoped.processId()); }
     assert(scopedChild.value && WaitForSingleObject(scopedChild.value, 2000) == WAIT_OBJECT_0);
-    session.stop();
+    session.stop();queue.drain();
+    // Two-stage managed launch uses synthetic TLS offers from the pinned child.
+    // Actual localhost TLS/private offer coverage is in the Python integration suite.
+    auto approveOffer=[&](const LocalTLSOffer& offer,LocalHostConsent& grant,const std::atomic<bool>& canceled) {
+        assert(queue.drain().empty()); // No native admission before host consent.
+        if(canceled.load()) return false;
+        grant={offer.epoch,offer.peerSha256,offer.connectionId,true,true};return true;
+    };
+    assert(session.startWithOffer(executable,approved,options,200,std::string(64,'a'),approveOffer));
+    Handle offerChild{OpenProcess(SYNCHRONIZE,FALSE,session.processId())};
+    assert(offerChild.value && session.running());
+    events=queue.drain();assert(events.size()==2 && events.back().wire=="1|200|1|managed_bridge|arm|1");
+    LocalTransportBinding offered{200,std::string(64,'a'),std::string(64,'b'),true};
+    auto wrongOffer=offered;wrongOffer.connectionId=std::string(64,'c');
+    assert(!session.onTransportLost(wrongOffer));assert(session.onTransportLost(offered));
+    assert(WaitForSingleObject(offerChild.value,2000)==WAIT_OBJECT_0);
+    events=queue.drain();assert(events.size()==1 && events.front().epoch==200);
+    bool called=false;
+    auto denyOffer=[&](const LocalTLSOffer&,LocalHostConsent&,const std::atomic<bool>&) {called=true;return false;};
+    assert(!session.startWithOffer(executable,approved,options,201,std::string(64,'c'),denyOffer));
+    assert(!called && queue.drain().empty() && session.processId()==0);
+    // A rejected offer consumes its planned epoch, even before native admission.
+    assert(!session.startWithOffer(executable,approved,options,201,std::string(64,'a'),approveOffer));
+    assert(!session.startWithOffer(executable,approved,options,202,std::string(64,'a'),denyOffer));
+    assert(called && queue.drain().empty() && session.processId()==0);
+    auto mismatched=[](const LocalTLSOffer& offer,LocalHostConsent& grant,const std::atomic<bool>&) {
+        grant={offer.epoch,offer.peerSha256,std::string(64,'c'),true,true};return true;
+    };
+    assert(!session.startWithOffer(executable,approved,options,203,std::string(64,'a'),mismatched));
+    assert(queue.drain().empty() && session.processId()==0);
+    auto late=[&](const LocalTLSOffer& offer,LocalHostConsent& grant,const std::atomic<bool>& canceled) {
+        Sleep(1100);return approveOffer(offer,grant,canceled);
+    };
+    assert(!session.startWithOffer(executable,approved,options,204,std::string(64,'a'),late,1000));
+    assert(queue.drain().empty() && session.processId()==0);
+    ResetEvent(entered.value);
+    bool offerResult=true;
+    std::thread waitingOffer([&] {
+        offerResult=session.startWithOffer(stalled.path,approved,options,205,std::string(64,'a'),approveOffer,5000);
+    });
+    assert(WaitForSingleObject(entered.value,3000)==WAIT_OBJECT_0);
+    auto stoppedAt=std::chrono::steady_clock::now();session.stop();waitingOffer.join();
+    assert(!offerResult && queue.drain().empty() && session.processId()==0);
+    assert(std::chrono::steady_clock::now()-stoppedAt<std::chrono::seconds(1));
+    for(bool loss:{false,true}) {
+        std::atomic<bool> inConsent{false};
+        const std::uint64_t epoch=loss?207:206;
+        auto waitingConsent=[&](const LocalTLSOffer&,LocalHostConsent&,const std::atomic<bool>& canceled) {
+            inConsent.store(true);while(!canceled.load()) Sleep(5);return false;
+        };
+        std::thread startingOffer([&] {
+            offerResult=session.startWithOffer(executable,approved,options,epoch,std::string(64,'a'),waitingConsent,5000);
+        });
+        const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+        while(!inConsent.load() && std::chrono::steady_clock::now()<until) Sleep(5);
+        assert(inConsent.load());assert(!session.onTransportLost(offered)); // Stale epoch cannot cancel startup.
+        stoppedAt=std::chrono::steady_clock::now();
+        if(loss) assert(session.onTransportLost({epoch,std::string(64,'a'),std::string(64,'b'),true}));
+        else session.stop();
+        startingOffer.join();
+        assert(!offerResult && queue.drain().empty() && session.processId()==0);
+        assert(std::chrono::steady_clock::now()-stoppedAt<std::chrono::seconds(1));
+    }
+    Copy wrongEpoch(L"-wrong-epoch");called=false;
+    assert(!session.startWithOffer(wrongEpoch.path,approved,options,208,std::string(64,'a'),denyOffer));
+    assert(!called && queue.drain().empty() && session.processId()==0);
 #else
     std::string output = "unchanged";
     assert(!inspectWindowsBridgeSha256(L"anything", output) && output == "unchanged");
     assert(!session.start(L"anything", std::string(64, 'a'), options, transport, consent));
+    assert(!session.startWithOffer(L"anything",std::string(64,'a'),options,1,std::string(64,'a'),
+        [](const LocalTLSOffer&,LocalHostConsent&,const std::atomic<bool>&){assert(false);return true;}));
     assert(!session.running() && session.processId() == 0 && queue.drain().empty());
     session.stop();
 #endif

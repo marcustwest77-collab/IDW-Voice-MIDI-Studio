@@ -224,8 +224,10 @@ bool WindowsBootstrapChannel::deliverTo(void* expectedClientProcess,
 #endif
 }
 bool receiveWindowsBootstrap(const std::wstring& name, void* expectedServerProcess,
-        const LocalSessionOwner::Provisioner& consume, unsigned timeoutMs) {
+        const LocalSessionOwner::Provisioner& consume, unsigned timeoutMs, const LocalTLSOffer* offer) {
 #if defined(_WIN32)
+    LocalTLSOfferBytes offerBytes{};
+    if(offer && !encodeTLSOffer(*offer,offerBytes)) return false;
     const auto peer = static_cast<HANDLE>(expectedServerProcess);
     if (!consume || !allowedName(name) || timeoutMs < 20 || timeoutMs > 5000 ||
         !alive(peer) || GetProcessId(peer) == 0) return false;
@@ -242,16 +244,19 @@ bool receiveWindowsBootstrap(const std::wstring& name, void* expectedServerProce
     if (pipe.value == INVALID_HANDLE_VALUE || !GetNamedPipeServerProcessId(pipe.value, &pid) ||
         pid != GetProcessId(peer) || !alive(peer)) return false;
     const std::atomic<bool> canceled{false};
+    if(offer && !transfer(pipe.value,true,offerBytes.data(),offerBytes.size(),deadline,peer,canceled)) return false;
     LocalBootstrapBytes bytes{};
     LocalSessionBootstrap bootstrap;
     if (!transfer(pipe.value, false, bytes.data(), bytes.size(), deadline, peer, canceled) ||
         !decodeLocalBootstrap(bytes, bootstrap)) return false;
+    if(offer && (bootstrap.epoch!=offer->epoch || bootstrap.peerSha256!=offer->peerSha256 ||
+        bootstrap.connectionId!=offer->connectionId)) return false;
     try { if (!consume(bootstrap)) return false; }
     catch (...) { return false; }
     auto ack = std::string(receipt);
     return transfer(pipe.value, true, reinterpret_cast<unsigned char*>(&ack[0]), ack.size(), deadline, peer, canceled);
 #else
-    (void)name; (void)expectedServerProcess; (void)consume; (void)timeoutMs;
+    (void)name; (void)expectedServerProcess; (void)consume; (void)timeoutMs; (void)offer;
     return false;
 #endif
 }

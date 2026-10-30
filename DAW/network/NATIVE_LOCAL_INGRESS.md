@@ -307,6 +307,31 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+`WindowsBridgeSession::startWithOffer` now manages the two-stage path. It locks
+and verifies the explicitly approved executable, launches it hidden/suspended,
+assigns the kill-on-close job, then resumes with fixed `--idw-native-offer`, pipe
+name, host PID and planned epoch arguments. No native command listener or grant
+is created before the held child supplies a private offer matching the approved
+peer pin and planned epoch, and a trusted local controller returns exact-binding
+host consent. The pinned helper is responsible for actual TLS verification;
+the offer remains data, not cryptographic proof by itself.
+Consent callbacks run synchronously on the caller's background startup thread,
+must remain bounded, honor the cancellation flag, and never re-enter the manager
+or retain references. Stop cancels a pending offer; after an offer is published,
+matching transport loss can also interrupt a waiting consent callback. Binding
+publication uses immutable atomic snapshots so stale callbacks cannot race its
+initialization or affect a newer session. Expired consent creates no native
+admission. A failed startup consumes its planned epoch. Failure, timeout,
+denial or cancellation cleans up the owned helper/job; successful sessions use
+the existing listener/process monitor and scoped native revocation.
+The C++ bootstrap consumer can send an offer and validates the returned binding
+before consumption. Managed process tests use synthetic TLS offers and cover
+success, pin/epoch/consent rejection, late consent, stale loss, and cancellation
+while waiting for offer or consent. Separate Python tests verify actual localhost
+mTLS/private-offer/native-review behavior. These are separate demonstrations;
+the manager has not yet launched a packaged real TLS bridge. Workstation UI and
+trusted artifact distribution remain unfinished; nothing starts by default.
+
 The private Windows channel now supports a two-stage session offer. The trusted
 bridge sends a fixed 142-byte `IDWO` version-1 record (host-assigned epoch, actual
 peer certificate fingerprint, fresh connection nonce and TLS 1.2/1.3 version).
