@@ -307,6 +307,26 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+`windows_bridge_launch` now parses only the fixed `--idw-native-offer`, private
+pipe discovery, parent PID and epoch arguments emitted by the managed launcher.
+It rejects extra arguments, noncanonical numbers, remote pipe paths and invalid
+identity ranges. `hold_launch_parent` compares the argument with the actual OS
+parent relationship, opens only that parent with non-inheritable query/synchronize
+rights, requires it to be alive and strictly older than this process, and holds
+the handle only for its context. A recycled or ambiguous creation time fails
+closed. The protected pipe consumer still verifies its actual server process
+against that held handle before sending an offer or reading credentials.
+`receive_managed_windows_lease` composes this launch scope with the existing
+transactional private offer/lease path, forwarding session cancellation/deadline.
+This is a launch relationship check, not publisher trust or a secure packaging
+policy. Same-user injection and privileged parent spoofing remain outside this
+guard. Approved host/bridge artifacts and TLS configuration must still come from
+independent trusted policy; do not treat an arbitrary parent as an approved host.
+Tests exercise real Windows parent acquisition, unrelated living PID rejection,
+scoped handle closure and injected creation-time ordering failure. Composition
+is unit-tested; this does not claim a packaged Python bridge has been launched
+by the native manager. The module adds no CLI activation or automatic listener.
+
 `WindowsBridgeSession::startWithOffer` now manages the two-stage path. It locks
 and verifies the explicitly approved executable, launches it hidden/suspended,
 assigns the kill-on-close job, then resumes with fixed `--idw-native-offer`, pipe

@@ -146,6 +146,7 @@ jobs:
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_native_command_approval.py -v
           python DAW/network/test_native_provisioning_lifetime.py -v
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_native_tls_offer.py -v
+          python DAW/network/test_windows_bridge_launch.py -v
 
       - name: Test mTLS approved client certificate pinning
         shell: bash
