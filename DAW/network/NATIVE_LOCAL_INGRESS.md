@@ -208,12 +208,53 @@ SHA-256 vector, pin/path/consent rejection, correctly pinned invalid-image rollb
 bootstrap timeout, stop/loss during startup, stale loss, restart/destruction and
 termination of a real descendant process. These fixtures do not implement TLS.
 
+## Verified Python TLS sink to native review
+
+`native_local_bridge.py` adapts the existing `VerifiedEventProducer` sink to the
+native receiver's protocol, separately from the older JSON IPC prototype.
+`NativeLocalBootstrap.decode` accepts only the exact 207-byte native record and
+validates every field. Its representation redacts credentials. Constructing the
+bridge requires the expected peer name plus the trusted TLS owner's certificate
+fingerprint and connection ID, both matching that bootstrap. These supplied
+strings remain preconditions, not a substitute for TLS verification.
+
+Each event must name that peer/epoch and contain a canonical, bounded arm/select
+wire command with a valid track index. The client sends the native secret/newline
+envelope to `127.0.0.1` only, then performs write-half shutdown before reading the
+native queue receipt. One absolute deadline covers connect/send/shutdown/receipt.
+Replay authority remains native; a failed delivery does not invent a new sequence
+or approve a command. `close` disables further submissions but cannot securely
+wipe Python string copies. A success receipt is queue admission only; fresh DAW
+state and explicit host review still govern the next stage.
+
+The client does not authenticate the process owning the TCP receiver port. Use
+it only with protected bootstrap and host-controlled bridge/receiver lifetimes;
+it is not a production replacement for the managed Windows bridge. It starts no
+listener, grants no permission and logs no credentials.
+
+The new three-platform integration runs a certificate-verified/pinned localhost
+mTLS server with peer mapping, host approval ledger and replay guard, through
+`VerifiedEventProducer` and this client into the actual C++ localhost receiver,
+trusted queue, lifecycle/mailbox and pending host-review coordinator. Tests reject
+missing client certificates, wrong pins/peer mappings, denied/missing approval,
+recording actions, malformed messages, replay and stale post-revocation commands.
+A busy DAW rejects arming at native review even when the queue receipt succeeded.
+
+`RemoteNativeLocalReviewFixture` is test-only. It refuses terminal/file stdio,
+emits bootstrap bytes only to a captured parent pipe, and offers bounded local
+status/revocation controls. Tests use throwaway certificates and real TLS
+handshakes, but the fixture's initial native admission and connection ID are
+synthetic trusted setup. Its parent stdio is not the Windows private pipe protocol.
+The tests do not launch the JUCE GUI or exercise a packaged managed TLS bridge,
+and no test approves or executes DAW actions. They are all on one computer.
+
 ## Remaining production work
 
 Supply the real bridge executable and trusted artifact pin/distribution policy,
 then connect its private bootstrap and trusted binding/consent/loss hooks to the
-actual verified remote TLS transport. The managed launcher currently exercises
-native test bridge fixtures. Implement protected provisioning for Linux/macOS before enabling
+actual verified remote TLS transport. The Python/native protocol handoff now has
+localhost mTLS integration coverage; the managed launcher still exercises native
+test bridge fixtures rather than a packaged TLS bridge. Implement protected provisioning for Linux/macOS before enabling
 those platforms. Current tests use synthetic TLS-owner evidence; Windows has
 real child-process pipe/socket coverage, and other platforms test the codec and
 fail-closed unsupported path.
