@@ -71,7 +71,7 @@ class NativeLeaseTests(unittest.TestCase):
 
 class SessionHarness:
     def __init__(self, cert, key, guest_cert, guest_key, *, pin=None, allowed=True, mismatch=None,
-                 verify_mode=ssl.CERT_REQUIRED, **limits):
+                 verify_mode=ssl.CERT_REQUIRED, owned_receiver=False, **limits):
         self.cert, self.guest_cert, self.guest_key = cert, guest_cert, guest_key
         self.fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(guest_cert.read_text())).hexdigest()
         self.pin = pin if pin is not None else self.fingerprint
@@ -83,13 +83,6 @@ class SessionHarness:
         self.fixture = None
         self.revocations = 0
         self.client_socket = None
-        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
-            self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-        self.listener.bind(("127.0.0.1", 0))
-        self.port = self.listener.getsockname()[1]
-        self.listener.listen(1)
-        self.listener.settimeout(3)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(str(cert), str(key))
@@ -97,6 +90,20 @@ class SessionHarness:
         context.verify_mode = verify_mode
         options = dict(command_timeout=2.0, session_timeout=6.0, max_commands=8)
         options.update(limits)
+
+        self.receiver = None
+        if owned_receiver:
+            from native_tls_receiver import NativeTLSLoopbackReceiver
+            self.receiver = NativeTLSLoopbackReceiver(context)
+            self.port = self.receiver.port
+        else:
+            self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            self.listener.bind(("127.0.0.1", 0))
+            self.port = self.listener.getsockname()[1]
+            self.listener.listen(1)
+            self.listener.settimeout(3)
 
         def provide(identity):
             self.identities.append(identity)
@@ -114,18 +121,20 @@ class SessionHarness:
             return NativeTLSLease(bootstrap, revoke)
 
         def serve():
+            session_options = dict(expected_peer_id="guest", approved_client_sha256=self.pin,
+                epoch=45, host_consent=lambda _: self.allowed, provide_native_lease=provide,
+                host_approval_ledger=self.ledger, **options)
             try:
-                with self.listener:
-                    raw, _ = self.listener.accept()
-                    with raw:
-                        raw.settimeout(2)
-                        with context.wrap_socket(raw, server_side=True) as secure:
-                            result = run_native_tls_session(secure, expected_peer_id="guest",
-                                approved_client_sha256=self.pin, epoch=45,
-                                host_consent=lambda _: self.allowed,
-                                provide_native_lease=provide, host_approval_ledger=self.ledger,
-                                cancel=self.cancel, **options)
-                            self.results.append(result)
+                if self.receiver is not None:
+                    result = self.receiver.serve_once(**session_options)
+                else:
+                    with self.listener:
+                        raw, _ = self.listener.accept()
+                        with raw:
+                            raw.settimeout(2)
+                            with context.wrap_socket(raw, server_side=True) as secure:
+                                result = run_native_tls_session(secure, cancel=self.cancel, **session_options)
+                self.results.append(result)
             except Exception as error:
                 self.errors.append(error)
         self.worker = threading.Thread(target=serve, daemon=True)
@@ -151,11 +160,19 @@ class SessionHarness:
         if self.worker.is_alive():
             raise RuntimeError("TLS session fixture did not stop")
 
-    def close(self):
+    def cancel_session(self):
         self.cancel.set()
+        if self.receiver is not None:
+            self.receiver.close()
+
+    def close(self):
+        self.cancel_session()
         if self.client_socket is not None:
             self.client_socket.close()
-        self.listener.close()
+        if self.receiver is not None:
+            self.receiver.close()
+        else:
+            self.listener.close()
         self.worker.join(timeout=5)
         if self.fixture is not None:
             self.fixture.close()
@@ -221,7 +238,7 @@ class LiveNativeTLSTests(unittest.TestCase):
             harness.connect()
             self.ready(harness)
             started = time.monotonic()
-            harness.cancel.set()
+            harness.cancel_session()
             self.revoked(harness)
             self.assertLess(time.monotonic() - started, 1)
             self.assertEqual(harness.errors, [])
