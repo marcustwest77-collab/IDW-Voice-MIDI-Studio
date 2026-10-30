@@ -307,6 +307,27 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+`serve_managed_windows_tls_once` now assembles the Python managed runtime. It
+holds the validated actual launch parent before binding a localhost TLS listener,
+keeps that handle through native lease teardown, forwards the verified TLS
+identity through the private offer/transactional bootstrap, and monitors parent
+lifetime plus explicit owner cancellation. Parent exit/cancellation closes the
+receiver; the existing TLS finalizer clears approvals and attempts authenticated
+native revocation. All listener, watcher and parent resources are closed on exit.
+TLS configuration, approved peer pin, local consent and exact command approvals
+remain trusted caller policy. The readiness callback receives only a non-secret
+localhost port and must use trusted discovery; it cannot grant native access.
+The module has no CLI or automatic startup and is not a packaged executable.
+Windows integration tests now use a native C++ test host that launches an actual
+Python child in an owned job. Only readiness stdout and NUL stdin are inherited;
+credentials stay on the process-verified private pipe. Real parent acquisition,
+mTLS, private offer, native pending review and socket revocation run together.
+Tests cover EOF, payload substitution, rejected host/client pins, owner
+cancellation and host exit. This test launcher is not the production pinned
+`WindowsBridgeSession` launcher and uses explicit trusted test paths/configuration.
+It does not demonstrate production artifact distribution, real GUI consent,
+native DAW action execution, or two-machine collaboration.
+
 `windows_bridge_launch` now parses only the fixed `--idw-native-offer`, private
 pipe discovery, parent PID and epoch arguments emitted by the managed launcher.
 It rejects extra arguments, noncanonical numbers, remote pipe paths and invalid
