@@ -1,6 +1,9 @@
 // Test-only process: private parent stdio -> native socket -> queue/host review.
 // Not the production bridge, JUCE GUI, or a TLS identity provider. Never deploy.
 #if defined(_WIN32)
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -20,6 +23,7 @@
 #include "../RemoteValidatedCommandReviewReceiver.h"
 #include <iostream>
 #include <cstdlib>
+#include "RemotePythonTLSChildFixture.h"
 using namespace idw::daw::remote;
 
 bool privateStdio() {
@@ -45,18 +49,23 @@ bool readControl(std::string& line) {
 }
 int main(int argc, char** argv) {
     if (!privateStdio()) return 2; // Never print a credential to a terminal/file.
-    const bool privateOffer=argc==3 && std::string(argv[1])=="--private-offer";
+    const bool runtimeChild=argc==5 && std::string(argv[1])=="--runtime-child-host";
+    const bool privateOffer=runtimeChild || (argc==3 && std::string(argv[1])=="--private-offer");
     const bool privateBootstrap=privateOffer || (argc==3 && std::string(argv[1])=="--private-bootstrap");
     if (argc!=1 && !privateBootstrap) return 2;
     WindowsBootstrapChannel channel;
 #if defined(_WIN32)
     struct PeerHandle { HANDLE value=nullptr; ~PeerHandle() { if(value) CloseHandle(value); } } peer;
+    FixtureHandle runtimeJob;
     if (privateBootstrap) {
-        char* end=nullptr;
-        const auto pid=std::strtoul(argv[2],&end,10);
-        if (!end || *end || pid==0 || pid==GetCurrentProcessId()) return 2;
-        peer.value=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,pid);
-        if (!peer.value || !channel.create()) return 2;
+        if(!runtimeChild) {
+            char* end=nullptr;
+            const auto pid=std::strtoul(argv[2],&end,10);
+            if (!end || *end || pid==0 || pid==GetCurrentProcessId()) return 2;
+            peer.value=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZE,FALSE,pid);
+            if(!peer.value) return 2;
+        }
+        if (!channel.create()) return 2;
     }
 #else
     if (privateBootstrap) return 2;
@@ -73,7 +82,12 @@ int main(int argc, char** argv) {
     };
     if(privateOffer) {
         LocalTLSOffer offer;
-        if(!emitPipe() || !channel.receiveOfferFrom(peer.value,offer) ||
+        if(runtimeChild) {
+            std::string ready;
+            if(!launchPythonTLSFixture(channel.name(),peer.value,runtimeJob,ready)) return 6;
+            std::cout << ready << '\n' << std::flush;
+        } else if(!emitPipe()) return 6;
+        if(!channel.receiveOfferFrom(peer.value,offer,runtimeChild?5000:2000) ||
             offer.epoch!=45 || offer.peerSha256!=setup.substr(0,64)) return 6;
         // Trusted test bridge owns the actual TLS socket. This fixture policy
         // checks its approved pin/epoch; production still needs real host consent.

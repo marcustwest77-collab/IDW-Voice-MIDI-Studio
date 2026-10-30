@@ -111,6 +111,11 @@ def hold_launch_parent(launch):
         _close(parent)
 
 
+def launch_parent_is_alive(handle):
+    """Lifetime check only, for a handle borrowed from hold_launch_parent."""
+    return os.name == "nt" and type(handle) is int and handle > 0 and _wait(handle, 0) == 258
+
+
 def receive_managed_windows_lease(launch, identity, *, cancel, deadline):
     """Compose verified launch scope, private session offer and revocable lease."""
     if (not isinstance(launch, ManagedBridgeLaunch) or not isinstance(identity, TLSConnectionIdentity) or
