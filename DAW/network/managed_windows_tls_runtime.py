@@ -46,7 +46,7 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
             def watch_parent():
                 while not stopped.wait(.025):
                     if cancel.is_set() or not launch_api.launch_parent_is_alive(parent):
-                        interrupted.set();receiver.close();return
+                        interrupted.set();receiver.request_cancel();return
             watcher = threading.Thread(target=watch_parent, name="idw-native-parent-watch")
             watcher.start()
             try:

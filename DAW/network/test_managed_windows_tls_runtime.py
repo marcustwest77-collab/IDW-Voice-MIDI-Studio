@@ -12,12 +12,14 @@ import time
 import threading
 import unittest
 from unittest.mock import patch
+from contextlib import contextmanager
 
 from managed_windows_tls_runtime import serve_managed_windows_tls_once
 from native_command_approval import NativeCommandApprovalLedger
 from windows_bridge_launch import ManagedBridgeLaunch, parse_managed_bridge_arguments
 from loopback_transport import send_frame, receive_frame
 from test_native_local_bridge import NativeFixture, issue_certificate
+from native_tls_receiver import NativeTLSLoopbackReceiver
 
 WIRE = b"1|45|1|managed_runtime|arm|1"
 
@@ -33,6 +35,39 @@ class RuntimeBoundaryTests(unittest.TestCase):
                     host_approval_ledger=NativeCommandApprovalLedger(),
                     on_listening=lambda _: self.fail("unverified launch must not advertise"))
             receiver.assert_not_called()
+
+    def test_cancellation_at_serve_entry_is_graceful_and_disposes_owned_listener(self):
+        launch = ManagedBridgeLaunch("\\\\.\\pipe\\IDW-LocalBootstrap-" + "a" * 64, 123, 45)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2;context.verify_mode = ssl.CERT_REQUIRED
+        receiver = NativeTLSLoopbackReceiver(context);cancel = threading.Event()
+        self.addCleanup(receiver.close)
+        original_serve = receiver.serve_once
+        entered = []
+        @contextmanager
+        def hold(_):
+            entered.append(True)
+            try: yield 456
+            finally: entered.pop()
+        def serve(**options):
+            # Precisely after the runtime's last startup cancellation check, but
+            # before the receiver changes ready -> serving. A watcher must not
+            # dispose the receiver in this window.
+            cancel.set()
+            until = time.monotonic() + 1
+            while not receiver._cancel.is_set() and time.monotonic() < until: time.sleep(.005)
+            self.assertTrue(receiver._cancel.is_set())
+            self.assertEqual(entered, [True])
+            return original_serve(**options)
+        with patch("managed_windows_tls_runtime.launch_api.hold_launch_parent", side_effect=hold), \
+                patch("managed_windows_tls_runtime.launch_api.launch_parent_is_alive", return_value=True), \
+                patch("managed_windows_tls_runtime.NativeTLSLoopbackReceiver", return_value=receiver), \
+                patch.object(receiver, "serve_once", side_effect=serve):
+            self.assertEqual(serve_managed_windows_tls_once(launch, context, expected_peer_id="guest",
+                approved_client_sha256="a" * 64, host_consent=lambda _: self.fail("canceled before consent"),
+                host_approval_ledger=NativeCommandApprovalLedger(), on_listening=lambda _: None, cancel=cancel), 0)
+        self.assertEqual(receiver._listener.fileno(), -1)
+        self.assertEqual(entered, [])
 
 
 class RuntimeFixture(NativeFixture):

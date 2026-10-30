@@ -307,6 +307,20 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+Managed runtime watchers now call `request_cancel()` instead of disposing the
+receiver. A watcher can race the transition from readiness publication into
+`serve_once`; closing a ready receiver in that window previously changed its
+state to closed and caused a single-use error instead of graceful cancellation.
+A cancellation request only sets the lifetime event. The serving scope observes
+it and runs its finalizer; the runtime owner always closes the receiver and joins
+the watcher before releasing the parent handle. Owners that request cancellation
+without serving must still call `close()` to release the listener. Explicit
+`close()` continues to dispose a never-started receiver and prohibit later reuse.
+Regression tests force cancellation at the exact serve-entry boundary using a
+real loopback receiver and a synthetic parent scope, and verify graceful return,
+listener disposal and parent-scope release. Existing real native-parent/child TLS
+and revocation tests remain separate coverage of the complete localhost path.
+
 `serve_managed_windows_tls_once` now assembles the Python managed runtime. It
 holds the validated actual launch parent before binding a localhost TLS listener,
 keeps that handle through native lease teardown, forwards the verified TLS

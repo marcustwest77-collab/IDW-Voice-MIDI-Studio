@@ -55,9 +55,17 @@ class NativeTLSLoopbackReceiver:
     def port(self):
         return self._port
 
+    def request_cancel(self):
+        """Interrupt serving without disposing an owner's not-yet-started scope.
+
+        The owner must still call close or finish serve_once to release sockets.
+        Unlike close, this is safe when a watcher races the start of serve_once.
+        """
+        self._cancel.set()
+
     def close(self):
         with self._lock:
-            self._cancel.set()
+            self.request_cancel()
             if self._state == "ready":
                 self._state = "closed"
                 self._listener.close()

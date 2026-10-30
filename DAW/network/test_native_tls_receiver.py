@@ -54,6 +54,14 @@ class ReceiverBoundaryTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): receiver.serve_once()
             self.assertEqual(receiver._listener.fileno(), -1)
 
+    def test_request_cancel_before_serve_preserves_scope_until_finalization(self):
+        with NativeTLSLoopbackReceiver(context()) as receiver:
+            receiver.request_cancel();receiver.request_cancel()
+            self.assertGreaterEqual(receiver._listener.fileno(), 0)
+            self.assertEqual(receiver.serve_once(), 0)
+            self.assertEqual(receiver._listener.fileno(), -1)
+            with self.assertRaises(RuntimeError): receiver.serve_once()
+
     def test_close_before_serve_and_cancel_during_accept(self):
         receiver = NativeTLSLoopbackReceiver(context());receiver.close();receiver.close()
         with self.assertRaises(RuntimeError): receiver.serve_once()
