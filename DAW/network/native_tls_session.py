@@ -17,6 +17,7 @@ import time
 from channel_bound_session import BoundSession
 from command_protocol import parse_command
 from native_local_bridge import NativeLocalBootstrap, NativeLocalCommandBridge
+from native_command_approval import NativeCommandApprovalLedger
 from replay_guard import ReplayGuard
 from verified_event_producer import VerifiedEventProducer
 
@@ -98,14 +99,15 @@ def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, 
     if not isinstance(secure, ssl.SSLSocket):
         raise TypeError("server TLS socket required")
     bridge = lease = session = None
+    identity = None
+    ledger_admitted = False
     accepted = 0
     try:
         if (not isinstance(expected_peer_id, str) or not _PEER.fullmatch(expected_peer_id) or
                 not isinstance(approved_client_sha256, str) or not _HEX.fullmatch(approved_client_sha256) or
                 type(epoch) is not int or not 1 <= epoch <= 2**64 - 1 or
                 not callable(host_consent) or not callable(provide_native_lease) or
-                not callable(getattr(host_approval_ledger, "contains", None)) or
-                not callable(getattr(host_approval_ledger, "consume", None)) or
+                not isinstance(host_approval_ledger, NativeCommandApprovalLedger) or
                 type(max_commands) is not int or not 1 <= max_commands <= 32 or
                 any(type(value) not in (int, float) or not 0.05 <= value <= limit or not math.isfinite(value)
                     for value, limit in ((session_timeout, 60), (command_timeout, 5))) or
@@ -183,6 +185,9 @@ def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, 
         check(deadline)
         if host_consent(identity) is not True:
             raise PermissionError("host consent denied")
+        if not host_approval_ledger.begin_session(identity.peer_id, identity.epoch, identity.connection_id):
+            raise PermissionError("approval ledger session admission rejected")
+        ledger_admitted = True
         lease = provide_native_lease(identity)
         if not isinstance(lease, NativeTLSLease):
             raise ValueError("native lease required")
@@ -220,11 +225,9 @@ def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, 
             command = parse_command(payload)
             if command["action"] not in ("arm", "select"):
                 raise PermissionError("TLS action not enabled")
-            if not host_approval_ledger.contains(identity.peer_id, identity.epoch, command["request_id"]):
-                raise PermissionError("command lacks host approval")
             guard.inspect(session, payload, identity.peer_id, identity.connection_id)
-            if not host_approval_ledger.consume(identity.peer_id, identity.epoch, command["request_id"]):
-                raise PermissionError("single-use host approval unavailable")
+            if not host_approval_ledger.consume(identity.peer_id, identity.epoch, identity.connection_id, payload):
+                raise PermissionError("exact connection-bound host approval unavailable")
             check(until)
             producer.accepted_command_sink(command, identity.peer_id)
             check(until)
@@ -234,14 +237,18 @@ def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, 
     except _Canceled:
         return accepted
     finally:
-        if session is not None:
-            session.revoke()
         try:
-            if bridge is not None:
-                bridge.close()
+            if ledger_admitted:
+                host_approval_ledger.revoke_session(identity.peer_id, identity.epoch, identity.connection_id)
         finally:
+            if session is not None:
+                session.revoke()
             try:
-                if isinstance(lease, NativeTLSLease):
-                    lease.close()
+                if bridge is not None:
+                    bridge.close()
             finally:
-                secure.close()
+                try:
+                    if isinstance(lease, NativeTLSLease):
+                        lease.close()
+                finally:
+                    secure.close()
