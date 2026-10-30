@@ -72,4 +72,25 @@ int main() {
     events = queue.drain();
     assert(events.size() == 1);
     assert(events.front().epoch == 46);
+    assert(ingress.beginSession(secret, 47, true, true, true));
+    assert(!ingress.receiveFrame(frame("IDW_REVOKE|1|47", replacement)));
+    for (const auto& wire : {"IDW_REVOKE|1|46", "IDW_REVOKE|1|48", "IDW_REVOKE|1|047",
+                             "IDW_REVOKE|2|47", "IDW_REVOKE|1|47|extra"})
+        assert(!ingress.receiveFrame(frame(wire, secret)));
+    assert(ingress.activeForEpoch(47));
+    queue.drain();
+    for (std::size_t i=0;i<TrustedTransportEventQueue::capacity;++i)
+        assert(queue.push({TrustedTransportEvent::Kind::command,47,false,false,false,"filler"}));
+    assert(ingress.receiveFrame(frame("IDW_REVOKE|1|47", secret)));
+    assert(!ingress.activeForEpoch(47));
+    assert(!queue.withActiveControlEpoch(47,[]{assert(false);return true;}));
+    events=queue.drain();
+    assert(events.size()==1 && events.front().kind==TrustedTransportEvent::Kind::authenticationLost);
+    assert(!ingress.receiveFrame(frame("IDW_REVOKE|1|47", secret))); // Never revive/replay.
+    assert(!ingress.receiveFrame(frame("1|47|1|late|arm|1",secret)));
+    assert(ingress.beginSession(replacement,48,true,true,true));
+    assert(!ingress.receiveFrame(frame("IDW_REVOKE|1|47",secret)));
+    assert(!ingress.receiveFrame(frame("IDW_REVOKE|1|47",replacement)));
+    assert(ingress.activeForEpoch(48));
+    ingress.endSession();
 }

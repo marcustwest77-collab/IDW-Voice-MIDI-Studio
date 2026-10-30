@@ -2,7 +2,8 @@
 // Native IPC ingress, not a socket listener. The owner must provision a fresh
 // OS-protected random secret and independently verify TLS identity/host consent.
 // Native protocol: 4-byte BE payload length, then 64 lowercase hex secret bytes,
-// newline, and the existing command wire. This is distinct from Python JSON IPC.
+// newline, and the existing command wire or canonical local lifecycle record.
+// This is distinct from Python JSON IPC; lifecycle records never execute actions.
 #include "RemoteVerifiedLocalCommandQueueAdapter.h"
 #include "RemoteWireFrame.h"
 #include <mutex>
@@ -28,8 +29,8 @@ public:
         return true;
     }
 
-    // One complete bounded frame per call. A future socket worker must assemble
-    // partial reads with StreamDecoder, enforce deadlines, and bind loopback only.
+    // One complete bounded frame per call. The socket worker assembles partial
+    // reads, enforces deadlines, requires frame+FIN, and binds loopback only.
     // Serialization preserves replay state across connections and revocation.
     bool receiveFrame(const std::vector<std::uint8_t>& frame) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -44,6 +45,12 @@ public:
                                       static_cast<unsigned char>(secret_[i]));
         if (difference != 0) return false;
         const auto wire = payload.substr(65);
+        // Separate local lifecycle record, never a remote DAW action. Both the
+        // fresh session secret and exact canonical epoch must match this owner.
+        if (wire == "IDW_REVOKE|1|" + std::to_string(epoch_)) {
+            endSessionLocked();
+            return true; // Terminal event admitted before the socket receipt.
+        }
         CommandMessage parsed;
         if (!parseControlCommand(wire, parsed) || parsed.sessionEpoch != epoch_ ||
             parsed.sequence <= highestSequence_) return false;
@@ -55,13 +62,21 @@ public:
     void endSession(std::uint64_t expectedEpoch = 0) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!active_ || (expectedEpoch != 0 && expectedEpoch != epoch_)) return;
+        endSessionLocked();
+    }
+    bool activeForEpoch(std::uint64_t epoch) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return active_ && epoch_ == epoch;
+    }
+
+private:
+    void endSessionLocked() {
         active_ = false;
         secret_.clear();
         queue_.push({TrustedTransportEvent::Kind::authenticationLost, epoch_,
                      false, false, false, {}});
     }
 
-private:
     static bool validSecret(const std::string& secret) {
         if (secret.size() != 64) return false;
         for (char c : secret)

@@ -230,4 +230,19 @@ int main() {
       assert(scoped.start(options, secret, 50, true, true, true)); }
     terminal = queue.drain();
     assert(terminal.size() == 1 && terminal.front().epoch == 50);
+    assert(server.start(options,secret,51,true,true,true));
+    const auto revokePort=server.port();
+    std::vector<std::uint8_t> revoke;
+    assert(encodeFrame(secret+"\nIDW_REVOKE|1|51",revoke));
+    auto trailingRevoke=revoke;trailingRevoke.push_back(0);
+    assert(sendFrame(revokePort,trailingRevoke)!='1');
+    { Client noFin(revokePort);
+      noFin.sendBytes(revoke.data(),revoke.size());assert(noFin.receipt()!='1'); }
+    assert(ingress.activeForEpoch(51));
+    assert(sendFrame(revokePort,revoke)=='1');
+    awaitStopped(server);server.stop();
+    terminal=queue.drain();
+    assert(terminal.size()==1 && terminal.front().epoch==51 &&
+        terminal.front().kind==TrustedTransportEvent::Kind::authenticationLost);
+    assert(!server.running() && server.port()==0);
 }

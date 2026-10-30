@@ -65,6 +65,26 @@ class _Canceled(Exception):
     pass
 
 
+def native_socket_lease(bootstrap, identity, *, timeout=1.0):
+    """Bind a protected bootstrap to this TLS identity and revoke via native IPC.
+
+    Call only from the trusted lease provider after host consent/provisioning.
+    This does not verify TLS or obtain a bootstrap. The provider must roll back
+    if construction fails. A failed native acknowledgment is reported on close.
+    """
+    if (not isinstance(identity, TLSConnectionIdentity) or
+            type(identity.epoch) is not int or not isinstance(bootstrap, NativeLocalBootstrap) or
+            bootstrap.epoch != identity.epoch):
+        raise ValueError("native lease identity mismatch")
+    bridge = NativeLocalCommandBridge(bootstrap, expected_peer_id=identity.peer_id,
+        verified_peer_sha256=identity.peer_sha256, verified_connection_id=identity.connection_id,
+        timeout=timeout)
+    def revoke():
+        if not bridge.revoke():
+            raise ConnectionError("native termination acknowledgment unavailable")
+    return NativeTLSLease(bootstrap, revoke)
+
+
 def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, epoch,
                            host_consent, provide_native_lease, host_approval_ledger,
                            cancel=None, max_commands=16, session_timeout=30.0, command_timeout=2.0):
