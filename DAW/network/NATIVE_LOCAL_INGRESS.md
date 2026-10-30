@@ -248,12 +248,69 @@ synthetic trusted setup. Its parent stdio is not the Windows private pipe protoc
 The tests do not launch the JUCE GUI or exercise a packaged managed TLS bridge,
 and no test approves or executes DAW actions. They are all on one computer.
 
+## Live TLS socket ownership and native teardown
+
+`native_tls_session.run_native_tls_session` now owns a complete, persistent
+command session on an already-handshaken server-side `ssl.SSLSocket`. It accepts
+only TLS 1.2/1.3 with mandatory `CERT_REQUIRED` verification, checks the actual
+peer DER certificate against the approved pin, then requests trusted host consent
+and native setup. Pin/mandatory-auth/consent failures create no native lease.
+The caller still supplies a trusted SSLContext/CA policy and host-owned epoch.
+See [Python's TLS socket contract](https://docs.python.org/3.12/library/ssl.html).
+
+The adapter creates a new 64-hex connection nonce after that socket's verified
+handshake. It is bound to the held socket lifetime and never accepted from a
+command or supplied as a pre-seeded connection ID. It is explicitly a local
+connection identifier, not a TLS exporter or `tls-unique` channel-binding proof.
+The native lease must match that nonce, actual peer fingerprint and epoch.
+The tests now start the native receiver from those live verified values rather
+than creating it with a connection ID before the TLS handshake.
+
+The lease provider is a trusted, bounded local callback returning
+`NativeTLSLease(bootstrap, revoke)`. Its revocation hook must terminate only the
+captured identity/epoch; it must not globally revoke a replacement connection.
+If provisioning raises before it can return a lease, that provider must roll back
+internally. Every returned lease is closed exactly once, including rejection of
+its bootstrap fields. A failed revocation callback is reported, never presented
+as successful cleanup. Concurrent closers wait for that hook; its failure is
+retained and reported to later closers without repeating the callback. This API
+installs no listener or user consent UI.
+
+One stream can carry multiple bounded arm/select commands. Host consent is
+rechecked before dispatch; the existing per-command approval ledger and replay
+guard still apply, and the peer certificate pin is rechecked after TLS I/O.
+No permission is taken from peer-supplied identity fields. Queue receipts are
+framed echoes only, not host decisions or execution results. A handoff or receipt
+failure ends the session; there is no automatic retry/at-least-once guarantee.
+
+EOF, malformed/truncated frames, replay/policy failure, command/session limits,
+idle/deadline expiry and host cancellation close the bridge, revoke the native
+lease and close the TLS socket. Native pending-review cleanup runs through the
+lease's owner callback and the native lifecycle/message-thread path. The tests'
+control fixture drains this path synchronously; they do not exercise a GUI timer.
+Native host review must still process/revalidate teardown before executing work.
+
+TLS reads/writes use nonblocking I/O with absolute per-command and whole-session
+deadlines, so partial traffic cannot keep extending a session. Limits are 1..32
+commands, at most 60 seconds per session and at most five seconds per command.
+The local handoff inherits the remaining deadline and may only shorten it.
+Cancellation is polled while waiting for TLS I/O; native handoff and trusted
+callbacks have their own bounded execution contract. Host revocation should also
+set the cancellation event so an idle peer is revoked without sending another
+command. As elsewhere, a queue receipt can be followed by session revocation.
+
+The live test suite uses actual pinned mTLS sockets, multiple commands on one
+connection, a new nonce on reconnect, and native pending-review teardown on
+close/cancel/replay/malformed frames/timeouts/budget exhaustion. It covers rejected
+optional-client-auth contexts, mismatched native setup and failed revocation
+hooks. All tests remain localhost and no test approves/executes a DAW action.
+
 ## Remaining production work
 
 Supply the real bridge executable and trusted artifact pin/distribution policy,
-then connect its private bootstrap and trusted binding/consent/loss hooks to the
-actual verified remote TLS transport. The Python/native protocol handoff now has
-localhost mTLS integration coverage; the managed launcher still exercises native
+then integrate the live TLS session owner with its private bootstrap and trusted
+host controller. The Python/native protocol and live connection-lifetime handoffs
+now have localhost mTLS integration coverage; the managed launcher still exercises native
 test bridge fixtures rather than a packaged TLS bridge. Implement protected provisioning for Linux/macOS before enabling
 those platforms. Current tests use synthetic TLS-owner evidence; Windows has
 real child-process pipe/socket coverage, and other platforms test the codec and
