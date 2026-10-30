@@ -307,6 +307,24 @@ hooks. All tests remain localhost and no test approves/executes a DAW action.
 
 ## Remaining production work
 
+`windows_native_lease.receive_windows_native_lease` now composes protected pipe
+delivery and socket-backed revocation for a trusted `provide_native_lease`
+callback. It takes pipe discovery and a held server process handle from the
+local owner, plus identity from the verified TLS session. It constructs the
+identity-bound revocable lease inside the pipe consumer, before bootstrap
+acknowledgment. A failed delivery, exception or observed cancellation closes any
+constructed lease before returning an error. If rollback cannot be confirmed,
+`NativeLeaseRollbackError` preserves both the provisioning and rollback errors.
+Successful return transfers ownership; the caller must close the lease. A cancel
+racing after return is handled by the session owner's existing cancellation and
+finally-close path. No PID lookup, process launch or trusted discovery policy is
+provided by this helper. It does not verify TLS or grant consent by itself.
+Windows integration tests use this composition with real localhost mTLS, the
+C++ private pipe and authenticated native revoke, without test-stdio credentials
+or test-stdio revocation. Workstation activation and bridge packaging remain
+unfinished. Failure injection covers acknowledgment loss and rollback failure;
+these failure injections do not claim a physical pipe fault was demonstrated.
+
 `native_socket_lease` now supplies a native revocation hook for a protected
 bootstrap and the current TLS identity. Closing the lease sends the distinct
 local lifecycle record `IDW_REVOKE|1|<epoch>` inside the existing secret-bearing
@@ -368,8 +386,9 @@ then integrate the live TLS session owner with its private bootstrap and trusted
 host controller. The Python/native protocol and live connection-lifetime handoffs
 now have localhost mTLS integration coverage; the managed launcher still exercises native
 test bridge fixtures rather than a packaged TLS bridge. Implement protected provisioning for Linux/macOS before enabling
-those platforms. Current tests use synthetic TLS-owner evidence; Windows has
-real child-process pipe/socket coverage, and other platforms test the codec and
+those platforms. Managed-launcher native tests use synthetic TLS-owner evidence;
+separate Python integration tests verify actual localhost mTLS before private
+provisioning. Windows has real child-process pipe/socket coverage, and other platforms test the codec and
 fail-closed unsupported path.
 The standalone native CI runs on Windows, Linux and macOS, including the real
 socket/session-owner tests. Foundation builds also compile/link the workstation

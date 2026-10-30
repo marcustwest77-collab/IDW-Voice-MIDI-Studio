@@ -104,7 +104,8 @@ class NativeBridgeUnitTests(unittest.TestCase):
 
 class NativeFixture:
     """Test-only stdio control. Credentials stay in private captured pipes."""
-    def __init__(self, fingerprint, channel, *, private_bootstrap=False, receive=None):
+    def __init__(self, fingerprint, channel, *, private_bootstrap=False, receive=None, lease_identity=None):
+        self.native_lease = None
         arguments = [os.environ["IDW_NATIVE_LOCAL_FIXTURE"]]
         if private_bootstrap:
             arguments += ["--private-bootstrap", str(os.getpid())]
@@ -120,11 +121,17 @@ class NativeFixture:
                 if not discovery.startswith(b"PIPE ") or not discovery.endswith(b"\n"):
                     raise RuntimeError("native pipe discovery unavailable")
                 accepted = []
-                if not (receive or receive_windows_bootstrap)(discovery[5:-1].decode("ascii"),
+                if lease_identity is not None:
+                    from windows_native_lease import receive_windows_native_lease
+                    self.native_lease = receive_windows_native_lease(discovery[5:-1].decode("ascii"),
+                        int(self.process._handle), lease_identity)
+                    self.bootstrap = self.native_lease.bootstrap
+                elif not (receive or receive_windows_bootstrap)(discovery[5:-1].decode("ascii"),
                         int(self.process._handle), expected_epoch=45, expected_peer_sha256=fingerprint,
                         expected_connection_id=channel, consume=lambda value: (accepted.append(value) or True)):
                     raise RuntimeError("native private bootstrap rejected")
-                self.bootstrap = accepted[0]
+                else:
+                    self.bootstrap = accepted[0]
             else:
                 self.bootstrap = NativeLocalBootstrap.decode(self._read(207))
         except Exception:
@@ -165,6 +172,10 @@ class NativeFixture:
         return int(response[8:-1])
 
     def close(self):
+        lease_error = None
+        if self.native_lease is not None:
+            try: self.native_lease.close()
+            except BaseException as error: lease_error = error
         if self.process.poll() is None:
             try:
                 self.process.stdin.write(b"QUIT\n")
@@ -175,6 +186,8 @@ class NativeFixture:
                 self.process.wait(timeout=5)
         for stream in (self.process.stdin, self.process.stdout, self.process.stderr):
             stream.close()
+        if lease_error is not None:
+            raise lease_error
 
 
 @unittest.skipUnless(os.environ.get("IDW_NATIVE_LOCAL_FIXTURE"), "native fixture required")
