@@ -5,6 +5,10 @@ authenticated native queue/host-review path, see [native ingress development not
 `native_local_bridge.py` connects the verified Python TLS sink to that native
 receiver. Its localhost mTLS integration stages requests for host review only;
 it does not demonstrate two-machine collaboration or execute DAW actions.
+`native_tls_session.py` adds live verified-TLS connection ownership: it requests
+native setup only after the pinned handshake and host consent, then revokes that
+native lease when the connection ends or its policies/time budgets fail. It has
+no listener/CLI or automatic activation; managed bridge packaging remains separate.
 
 This Python script is intentionally a **network proof-of-concept**, not a DAW client or a secure collaboration service. It binds only to 127.0.0.1 and accepts **one** TCP connection, echoes a bounded (1–4096 bytes) frame, then exits. It does not parse commands, record audio, provide authentication, use TLS, connect to the Internet, or perform any DAW action.
 

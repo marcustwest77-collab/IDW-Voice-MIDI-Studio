@@ -71,7 +71,7 @@ class NativeLocalCommandBridge:
         with self._lock:
             self._bootstrap = None  # Python string storage is not a secure wipe.
 
-    def deliver(self, event: VerifiedCommandEvent) -> bool:
+    def deliver(self, event: VerifiedCommandEvent, *, deadline=None) -> bool:
         with self._lock:
             bootstrap = self._bootstrap
             if (bootstrap is None or not isinstance(event, VerifiedCommandEvent) or
@@ -89,10 +89,14 @@ class NativeLocalCommandBridge:
                 payload = bootstrap._secret.encode("ascii") + b"\n" + wire
                 if len(payload) > 4096:
                     return False
-                deadline = time.monotonic() + self._timeout
+                local_deadline = time.monotonic() + self._timeout
+                if deadline is not None:
+                    if type(deadline) not in (int, float) or not math.isfinite(deadline):
+                        return False
+                    local_deadline = min(local_deadline, deadline)
 
                 def remaining():
-                    value = deadline - time.monotonic()
+                    value = local_deadline - time.monotonic()
                     if value <= 0:
                         raise TimeoutError("native handoff deadline")
                     return value
@@ -104,5 +108,5 @@ class NativeLocalCommandBridge:
                     connection.shutdown(socket.SHUT_WR)  # Native receiver requires one frame followed by FIN.
                     connection.settimeout(remaining())
                     return connection.recv(1) == b"1"  # Queued, never approval/execution.
-            except (OSError, ValueError, UnicodeError):
+            except (OSError, ValueError, UnicodeError, OverflowError):
                 return False

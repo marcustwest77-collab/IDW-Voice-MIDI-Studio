@@ -94,6 +94,13 @@ class NativeBridgeUnitTests(unittest.TestCase):
             self.assertFalse(binding(self.bootstrap).deliver(self.event))
         connection.recv.assert_not_called()
 
+    def test_external_deadline_cannot_extend_or_bypass_timeout(self):
+        bridge = binding(self.bootstrap)
+        with patch("native_local_bridge.socket.create_connection") as connect:
+            for deadline in (-1, float("nan"), float("inf"), True, 10**1000):
+                self.assertFalse(bridge.deliver(self.event, deadline=deadline))
+            connect.assert_not_called()
+
 
 class NativeFixture:
     """Test-only stdio control. Credentials stay in private captured pipes."""
