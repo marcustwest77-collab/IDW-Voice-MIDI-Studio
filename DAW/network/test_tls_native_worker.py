@@ -10,7 +10,7 @@ import time
 import unittest
 from tls_client import verified_tls_client
 from tls_worker_bootstrap import TLSWorkerProcess, fresh_session_secret
-from local_test_client import send_local_request, check_local_setup, FIELDS
+from local_test_client import send_local_request, check_local_setup, create_local_setup, load_setup, FIELDS
 
 
 class TLSNativeWorkerTests(unittest.TestCase):
@@ -79,6 +79,34 @@ class TLSNativeWorkerTests(unittest.TestCase):
             code = worker.process.wait(timeout=6)
             self.assertEqual(worker.process.stdout.read(), b"")
             return reply, code
+
+    def test_setup_builder_roundtrip_and_no_overwrite(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "setup.json"
+            args = dict(peer="guest", tls_port=49200,
+                        server_cert=str(self.root / "localhost.crt"),
+                        server_key=str(self.root / "localhost.key"),
+                        client_ca=str(self.root / "guest.crt"),
+                        client_cert=str(self.root / "guest.crt"),
+                        client_key=str(self.root / "guest.key"))
+            with patch("socket.socket", side_effect=AssertionError("must remain offline")):
+                result = create_local_setup(destination, **args)
+                self.assertEqual(load_setup(destination), result)
+                self.assertEqual(result["client_pin"], self.pin)
+                content = destination.read_bytes()
+                self.assertNotIn(b"PRIVATE KEY", content)
+                self.assertNotIn("client_key", result)
+                with self.assertRaises(FileExistsError):
+                    create_local_setup(destination, **args)
+                self.assertEqual(destination.read_bytes(), content)
+                invalid = Path(directory) / "invalid.json"
+                with self.assertRaises(ValueError):
+                    create_local_setup(invalid, **dict(args, client_key=args["server_key"]))
+                self.assertFalse(invalid.exists())
+                with self.assertRaises(ValueError):
+                    create_local_setup(invalid, **dict(args, peer="bad peer"))
+                self.assertFalse(invalid.exists())
 
     def test_offline_client_preflight(self):
         config = self.config()
