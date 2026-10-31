@@ -51,6 +51,31 @@ class ClientUITests(unittest.TestCase):
         self.assertNotIn("private detail",self.client.status.get())
         self.assertEqual(self.client.sequence.get(),"1")
 
+    def test_create_setup_loads_result_without_network(self):
+        setup = dict(self.client.setup)
+        with patch("local_test_client_ui.simpledialog.askstring", return_value="guest"), \
+             patch("local_test_client_ui.simpledialog.askinteger", return_value=49200), \
+             patch("local_test_client_ui.filedialog.askopenfilename", side_effect=["server.crt", "server.key", "ca.crt", "client.crt", "client.key"]), \
+             patch("local_test_client_ui.filedialog.asksaveasfilename", return_value="new.json"), \
+             patch("local_test_client_ui.create_local_setup", return_value=setup) as create, \
+             patch("local_test_client_ui.send_local_request") as send:
+            self.client.create_setup()
+            create.assert_called_once_with("new.json", peer="guest", tls_port=49200,
+                                           server_cert="server.crt", server_key="server.key", client_ca="ca.crt",
+                                           client_cert="client.crt", client_key="client.key")
+            send.assert_not_called()
+        self.assertEqual(self.client.client_key, "client.key")
+        self.assertIn("saved and loaded", self.client.status.get())
+        self.assertEqual(self.client.request_id.get(), "test1")
+
+    def test_cancel_create_preserves_loaded_setup(self):
+        original = self.client.setup
+        with patch("local_test_client_ui.simpledialog.askstring", return_value=None), \
+             patch("local_test_client_ui.create_local_setup") as create:
+            self.client.create_setup()
+            create.assert_not_called()
+        self.assertIs(self.client.setup, original)
+
     def test_preflight_reports_result_without_sending(self):
         with patch("local_test_client_ui.check_local_setup", return_value="No connection was made.") as check, \
              patch("local_test_client_ui.send_local_request") as send:

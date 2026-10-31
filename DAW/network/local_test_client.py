@@ -87,15 +87,8 @@ def check_local_setup(setup, client_cert, client_key):
     validate_setup(setup)
     if not _existing_file(client_cert) or not _existing_file(client_key):
         raise ValueError("Choose the client certificate and matching private key.")
-    with open(client_cert, "rb") as source:
-        pem = source.read(65537)
-    if len(pem) > 65536 or pem.count(b"-----BEGIN CERTIFICATE-----") != 1:
-        raise ValueError("Choose one PEM client certificate, at most 64 KiB.")
-    try:
-        der = ssl.PEM_cert_to_DER_cert(pem.decode("ascii"))
-    except (ValueError, UnicodeError):
-        raise ValueError("The client certificate must be valid PEM.") from None
-    if hashlib.sha256(der).hexdigest() != setup["client_pin"]:
+    fingerprint = certificate_fingerprint(client_cert)
+    if fingerprint != setup["client_pin"]:
         raise ValueError("The client certificate fingerprint does not match the setup.")
     try:
         host = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -107,3 +100,33 @@ def check_local_setup(setup, client_cert, client_key):
         raise ValueError("Certificate/key loading failed. Check matching keys, PEM files and trust files; this test uses unencrypted keys.") from None
     return ("Local files and fingerprint checked. No connection was made. "
             "The live test still verifies certificate trust, expiry and localhost identity.")
+
+
+def certificate_fingerprint(path):
+    with open(path, "rb") as source:
+        pem = source.read(65537)
+    if len(pem) > 65536 or pem.count(b"-----BEGIN CERTIFICATE-----") != 1:
+        raise ValueError("Choose one PEM client certificate, at most 64 KiB.")
+    try:
+        der = ssl.PEM_cert_to_DER_cert(pem.decode("ascii"))
+    except (ValueError, UnicodeError):
+        raise ValueError("The client certificate must be valid PEM.") from None
+    return hashlib.sha256(der).hexdigest()
+
+
+def create_local_setup(path, *, peer, tls_port, server_cert, server_key,
+                       client_ca, client_cert, client_key):
+    """Save a new nonsecret setup only after offline checks; never replace a file."""
+    setup = dict(version=1, peer=peer, tls_port=tls_port,
+                 server_cert=str(Path(server_cert).resolve()),
+                 server_key=str(Path(server_key).resolve()),
+                 client_ca=str(Path(client_ca).resolve()),
+                 client_pin=certificate_fingerprint(client_cert),
+                 approved_requests=["local_request_1"])
+    check_local_setup(setup, client_cert, client_key)
+    payload = json.dumps(setup, indent=2) + "\n"
+    if len(payload.encode("utf-8")) > 16384:
+        raise ValueError("Setup paths exceed the supported file size.")
+    with open(path, "x", encoding="utf-8", newline="\n") as target:
+        target.write(payload)
+    return setup

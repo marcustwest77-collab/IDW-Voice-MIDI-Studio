@@ -2,8 +2,8 @@
 import queue
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-from local_test_client import build_request, check_local_setup, load_setup, send_local_request
+from tkinter import filedialog, messagebox, simpledialog, ttk
+from local_test_client import build_request, check_local_setup, create_local_setup, load_setup, send_local_request
 
 
 class LocalTestClient:
@@ -22,11 +22,14 @@ class LocalTestClient:
         ttk.Label(frame, text="IDW Remote Studio", font=("Segoe UI", 20, "bold")).grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
         ttk.Label(frame, text="One local request. Review and approve it in the DAW.").grid(
-            row=1, column=0, columnspan=3, sticky="w", pady=(0, 18))
+            row=1, column=0, columnspan=2, sticky="w", pady=(0, 18))
         self.summary = tk.StringVar(value="Load the same test setup selected in the DAW.")
         self.cert_label = tk.StringVar(value="No client certificate selected")
         self.key_label = tk.StringVar(value="No client key selected")
         self.controls = []
+        create = ttk.Button(frame, text="CREATE SETUP…", command=self.create_setup)
+        create.grid(row=1, column=2, sticky="e", pady=(0, 18))
+        self.controls.append((create, "normal"))
         for row, label, text, command in (
                 (2, "Test setup", self.summary, self.choose_setup),
                 (3, "Client certificate", self.cert_label, lambda: self.choose_credential(False)),
@@ -65,6 +68,47 @@ class LocalTestClient:
             row=12, column=0, columnspan=3, sticky="w")
         self.poll_id = root.after(100, self.poll)
         root.protocol("WM_DELETE_WINDOW", self.close)
+
+    def create_setup(self):
+        if self.pending:
+            return
+        peer = simpledialog.askstring("Create local setup", "Collaborator ID (letters, numbers, _ or -):", initialvalue="guest", parent=self.root)
+        if peer is None:
+            return
+        port = simpledialog.askinteger("Local TLS port", "Local port (1024–65535):", initialvalue=49200,
+                                       minvalue=1024, maxvalue=65535, parent=self.root)
+        if port is None:
+            return
+        paths = {}
+        for field, title in (("server_cert", "Choose localhost server certificate"),
+                             ("server_key", "Choose server private key"),
+                             ("client_ca", "Choose trusted client CA (self-signed client: its certificate)"),
+                             ("client_cert", "Choose client certificate"),
+                             ("client_key", "Choose client private key")):
+            path = filedialog.askopenfilename(title=title, parent=self.root)
+            if not path:
+                return
+            paths[field] = path
+        destination = filedialog.asksaveasfilename(title="Save as a NEW local setup file", parent=self.root,
+                                                   defaultextension=".json", filetypes=[("JSON setup", "*.json")])
+        if not destination:
+            return
+        try:
+            setup = create_local_setup(destination, peer=peer, tls_port=port, **paths)
+        except FileExistsError:
+            messagebox.showerror("Choose a new filename", "Existing files are never replaced. Create setup again with a new filename.")
+            return
+        except (ValueError, OSError):
+            messagebox.showerror("Setup not created", "Check IDs, certificate fingerprint format, matching keys, trust files and the destination folder.")
+            return
+        self.setup = setup
+        self.requests.configure(values=setup["approved_requests"])
+        self.request_id.set(setup["approved_requests"][0])
+        self.summary.set(f"{setup['peer']} | localhost:{setup['tls_port']}")
+        self.client_cert, self.client_key = paths["client_cert"], paths["client_key"]
+        self.cert_label.set("Client certificate selected")
+        self.key_label.set("Client key selected (not saved)")
+        self.status.set("Setup saved and loaded. Load the same JSON in the DAW. No connection was made; live TLS verification is still required.")
 
     def choose_setup(self):
         path = filedialog.askopenfilename(title="Choose the DAW local test setup",

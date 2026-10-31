@@ -7,8 +7,20 @@ the app opens. Setup and Python selection are held only in memory.
 Prerequisites: a trusted Python installation, server certificate/key with
 localhost identity, a trusted client CA/certificate, the approved client's
 SHA-256 certificate fingerprint, and the corresponding client private key held
-by the local test client. The UI does not create certificates. The example JSON
-contains placeholders and must be edited with your real local test paths/pin.
+by the local test client. The UI does not create certificates. To avoid editing JSON, open the local test
+client and choose CREATE SETUP. Enter a collaborator ID and port, then select
+the server certificate/key, trusted client CA, and client certificate/key.
+For a self-signed client, choose its certificate as the trusted client CA.
+Choose a new JSON filename: existing files are never replaced. The client
+computes the fingerprint and checks local files before saving. It then loads
+the setup and selected client credentials in memory. Load that same JSON in
+the DAW. Cancelling leaves your current client setup unchanged.
+
+The saved JSON contains paths, fingerprint, collaborator ID, port and one
+request ID (`local_request_1`); no private key contents or client key path is
+saved. Protect the original key files. This does not install certificates or
+change system trust settings. Alternatively, edit the example JSON placeholders
+with your real local test paths/pin.
 Do not place private key contents, passwords, session tokens, or executable paths
 in the setup file. Certificate/key paths are allowed.
 
