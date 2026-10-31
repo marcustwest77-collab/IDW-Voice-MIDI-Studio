@@ -580,7 +580,14 @@ managed lease helper rejects this profile because it cannot own pre-handshake
 readiness; there is no reconnect or discovery fallback.
 
 `ManagedOfferController` has an explicit readiness option, off by default, and a
-one-shot non-secret readiness report. The packaged native fixture selects it via
+one-shot non-secret readiness report. Readiness reports retain the native
+transaction's original deadline and are available only while that startup is
+pending. The controller rejects an expired callback, a mismatched epoch or a zero
+port, retires the snapshot on completion (success or failure), and checks expiry
+again when the owner consumes it. Stopped and replacement operations cannot
+reuse a prior report. A reported port can still close immediately afterward;
+callers must establish and verify TLS and never treat discovery as authority.
+The packaged native fixture selects readiness via
 its TEST-only `--ready-profile` option. Its real frozen Python child now publishes
 the TLS port on the private pipe, with no readiness file, before actual mTLS and
 the exact native consent decision. Tests verify native pending review and EOF
