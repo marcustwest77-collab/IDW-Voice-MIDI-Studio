@@ -537,7 +537,23 @@ verification. Enable a user flow only after provisioning and transport ownership
 are integrated. A real two-machine TLS and host-consent demonstration remains
 separate work.
 
-## Final host dispatch boundary
+## Managed TLS runtime policy and lifetime
+
+`native_tls_policy.build_native_server_context` constructs the managed bridge's
+TLS context from explicit absolute server certificate/key paths and a PEM client
+CA snapshot supplied by trusted local configuration. It requires client
+certificates and TLS 1.2 or newer, disables TLS tickets, and does not call system
+root or environment CA discovery. It preserves the interpreter's baseline TLS
+policy. Key loading never requests an interactive password; encrypted keys are
+unsupported. Invalid trust, missing files and mismatched keys fail before any
+listener opens. File provenance, protection against replacement during loading,
+and artifact distribution remain the trusted caller's responsibility. This API
+does not accept launch arguments or peer configuration as policy. Live-session
+client fingerprint pinning, local consent and exact command approvals remain
+mandatory separate checks. The real native-parent/Python-child integration now
+uses this builder and rejects missing or unrelated client certificates before a
+private native session offer. Executable packaging and host UI activation remain
+unfinished.
 
 The managed Windows runtime treats an exception from its parent-liveness monitor
 as loss of authority: it requests receiver cancellation, joins the monitor and
@@ -548,6 +564,8 @@ an uncertain revocation is never converted to a successful return. Deterministic
 tests inject a monitor failure while serving and verify cancellation, disposal,
 parent-scope release and preservation of a concurrent teardown error. This does
 not add executable packaging, host UI activation or a two-computer demonstration.
+
+## Final host dispatch boundary
 
 The JUCE host decision handler drains queued transport facts before reading its
 session grant. Final approval consumption and the short select/arm mutation also
