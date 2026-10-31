@@ -22,10 +22,12 @@ WIRE = b"1|45|1|packaged_runtime|arm|1"
 
 
 class ManagedHostFixture(NativeFixture):
-    def __init__(self, executable, digest, peer_pin):
+    def __init__(self, executable, digest, peer_pin, *, ready_profile=False):
         self.native_lease = None
         self.peer_pin = peer_pin
-        self.process = subprocess.Popen([os.environ["IDW_MANAGED_TLS_FIXTURE"], str(executable)],
+        self.ready_profile = ready_profile
+        self.process = subprocess.Popen([os.environ["IDW_MANAGED_TLS_FIXTURE"],
+            *(["--ready-profile"] if ready_profile else []), str(executable)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
             close_fds=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         self.process.stdin.write((digest + "|" + peer_pin + "\n").encode("ascii"))
@@ -92,26 +94,35 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         cls.executable = root / "dist/IDWPackagedTLSFixture/IDWPackagedTLSFixture.exe"
         cls.digest = hashlib.sha256(cls.executable.read_bytes()).hexdigest() # Explicit TEST approval only.
 
-    def host(self, *, digest=None):
+    def host(self, *, digest=None, ready_profile=False):
         self.ready.unlink(missing_ok=True)
-        host = ManagedHostFixture(self.executable, digest or self.digest, self.pin)
+        host = ManagedHostFixture(self.executable, digest or self.digest, self.pin, ready_profile=ready_profile)
         self.addCleanup(host.close)
         return host
 
-    def connect(self, host, *, approve=True, substitute=False, decision_delay=0):
+    def tls_client(self, host, *, credentials=True):
         deadline = time.monotonic() + 6
-        while not self.ready.exists():
-            if host.process.poll() is not None:
-                self.fail("pinned managed host exited before test readiness")
-            if time.monotonic() >= deadline: self.fail("packaged TLS child did not become ready")
-            time.sleep(.01)
-        port = int(self.ready.read_text(encoding="ascii"))
+        if host.ready_profile:
+            record = host._read()
+            self.assertRegex(record, rb"^READY [1-9][0-9]{0,4}\n$")
+            port = int(record[6:]);self.assertFalse(self.ready.exists())
+        else:
+            while not self.ready.exists():
+                if host.process.poll() is not None:
+                    self.fail("pinned managed host exited before test readiness")
+                if time.monotonic() >= deadline: self.fail("packaged TLS child did not become ready")
+                time.sleep(.01)
+            port = int(self.ready.read_text(encoding="ascii"))
         self.assertTrue(1 <= port <= 65535)
         context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=str(self.cert))
-        context.load_cert_chain(str(self.client_cert), str(self.client_key))
+        if credentials: context.load_cert_chain(str(self.client_cert), str(self.client_key))
         client = context.wrap_socket(socket.create_connection(("127.0.0.1", port), timeout=3),
                                      server_hostname="localhost")
         client.settimeout(3);self.addCleanup(client.close)
+        return client
+
+    def connect(self, host, *, approve=True, substitute=False, decision_delay=0):
+        client = self.tls_client(host)
         host.decide(allow=approve, substitute=substitute, delay=decision_delay)
         if approve and not substitute: self.assertEqual(host._read(), b"ACTIVE\n")
         return client
@@ -128,6 +139,25 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         while host.pending() != 0:
             if time.monotonic() >= deadline: self.fail("EOF did not revoke native pending review")
             time.sleep(.025)
+
+    def test_private_ready_pipe_survives_tls_and_bootstrap_without_a_readiness_file(self):
+        host = self.host(ready_profile=True);client = self.connect(host);self.command(host, client)
+        self.assertFalse(self.ready.exists())
+        client.shutdown(socket.SHUT_WR)
+        deadline = time.monotonic()+3
+        while host.pending() != 0:
+            if time.monotonic() >= deadline: self.fail("private readiness TLS EOF was not revoked")
+            time.sleep(.025)
+        self.assertFalse(self.ready.exists())
+
+    def test_ready_metadata_without_a_client_certificate_never_reaches_consent(self):
+        host = self.host(ready_profile=True)
+        with self.assertRaises(OSError):
+            client = self.tls_client(host, credentials=False)
+            send_frame(client, WIRE);receive_frame(client)
+        self.assertEqual(host.process.wait(timeout=5), 4)
+        self.assertNotIn(b"OFFER", host.process.stdout.read())
+        self.assertFalse(self.ready.exists())
 
     def test_manager_stop_clears_pending_review_and_terminates_tls_child(self):
         host = self.host();client = self.connect(host);self.command(host, client)

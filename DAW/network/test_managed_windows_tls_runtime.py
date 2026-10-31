@@ -11,7 +11,7 @@ import tempfile
 import time
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from contextlib import contextmanager
 
 from managed_windows_tls_runtime import serve_managed_windows_tls_once
@@ -22,11 +22,42 @@ from test_native_local_bridge import NativeFixture, issue_certificate
 from native_tls_receiver import NativeTLSLoopbackReceiver
 from native_tls_policy import build_native_server_context
 from native_tls_session import TLSConnectionIdentity
+from windows_native_bootstrap import BootstrapConnectionError
 
 WIRE = b"1|45|1|managed_runtime|arm|1"
 
 
 class RuntimeBoundaryTests(unittest.TestCase):
+    def test_ready_failure_has_no_discovery_fallback_and_cleanup_always_joins(self):
+        for fail_prepare in (True, False):
+            with self.subTest(fail_prepare=fail_prepare):
+                launch = ManagedBridgeLaunch("\\\\.\\pipe\\IDW-LocalBootstrap-"+"a"*64,123,45,True)
+                active = []
+                @contextmanager
+                def hold(_):
+                    active.append(True)
+                    try: yield 456
+                    finally: active.pop()
+                with patch("managed_windows_tls_runtime.launch_api.hold_launch_parent",side_effect=hold), \
+                        patch("managed_windows_tls_runtime.launch_api.launch_parent_is_alive",return_value=True), \
+                        patch("managed_windows_tls_runtime.NativeTLSLoopbackReceiver") as receiver, \
+                        patch("managed_windows_tls_runtime.WindowsReadyBootstrap") as ready, \
+                        patch("managed_windows_tls_runtime.receive_windows_native_lease") as lease:
+                    owned=receiver.return_value.__enter__.return_value
+                    owned.port=12345;owned.serve_once.return_value=0
+                    if fail_prepare: ready.side_effect=BootstrapConnectionError("test preparation failure")
+                    else: ready.return_value.close.side_effect=RuntimeError("test cleanup failure")
+                    observe=Mock()
+                    with self.assertRaises(BootstrapConnectionError if fail_prepare else RuntimeError):
+                        serve_managed_windows_tls_once(launch,None,expected_peer_id="guest",
+                            approved_client_sha256="a"*64,host_consent=lambda _:True,
+                            host_approval_ledger=NativeCommandApprovalLedger(),on_listening=observe)
+                    if fail_prepare: observe.assert_not_called();owned.serve_once.assert_not_called()
+                    else: ready.return_value.close.assert_called_once()
+                    lease.assert_not_called();owned.close.assert_called_once()
+                self.assertEqual(active,[])
+                self.assertFalse(any(t.name=="idw-native-parent-watch" for t in threading.enumerate()))
+
     def test_provision_budget_keeps_the_tls_sessions_absolute_deadline(self):
         launch = ManagedBridgeLaunch("\\\\.\\pipe\\IDW-LocalBootstrap-" + "a" * 64, 123, 45)
         identity = TLSConnectionIdentity("guest", 45, "a" * 64, "b" * 64, "TLSv1.3")

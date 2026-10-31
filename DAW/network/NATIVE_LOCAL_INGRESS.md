@@ -565,13 +565,38 @@ native queue admission before consent, wrong-epoch/pin rejection, denied/expired
 readiness and owned stop. Separate real pipe tests verify wrong process rejection,
 shared deadlines and refusal to disclose any credential byte before an offer.
 
-This step adds the native stage and matching Python codec only. The Python runtime
-and its launch parser do not yet select the readiness profile, and the packaged
-TLS integration still uses its temporary readiness file. Next integration must
-open the process-verified private pipe before TLS accept and reuse it through the
-offer/bootstrap transaction, rather than reconnecting. Existing timed/legacy
-profiles remain unchanged and default startup stays disabled. No two-computer or
-new packaged-readiness demonstration is claimed.
+The Python runtime now accepts the exact fixed readiness launch profile and
+constructs `WindowsReadyBootstrap` after holding the verified actual parent and
+binding the loopback listener. It duplicates that held parent, verifies the pipe
+server before writing any readiness bytes, and retains the pipe through the real
+TLS handshake, offer and transactional native lease/acknowledgment. It never
+reopens the pipe for provisioning. The original readiness deadline, per-phase
+cancel event and absolute TLS deadline can only shorten its wait. The scope is
+single-use; all failures retire its owned pipe/duplicate, and borrowed parent
+handles remain the runtime owner's responsibility. Pending overlapped operations
+are canceled and drained before buffers/handles are released. Failed bootstrap
+acknowledgment still rolls back any constructed lease. The legacy post-handshake
+managed lease helper rejects this profile because it cannot own pre-handshake
+readiness; there is no reconnect or discovery fallback.
+
+`ManagedOfferController` has an explicit readiness option, off by default, and a
+one-shot non-secret readiness report. The packaged native fixture selects it via
+its TEST-only `--ready-profile` option. Its real frozen Python child now publishes
+the TLS port on the private pipe, with no readiness file, before actual mTLS and
+the exact native consent decision. Tests verify native pending review and EOF
+revocation over that path, and reject readiness without a client certificate
+before any consent prompt. Separate pipe tests verify one open across all phases,
+wrong-server rejection before metadata, cancellation, no deadline renewal, failed
+acknowledgment rollback and single-use scope retirement. Runtime boundary tests
+verify no discovery fallback and joined monitoring even if scope cleanup fails.
+
+Existing timed/legacy profiles remain supported; their packaged compatibility
+tests still use the temporary readiness file. The Workstation's private configured
+startup hook still selects the existing timed profile, and no normal user action
+or default configuration activates a helper. Production whole-bundle trust,
+protected credentials, frontend discovery/selection and activation remain
+unfinished. This is a local packaged-readiness demonstration only, not DAW action
+execution or two-computer collaboration.
 
 The managed JUCE consent path now has an explicit **maximum 30-second shared
 budget** through `WindowsBridgeSession::startWithTimedOffer`. The private channel

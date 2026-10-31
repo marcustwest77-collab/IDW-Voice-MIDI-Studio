@@ -14,6 +14,7 @@ import time
 
 from native_local_bridge import NativeLocalBootstrap
 from native_tls_offer import NativeTLSOffer
+from native_bridge_ready import NativeBridgeReady
 
 _NAME = re.compile(r"\\\\\.\\pipe\\IDW-LocalBootstrap-[0-9a-f]{64}\Z")
 _HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -52,7 +53,7 @@ if os.name == "nt":
 
 def receive_windows_bootstrap(name, expected_server_handle, *, expected_epoch,
                               expected_peer_sha256, expected_connection_id, consume,
-                              timeout=2.0, cancel=None, deadline=None, offer=None):
+                              timeout=2.0, cancel=None, deadline=None, offer=None, _connection=None):
     """Read exactly one bootstrap, verify binding, consume, then acknowledge.
 
     Returns False on rejection, cancellation, timeout or OS failure. The borrowed
@@ -84,87 +85,145 @@ def receive_windows_bootstrap(name, expected_server_handle, *, expected_epoch,
         offer_data = bytearray(offer.encode())
     if os.name != "nt":
         return False # No TCP, stdio, or insecure cross-platform fallback.
-    cancel = cancel if cancel is not None else threading.Event()
-    deadline = min(time.monotonic() + timeout, deadline) if deadline is not None else time.monotonic() + timeout
-    if cancel.is_set() or time.monotonic() >= deadline:
-        return False
-    peer = wintypes.HANDLE()
-    if not _duplicate(_current(), expected_server_handle, _current(), ctypes.byref(peer), 0, False, 2):
-        return False
-    pipe = None
-    def active():
-        return not cancel.is_set() and time.monotonic() < deadline and _wait(peer, 0) == 258
-    try:
-        pid = _pid(peer)
-        if not pid or pid == os.getpid() or not active():
-            return False
-        while active():
-            # Overlapped, non-inheritable; identification-only impersonation.
-            pipe = _open(name, 0xC0000000, 0, None, 3, 0x40000000 | 0x00100000 | 0x00010000, None)
-            if pipe != _INVALID:
-                break
-            pipe = None
-            if ctypes.get_last_error() not in (2, 231):
-                return False
-            cancel.wait(min(.01, max(0, deadline - time.monotonic())))
-        server_pid = wintypes.ULONG()
-        if (not pipe or not active() or not _server_pid(pipe, ctypes.byref(server_pid)) or
-                server_pid.value != pid):
-            return False # Verify process before reading any credential bytes.
-
-        def transfer(data, writing):
-            offset = 0
-            while offset < len(data) and active():
-                event = _event(None, True, False, None)
-                if not event:
-                    return False
-                operation = _Overlapped();operation.hEvent = event
-                count = wintypes.DWORD()
-                buffer = (ctypes.c_ubyte * (len(data) - offset)).from_buffer(data, offset)
-                pending = False
-                try:
-                    done = (_write if writing else _read)(pipe, buffer, len(buffer),
-                        ctypes.byref(count), ctypes.byref(operation))
-                    if not done:
-                        if ctypes.get_last_error() != 997:
-                            return False
-                        pending = True
-                        while active():
-                            status = _wait(event, 10)
-                            if status == 0:
-                                done = _result(pipe, ctypes.byref(operation), ctypes.byref(count), False)
-                                pending = False
-                                break
-                            if status != 258:
-                                break
-                    if not done or not count.value:
-                        return False
-                    offset += count.value
-                finally:
-                    if pending:
-                        _cancel_io(pipe, ctypes.byref(operation))
-                        # Drain cancellation before releasing OVERLAPPED/buffer.
-                        _result(pipe, ctypes.byref(operation), ctypes.byref(count), True)
-                    _close(event)
-            return offset == len(data) and active()
-
-        if offer_data is not None and not transfer(offer_data, True):
-            return False
-        data = bytearray(207)
-        if not transfer(data, False):
-            return False
+    if _connection is not None:
+        if (not isinstance(_connection, _VerifiedPipe) or _connection.name != name or
+                _connection.source_handle != expected_server_handle or offer is None or
+                _connection.ready_epoch != expected_epoch):
+            raise ValueError("prepared readiness connection scope mismatch")
+        connection = _connection
+        connection.restrict(timeout, cancel, deadline)
+    else:
         try:
-            bootstrap = NativeLocalBootstrap.decode(bytes(data))
-        except ValueError:
+            connection = _VerifiedPipe(name, expected_server_handle, timeout, cancel, deadline)
+        except BootstrapConnectionError:
             return False
+    try:
+        if connection.used: raise RuntimeError("private bootstrap connection is single-use")
+        connection.used = True
+        if offer_data is not None and not connection.transfer(offer_data, True): return False
+        data = bytearray(207)
+        if not connection.transfer(data, False): return False
+        try: bootstrap = NativeLocalBootstrap.decode(bytes(data))
+        except ValueError: return False
         if (bootstrap.epoch != expected_epoch or
                 not hmac.compare_digest(bootstrap.peer_sha256, expected_peer_sha256) or
-                not hmac.compare_digest(bootstrap.connection_id, expected_connection_id) or not active()):
+                not hmac.compare_digest(bootstrap.connection_id, expected_connection_id) or not connection.active()):
             return False
-        if consume(bootstrap) is not True or not active():
-            return False
-        return transfer(bytearray(_ACK), True)
+        if consume(bootstrap) is not True or not connection.active(): return False
+        return connection.transfer(bytearray(_ACK), True)
     finally:
-        if pipe and pipe != _INVALID:
-            _close(pipe)
-        _close(peer)
+        connection.close()
+
+
+class BootstrapConnectionError(ConnectionError):
+    """The held server could not be verified or readiness could not be published."""
+
+
+class _VerifiedPipe:
+    """One caller owns I/O. Cancel and join it before closing from another scope."""
+    def __init__(self, name, server_handle, timeout, cancel, deadline):
+        if os.name != "nt": raise BootstrapConnectionError("Windows private pipe required")
+        self.name = name;self.source_handle = server_handle
+        self.cancel = cancel if cancel is not None else threading.Event()
+        self.phase_cancel = None
+        self.deadline = min(time.monotonic()+timeout, deadline) if deadline is not None else time.monotonic()+timeout
+        self.peer = wintypes.HANDLE();self.pipe = None;self.ready_epoch = None;self.used = False
+        try:
+            if self.cancel.is_set() or time.monotonic() >= self.deadline:
+                raise BootstrapConnectionError("private pipe connection canceled or expired")
+            if not _duplicate(_current(), server_handle, _current(), ctypes.byref(self.peer), 0, False, 2):
+                raise BootstrapConnectionError("held server handle unavailable")
+            pid = _pid(self.peer)
+            if not pid or pid == os.getpid() or not self.active():
+                raise BootstrapConnectionError("held server is not active")
+            while self.active():
+                self.pipe = _open(name, 0xC0000000, 0, None, 3, 0x40000000 | 0x00100000 | 0x00010000, None)
+                if self.pipe != _INVALID: break
+                self.pipe = None
+                if ctypes.get_last_error() not in (2, 231): break
+                self.cancel.wait(min(.01, max(0, self.deadline-time.monotonic())))
+            server_pid = wintypes.ULONG()
+            if (not self.pipe or not self.active() or not _server_pid(self.pipe, ctypes.byref(server_pid)) or
+                    server_pid.value != pid):
+                raise BootstrapConnectionError("private pipe server was not verified")
+        except BaseException:
+            self.close();raise
+
+    def restrict(self, timeout, cancel, deadline):
+        self.deadline = min(self.deadline, time.monotonic()+timeout)
+        if deadline is not None: self.deadline = min(self.deadline, deadline)
+        self.phase_cancel = cancel
+
+    def active(self):
+        return (bool(self.peer.value) and not self.cancel.is_set() and
+                (self.phase_cancel is None or not self.phase_cancel.is_set()) and
+                time.monotonic() < self.deadline and _wait(self.peer, 0) == 258)
+
+    def transfer(self, data, writing):
+        offset = 0
+        while offset < len(data) and self.active():
+            event = _event(None, True, False, None)
+            if not event: return False
+            operation = _Overlapped();operation.hEvent = event
+            count = wintypes.DWORD()
+            buffer = (ctypes.c_ubyte * (len(data)-offset)).from_buffer(data, offset)
+            pending = False
+            try:
+                done = (_write if writing else _read)(self.pipe, buffer, len(buffer), ctypes.byref(count), ctypes.byref(operation))
+                if not done:
+                    if ctypes.get_last_error() != 997: return False
+                    pending = True
+                    while self.active():
+                        status = _wait(event, 10)
+                        if status == 0:
+                            done = _result(self.pipe, ctypes.byref(operation), ctypes.byref(count), False)
+                            pending = False;break
+                        if status != 258: break
+                if not done or not count.value: return False
+                offset += count.value
+            finally:
+                if pending:
+                    _cancel_io(self.pipe, ctypes.byref(operation))
+                    _result(self.pipe, ctypes.byref(operation), ctypes.byref(count), True)
+                _close(event)
+        return offset == len(data) and self.active()
+
+    def close(self):
+        self.used = True
+        if self.pipe and self.pipe != _INVALID: _close(self.pipe)
+        self.pipe = None
+        if self.peer.value: _close(self.peer);self.peer.value = None
+
+
+class WindowsReadyBootstrap:
+    """Verify/publish readiness once, retain that pipe through the TLS offer.
+
+    No TLS verification or native authority is supplied by this object. Its owner
+    must hold the launch parent, cancel/join I/O before close, and always dispose
+    this scope, including TLS/consent failures before receive is called.
+    """
+    def __init__(self, name, server_handle, ready, *, timeout=30.0, cancel=None, deadline=None):
+        if (not isinstance(ready, NativeBridgeReady) or not isinstance(name, str) or not _NAME.fullmatch(name) or
+                type(server_handle) is not int or not 0 < server_handle < 2**(8*ctypes.sizeof(ctypes.c_void_p)) or
+                type(timeout) not in (int, float) or not .02 <= timeout <= 30 or not math.isfinite(timeout) or
+                (cancel is not None and not isinstance(cancel, threading.Event)) or
+                (deadline is not None and (type(deadline) not in (int, float) or
+                 not -1e12 <= deadline <= 1e12 or not math.isfinite(deadline)))):
+            raise ValueError("invalid private readiness configuration")
+        self._connection = _VerifiedPipe(name, server_handle, timeout, cancel, deadline)
+        try:
+            if not self._connection.transfer(bytearray(ready.encode()), True):
+                raise BootstrapConnectionError("private readiness was not published")
+            self._connection.ready_epoch = ready.epoch
+        except BaseException:
+            self.close();raise
+
+    def receive(self, name, expected_server_handle, **options):
+        try:
+            return receive_windows_bootstrap(name, expected_server_handle, **options, _connection=self._connection)
+        finally:
+            self.close()
+
+    def close(self): self._connection.close()
+    def __enter__(self): return self
+    def __exit__(self, *_): self.close()

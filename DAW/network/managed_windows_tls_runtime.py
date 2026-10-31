@@ -12,6 +12,8 @@ import windows_bridge_launch as launch_api
 from native_command_approval import NativeCommandApprovalLedger
 from native_tls_receiver import NativeTLSLoopbackReceiver
 from windows_native_lease import receive_windows_native_lease
+from windows_native_bootstrap import WindowsReadyBootstrap
+from native_bridge_ready import NativeBridgeReady
 
 
 def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approved_client_sha256,
@@ -48,34 +50,47 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
                                        handshake_timeout=handshake_timeout) as receiver:
             stopped = threading.Event()
             interrupted = threading.Event()
+            ready_cancel = threading.Event()
+            ready_channel = None
             monitor_errors = [] # Written by watcher, read only after join.
             def watch_parent():
                 try:
                     while not stopped.wait(.025):
                         if cancel.is_set() or not launch_api.launch_parent_is_alive(parent):
-                            interrupted.set();receiver.request_cancel();return
+                            interrupted.set();ready_cancel.set();receiver.request_cancel();return
                 except Exception as error:
                     # Losing the ability to establish parent liveness cannot
                     # leave a serving child with unmonitored native authority.
                     monitor_errors.append(error)
-                    interrupted.set();receiver.request_cancel()
+                    interrupted.set();ready_cancel.set();receiver.request_cancel()
             watcher = threading.Thread(target=watch_parent, name="idw-native-parent-watch")
             watcher.start()
             try:
                 if cancel.is_set() or not launch_api.launch_parent_is_alive(parent):
                     return 0
+                if launch.ready_profile:
+                    ready_channel = WindowsReadyBootstrap(launch.pipe_name, parent,
+                        NativeBridgeReady(launch.epoch, receiver.port), timeout=native_provision_timeout,
+                        cancel=ready_cancel)
                 on_listening(receiver.port)
                 if interrupted.is_set() or cancel.is_set(): return 0
                 def provide(identity, *, cancel, deadline):
+                    options = {"ready_channel": ready_channel} if ready_channel is not None else {}
                     return receive_windows_native_lease(launch.pipe_name, parent, identity,
-                        send_offer=True, timeout=native_provision_timeout, cancel=cancel, deadline=deadline)
+                        send_offer=True, timeout=native_provision_timeout, cancel=cancel, deadline=deadline, **options)
                 return receiver.serve_once(expected_peer_id=expected_peer_id,
                     approved_client_sha256=approved_client_sha256, epoch=launch.epoch,
                     host_consent=host_consent, provide_native_lease=provide,
                     host_approval_ledger=host_approval_ledger, session_timeout=session_timeout,
                     command_timeout=command_timeout, max_commands=max_commands)
             finally:
-                receiver.close();stopped.set();watcher.join()
+                try:
+                    receiver.close()
+                finally:
+                    try:
+                        if ready_channel is not None: ready_channel.close()
+                    finally:
+                        stopped.set();watcher.join()
                 if monitor_errors:
                     if sys.exception() is not None:
                         # Preserve session/revocation failures as the primary
