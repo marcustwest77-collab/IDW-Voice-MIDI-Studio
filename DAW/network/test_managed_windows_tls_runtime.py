@@ -25,6 +25,52 @@ WIRE = b"1|45|1|managed_runtime|arm|1"
 
 
 class RuntimeBoundaryTests(unittest.TestCase):
+    def test_monitor_failure_cancels_receiver_and_preserves_teardown_errors(self):
+        for teardown_fails in (False, True):
+            with self.subTest(teardown_fails=teardown_fails):
+                launch = ManagedBridgeLaunch("\\\\.\\pipe\\IDW-LocalBootstrap-" + "a" * 64, 123, 45)
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                context.verify_mode = ssl.CERT_REQUIRED
+                receiver = NativeTLSLoopbackReceiver(context)
+                self.addCleanup(receiver.close)
+                serving = threading.Event();held = []
+                monitor_error = OSError("injected liveness query failure")
+                teardown_error = ConnectionError("injected native revoke failure")
+                original_serve = receiver.serve_once
+                @contextmanager
+                def hold(_):
+                    held.append(True)
+                    try: yield 456
+                    finally: held.pop()
+                def alive(_):
+                    if threading.current_thread().name == "idw-native-parent-watch":
+                        self.assertTrue(serving.wait(1))
+                        raise monitor_error
+                    return True
+                def serve(**options):
+                    serving.set()
+                    self.assertTrue(receiver._cancel.wait(1), "monitor must cancel owned receiver")
+                    self.assertEqual(held, [True])
+                    if teardown_fails: raise teardown_error
+                    return original_serve(**options)
+                with patch("managed_windows_tls_runtime.launch_api.hold_launch_parent", side_effect=hold), \
+                        patch("managed_windows_tls_runtime.launch_api.launch_parent_is_alive", side_effect=alive), \
+                        patch("managed_windows_tls_runtime.NativeTLSLoopbackReceiver", return_value=receiver), \
+                        patch.object(receiver, "serve_once", side_effect=serve):
+                    with self.assertRaises(ConnectionError if teardown_fails else PermissionError) as caught:
+                        serve_managed_windows_tls_once(launch, context, expected_peer_id="guest",
+                            approved_client_sha256="a" * 64, host_consent=lambda _: self.fail("no consent after failure"),
+                            host_approval_ledger=NativeCommandApprovalLedger(), on_listening=lambda _: None)
+                if teardown_fails:
+                    self.assertIs(caught.exception, teardown_error)
+                    self.assertIn("managed launch parent monitoring also failed", caught.exception.__notes__)
+                else:
+                    self.assertIs(caught.exception.__cause__, monitor_error)
+                self.assertEqual(receiver._listener.fileno(), -1)
+                self.assertEqual(held, [])
+                self.assertFalse(any(t.name == "idw-native-parent-watch" for t in threading.enumerate()))
+
     def test_parent_rejection_cannot_bind_or_advertise_listener(self):
         launch = ManagedBridgeLaunch("\\\\.\\pipe\\IDW-LocalBootstrap-" + "a" * 64, 123, 45)
         with patch("managed_windows_tls_runtime.launch_api.hold_launch_parent", side_effect=PermissionError), \
