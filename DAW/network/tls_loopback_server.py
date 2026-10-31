@@ -16,7 +16,9 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
                    verified_peer_id=None, verified_channel_id=None, replay_guard=None,
                    client_cafile=None, approved_client_sha256=None,
                    approved_peer_by_sha256=None, host_approval=None,
-                   host_approval_ledger=None, accepted_command_sink=None):
+                   host_approval_ledger=None, accepted_command_sink=None, accept_timeout=5):
+    if type(accept_timeout) not in (int, float) or not 1 <= accept_timeout <= 60:
+        raise ValueError("listener timeout must be between one and sixty seconds")
     if not (1024 <= port <= 65535) or not certfile or not keyfile:
         raise ValueError("port and TLS certificate/key are required")
     if approved_client_sha256 is not None:
@@ -43,7 +45,7 @@ def serve_tls_once(port, certfile, keyfile, ready=None, *, session=None,
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.bind(("127.0.0.1", port))
         listener.listen(1)
-        listener.settimeout(5)
+        listener.settimeout(accept_timeout)
         if ready is not None:
             ready.set()
         raw, _ = listener.accept()

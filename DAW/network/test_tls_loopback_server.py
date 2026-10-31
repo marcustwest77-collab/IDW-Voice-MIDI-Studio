@@ -16,6 +16,13 @@ from replay_guard import ReplayGuard
 
 
 class TLSServerTest(unittest.TestCase):
+    def test_listener_wait_is_bounded_before_startup(self):
+        for timeout in (0,61,True,"60",float("inf"),float("nan")):
+            with self.subTest(timeout=timeout), mock.patch("tls_loopback_server.socket.socket") as socket_factory:
+                with self.assertRaises(ValueError):
+                    serve_tls_once(38941,"cert","key",accept_timeout=timeout)
+                socket_factory.assert_not_called()
+
     def test_missing_command_ledger_fails_before_listener(self):
         from unittest.mock import MagicMock
         with self.assertRaises(PermissionError):
