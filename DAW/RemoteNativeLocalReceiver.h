@@ -73,6 +73,7 @@ public:
         return true;
     }
     unsigned short port() const { return port_; }
+    std::uint64_t epoch() const { return epoch_; }
     void stop() {
         stopping_.store(true);
         if (worker_.joinable()) worker_.join();

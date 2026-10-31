@@ -32,7 +32,8 @@ def run(config):
             return False
         return (session.admit_bound(certificate_peer, config["channel"],
                                     config["host_approved"], True) and
-                session.grant(control=config["track_control"], recording=False))
+                session.grant(control=config["track_control"], recording=False) and
+                bridge.connected(certificate_peer, epoch))
 
     class Ready:
         def set(self):

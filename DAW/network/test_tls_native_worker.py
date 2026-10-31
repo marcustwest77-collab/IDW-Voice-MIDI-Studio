@@ -36,6 +36,7 @@ class TLSNativeWorkerTests(unittest.TestCase):
         self.native.stdin.write(self.token+"\n")
         self.native.stdin.flush()
         self.native_port = int(self.native.stdout.readline())
+        self.assertEqual(self.operation("admitted"), "no")
 
     def close_native(self):
         if self.native.poll() is None:
@@ -81,6 +82,7 @@ class TLSNativeWorkerTests(unittest.TestCase):
     def test_success_and_replay_after_worker_restart(self):
         payload = b"1|45|1|arm1|arm|0"
         self.assertEqual(self.exchange(payload), (payload, 0))
+        self.assertEqual(self.operation("admitted"), "yes")
         self.assertEqual(self.operation("drain"), "1")
         self.assertEqual(self.exchange(payload), (None, 1))
         self.assertEqual(self.operation("drain"), "0")
@@ -93,6 +95,8 @@ class TLSNativeWorkerTests(unittest.TestCase):
                        {"peer": "other"}, {"approved_requests": ["different"]}):
             with self.subTest(fields=list(change)):
                 self.assertEqual(self.exchange(**change), (None, 1))
+                if "approved_requests" not in change:
+                    self.assertEqual(self.operation("admitted"), "no")
                 self.assertEqual(self.operation("drain"), "0")
 
     def test_revocation_and_forbidden_action(self):
@@ -109,6 +113,7 @@ class TLSNativeWorkerTests(unittest.TestCase):
                 verified_tls_client("127.0.0.1", config["tls_port"], "localhost",
                                     config["server_cert"], b"1|45|1|arm1|arm|0")
             self.assertEqual(worker.process.wait(timeout=6), 1)
+        self.assertEqual(self.operation("admitted"), "no")
         self.assertEqual(self.operation("drain"), "0")
 
     def test_native_unavailable_does_not_report_success(self):

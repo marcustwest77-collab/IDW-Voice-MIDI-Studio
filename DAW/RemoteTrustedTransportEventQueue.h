@@ -70,6 +70,13 @@ public:
   return out;
  }
  void clear() { std::lock_guard<std::mutex> lock(mutex_);queue_.clear(); }
+ // Admission remains authoritative after the UI drains the connection event.
+ // Used to acknowledge an idempotent local worker admission without emitting
+ // another connection event or reviving an ended/superseded epoch.
+ bool isAdmitted(std::uint64_t epoch) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return epoch!=0 && epoch==highestAdmittedEpoch_ && epoch>lastTerminatedEpoch_;
+ }
 private:
  std::mutex mutex_;
  std::deque<TrustedTransportEvent> queue_;

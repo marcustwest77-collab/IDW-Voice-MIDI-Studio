@@ -38,6 +38,14 @@ class NativeReceiverTests(unittest.TestCase):
 
     def test_authentication_replay_and_delivery(self):
         wrong = NativeLocalCommandBridge(self.port, session_token=secrets.token_hex(32))
+        self.assertFalse(self.client.deliver(self.event()))
+        self.assertEqual(self.operation("admitted"), "no")
+        self.assertFalse(wrong.connected("peer",45))
+        self.assertFalse(self.client.connected("other",45))
+        self.assertFalse(self.client.connected("peer",46))
+        self.assertEqual(self.operation("admitted"), "no")
+        self.assertTrue(self.client.connected("peer",45))
+        self.assertEqual(self.operation("admitted"), "yes")
         self.assertFalse(wrong.deliver(self.event()))
         self.assertFalse(self.client.deliver(self.event(peer="other")))
         self.assertFalse(self.client.deliver(self.event(epoch=46)))
@@ -49,10 +57,12 @@ class NativeReceiverTests(unittest.TestCase):
         self.assertEqual(self.operation("drain"), "2")
         self.assertTrue(self.client.deliver(self.event(3)))
         self.assertEqual(self.operation("revoke"), "revoked")
+        self.assertFalse(self.client.connected("peer",45))
         self.assertFalse(self.client.deliver(self.event(4)))
         self.assertEqual(self.operation("drain"), "0")
 
     def test_queue_backpressure_does_not_ack_or_consume_sequence(self):
+        self.assertTrue(self.client.connected("peer",45))
         self.operation("drain")
         for seq in range(1, 33):
             self.assertTrue(self.client.deliver(self.event(seq)))
@@ -68,6 +78,7 @@ class NativeReceiverTests(unittest.TestCase):
         with socket.create_connection(("127.0.0.1", self.port), 2) as connection:
             connection.sendall(b"\0")
             self.assertEqual(connection.recv(1), b"")
+        self.assertTrue(self.client.connected("peer",45))
         self.assertTrue(self.client.deliver(self.event()))
 
     def test_stop_interrupts_partial_frame(self):

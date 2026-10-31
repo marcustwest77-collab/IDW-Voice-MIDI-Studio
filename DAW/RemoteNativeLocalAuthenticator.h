@@ -10,7 +10,8 @@ class NativeLocalAuthenticator {
 public:
     NativeLocalAuthenticator(std::string token, std::string peer, std::uint64_t epoch,
                              TrustedTransportEventQueue& queue)
-        : token_(std::move(token)), peer_(std::move(peer)), epoch_(epoch), adapter_(queue) {}
+        : token_(std::move(token)), peer_(std::move(peer)), epoch_(epoch),
+          queue_(queue), adapter_(queue) {}
     bool configured() const {
         if (token_.size()!=64 || !validId(peer_) || epoch_==0) return false;
         for (char c : token_)
@@ -29,6 +30,16 @@ public:
         const auto endPeer=packet.find('\n',73);
         if (endPeer==std::string::npos || packet.substr(73,endPeer-73)!=peer_) return false;
         const auto wire=packet.substr(endPeer+1);
+        // Only the locally provisioned TLS worker has this token. It may send
+        // CONNECT only after certificate verification, pinning and host consent.
+        // No booleans/permissions from a remote command are accepted here.
+        if (wire=="CONNECT|"+std::to_string(epoch_)) {
+            if (connected_) return queue_.isAdmitted(epoch_);
+            connected_=queue_.push({TrustedTransportEvent::Kind::connected,
+                                   epoch_,true,true,true,{}});
+            return connected_;
+        }
+        if (!connected_ || !queue_.isAdmitted(epoch_)) return false;
         CommandMessage command;
         if (!parseControlCommand(wire,command) || command.sessionEpoch!=epoch_ ||
             command.sequence<=sequence_ || command.trackIndex>=128 ||
@@ -44,6 +55,8 @@ public:
 private:
     std::string token_,peer_;
     std::uint64_t epoch_=0,sequence_=0;
+    bool connected_=false;
+    TrustedTransportEventQueue& queue_;
     VerifiedLocalCommandQueueAdapter adapter_;
 };
 }
