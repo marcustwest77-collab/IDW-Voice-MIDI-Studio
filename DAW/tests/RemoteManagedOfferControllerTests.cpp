@@ -37,7 +37,7 @@ struct FakeManager {
                             const WindowsBridgeSession::TimedOfferConsent& consent,unsigned timeoutMs,
                             const std::atomic<bool>* ownerCanceled) {
         const auto deadline=std::chrono::steady_clock::now()+(readyMode==1 ? -1ms :
-            std::chrono::milliseconds(readyMode==4 ? 60 : timeoutMs));
+            std::chrono::milliseconds(readyMode==4 ? 200 : timeoutMs));
         if(!ready({readyMode==2 ? epoch+1 : epoch,static_cast<std::uint16_t>(readyMode==3 ? 0 : 12345)},
                   *ownerCanceled,deadline)) return false;
         readyPublished.store(true);
@@ -64,13 +64,14 @@ int main() {
             await([&]{return manager.readyPublished.load();});
             if(mode==4) {
                 // Keep the worker pending past the original readiness budget.
-                std::this_thread::sleep_for(80ms);
-                assert(!controller.takeReadiness());
+                assert(controller.takeReadiness() && controller.pendingReadiness());
+                std::this_thread::sleep_for(250ms);
+                assert(!controller.takeReadiness() && !controller.pendingReadiness());
             }
             manager.releaseReady.store(true);
         }
         await([&]{result=controller.takeStartupResult();return bool(result);});
-        assert(!*result && !controller.takeReadiness() && !controller.pending());
+        assert(!*result && !controller.takeReadiness() && !controller.pendingReadiness() && !controller.pending());
         assert(manager.admitted.load()==0);
         controller.stop();
         // A replacement operation cannot inherit the old port or deadline.
@@ -89,7 +90,7 @@ int main() {
         std::optional<bool> result;
         await([&]{result=controller.takeStartupResult();return bool(result);});
         // Discovery is no longer pending after admission, either.
-        assert(*result && manager.admitted.load()==1 && !controller.takeReadiness());
+        assert(*result && manager.admitted.load()==1 && !controller.takeReadiness() && !controller.pendingReadiness());
         controller.stop();
     }
     {
@@ -98,8 +99,9 @@ int main() {
         std::optional<LocalBridgeReady> ready;
         await([&]{ready=controller.takeReadiness();return bool(ready);});
         assert(ready->epoch==45 && ready->tlsPort==12345 && !controller.takeReadiness() && manager.admitted.load()==0);
+        assert(controller.pendingReadiness() && controller.pendingReadiness()->tlsPort==12345);
         await([&]{return bool(controller.pending());});assert(controller.resolve(*controller.pending(),false));
-        controller.stop();assert(!controller.takeReadiness());
+        controller.stop();assert(!controller.takeReadiness() && !controller.pendingReadiness());
     }
     {
         FakeManager manager;ManagedOfferController<FakeManager> controller(manager);

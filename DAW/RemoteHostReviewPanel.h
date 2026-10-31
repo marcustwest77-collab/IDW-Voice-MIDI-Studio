@@ -4,6 +4,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "RemoteHostReviewController.h"
 #include "RemoteLocalOfferConsent.h"
+#include "RemoteBridgeReadyWire.h"
 #include <functional>
 #include <memory>
 
@@ -35,6 +36,7 @@ public:
         header_.setText("Remote Studio - Host Approval", juce::dontSendNotification);
         addAndMakeVisible(status_);
         status_.setText("Offline: remote approvals unavailable", juce::dontSendNotification);
+        addChildComponent(discovery_);
         addAndMakeVisible(revokeButton_);
         revokeButton_.setButtonText("REVOKE CONTROL");
         revokeButton_.onClick=[this] { if (onRevokeControl) onRevokeControl(); };
@@ -56,6 +58,17 @@ public:
         }
         for(auto& row:rows_) row->approve.setEnabled(approvalEnabled_ && !consentRow_);
         resized();repaint();
+    }
+
+    // Trusted owner polls live controller state; this label grants no consent.
+    void showLocalReadiness(std::optional<LocalBridgeReady> ready) {
+        jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+        const bool visible=ready && ready->epoch!=0 && ready->tlsPort!=0;
+        const auto text=visible ? "Local bridge: 127.0.0.1:"+juce::String(ready->tlsPort)+
+            "\nDiscovery grants no control; TLS and host consent required." : juce::String{};
+        if(discovery_.isVisible()==visible && discovery_.getText()==text) return;
+        discovery_.setText(text,juce::dontSendNotification);
+        discovery_.setVisible(visible);resized();repaint();
     }
 
     void setConnectionStatus(const juce::String& status) {
@@ -99,6 +112,7 @@ public:
         revokeButton_.setBounds(headerArea.removeFromRight(150).reduced(2));
         header_.setBounds(headerArea);
         status_.setBounds(area.removeFromTop(24));
+        discovery_.setBounds(area.removeFromTop(discovery_.isVisible() ? 42 : 0));
         if(consentRow_) consentRow_->setBounds(area.removeFromTop(97));
         emptyState_.setBounds(area.removeFromTop(rows_.empty() ? 30 : 0));
         for (auto& row : rows_) row->setBounds(area.removeFromTop(36));
@@ -154,7 +168,7 @@ private:
     bool approvalEnabled_ = false; // deny by default until live authenticated DAW integration
     juce::TextButton revokeButton_;
     std::unique_ptr<LocalConsentRow> consentRow_;
-    juce::Label header_, status_, emptyState_;
+    juce::Label header_, status_, emptyState_, discovery_;
     std::vector<std::unique_ptr<ReviewRow>> rows_;
 };
 }

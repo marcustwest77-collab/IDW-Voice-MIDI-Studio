@@ -599,10 +599,21 @@ verify no discovery fallback and joined monitoring even if scope cleanup fails.
 
 Existing timed/legacy profiles remain supported; their packaged compatibility
 tests still use the temporary readiness file. The Workstation's private configured
-startup hook still selects the existing timed profile, and no normal user action
-or default configuration activates a helper. Production whole-bundle trust,
-protected credentials, frontend discovery/selection and activation remain
-unfinished. This is a local packaged-readiness demonstration only, not DAW action
+startup hook now accepts an explicit readiness-profile option (false by default).
+Its message-thread timer polls `pendingReadiness()` independently of one-shot
+driver consumption and updates a read-only loopback endpoint label in the host
+review panel. The label is cleared on deadline expiry, startup completion or
+failure, stop/revocation and replacement. It does not create consent controls,
+enable command approval, connect a client or change the authenticated grant.
+The existing exact-offer consent flow remains separate. Headless JUCE tests
+exercise endpoint replacement/removal and verify discovery refresh cannot decide
+or replace consent. Controller tests cover live polling after one-shot delivery
+and clearing at expiry/completion/stop.
+
+No normal user action or default configuration activates a helper. Production
+whole-bundle trust, protected credentials, frontend client connection and normal
+activation remain unfinished. This is local packaged fixture and headless JUCE
+integration only, not a running Workstation TLS demonstration, DAW action
 execution or two-computer collaboration.
 
 The managed JUCE consent path now has an explicit **maximum 30-second shared
