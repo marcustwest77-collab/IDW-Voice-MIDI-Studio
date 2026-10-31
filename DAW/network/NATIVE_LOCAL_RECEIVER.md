@@ -11,7 +11,9 @@ collaborator with track-control permission. The caller must provide a fresh
 cryptographically random 32-byte secret encoded as 64 lowercase hex characters,
 the independently verified peer ID, and the admitted epoch. Secret generation,
 OS-protected provisioning to the TLS process, and a launcher/UI that calls this
-method remain unfinished. Do not put tokens in arguments, logs, or project files.
+method remain unfinished in the Workstation. A Python parent/child pipe bootstrap
+and TLS-to-native worker now exist; see `TLS_NATIVE_WORKER.md`. Do not put tokens
+in arguments, logs, or project files.
 The activation method is not exposed as a network operation.
 
 `NativeLocalCommandBridge` is a separate native-protocol client; the earlier JSON
