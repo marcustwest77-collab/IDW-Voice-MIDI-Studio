@@ -67,7 +67,8 @@ bool sendCommand(const LocalSessionBootstrap& bootstrap, const std::string& requ
 std::wstring startedEvent(DWORD parent) { return L"Local\\IDW-BridgeTestStarted-" + std::to_wstring(parent); }
 int childMain(int argc, char** argv) {
     if (argc == 2) { Sleep(15000); return 0; } // Owned descendant fixture.
-    const bool offerMode=argc==5 && std::string(argv[1])=="--idw-native-offer";
+    const bool readyMode=argc==5 && std::string(argv[1])=="--idw-native-ready-offer";
+    const bool offerMode=readyMode || (argc==5 && std::string(argv[1])=="--idw-native-offer");
     if (!offerMode && (argc != 4 || std::string(argv[1]) != "--idw-native-bootstrap")) return 2;
     const auto parentId = static_cast<DWORD>(std::strtoul(argv[3], nullptr, 10));
     const auto path = selfPath();
@@ -82,6 +83,7 @@ int childMain(int argc, char** argv) {
     LocalTLSOffer offer;
     if(offerMode) offer={std::strtoull(argv[4],nullptr,10),std::string(64,'a'),std::string(64,'b'),13};
     if(offerMode && path.find(L"-wrong-epoch.exe")!=std::wstring::npos) ++offer.epoch;
+    const LocalBridgeReady ready{offer.epoch,12345}; // Synthetic test discovery, not a TLS listener.
     const bool result = receiveWindowsBootstrap(std::wstring(ascii.begin(), ascii.end()), parent.value,
         [&](const LocalSessionBootstrap& bootstrap) {
             std::string request = "managed_bridge";
@@ -96,7 +98,7 @@ int childMain(int argc, char** argv) {
             }
             return bootstrap.peerSha256 == std::string(64, 'a') &&
                    bootstrap.connectionId == std::string(64, 'b') && sendCommand(bootstrap, request);
-        }, 3000,offerMode?&offer:nullptr);
+        }, 3000,offerMode?&offer:nullptr,readyMode?&ready:nullptr);
     if (!result) return 4;
     Sleep(path.find(L"-exit.exe") != std::wstring::npos ? 100 : 15000);
     return 0;
@@ -312,6 +314,51 @@ int main(int argc, char** argv) {
     assert(!session.startWithTimedOffer(executable,approved,options,209,std::string(64,'a'),timedConsent,30001));
     assert(session.startWithTimedOffer(executable,approved,options,209,std::string(64,'a'),timedConsent,10000));
     session.stop();queue.drain();
+    bool readyCalled=false;WindowsBridgeSession::OfferDeadline readyDeadline{};
+    auto onReady=[&](const LocalBridgeReady& ready,const std::atomic<bool>& cancel,WindowsBridgeSession::OfferDeadline deadline) {
+        assert(!cancel.load() && ready.epoch==210 && ready.tlsPort==12345 && queue.drain().empty());
+        readyCalled=true;readyDeadline=deadline;return true;
+    };
+    auto afterReady=[&](const LocalTLSOffer& offer,LocalHostConsent& grant,const std::atomic<bool>& cancel,
+                        WindowsBridgeSession::OfferDeadline deadline) {
+        assert(readyCalled && deadline==readyDeadline && queue.drain().empty());
+        return approveOffer(offer,grant,cancel);
+    };
+    assert(session.startWithReadyOffer(executable,approved,options,210,std::string(64,'a'),onReady,afterReady,2000));
+    events=queue.drain();assert(events.size()==2 && events.back().wire=="1|210|1|managed_bridge|arm|1");
+    session.stop();queue.drain();
+    bool unexpectedConsent=false;
+    auto noConsent=[&](const LocalTLSOffer&,LocalHostConsent&,const std::atomic<bool>&,WindowsBridgeSession::OfferDeadline) {
+        unexpectedConsent=true;return false;
+    };
+    auto rejectReady=[](const LocalBridgeReady&,const std::atomic<bool>&,WindowsBridgeSession::OfferDeadline){return false;};
+    assert(!session.startWithReadyOffer(executable,approved,options,211,std::string(64,'a'),rejectReady,noConsent,2000));
+    assert(!unexpectedConsent && queue.drain().empty() && session.processId()==0);
+    readyCalled=false;
+    assert(!session.startWithReadyOffer(wrongEpoch.path,approved,options,212,std::string(64,'a'),onReady,noConsent,2000));
+    assert(!readyCalled && !unexpectedConsent && queue.drain().empty());
+    bool expiredCallbackEntered=false;
+    auto expiredReady=[&](const LocalBridgeReady&,const std::atomic<bool>&,WindowsBridgeSession::OfferDeadline) {
+        expiredCallbackEntered=true;Sleep(1100);return true;
+    };
+    assert(!session.startWithReadyOffer(executable,approved,options,213,std::string(64,'a'),expiredReady,noConsent,1000));
+    assert(expiredCallbackEntered && !unexpectedConsent && queue.drain().empty());
+    std::atomic<bool> waitingReady{false};bool readyResult=true;
+    auto waitReady=[&](const LocalBridgeReady&,const std::atomic<bool>& canceled,WindowsBridgeSession::OfferDeadline) {
+        waitingReady.store(true);while(!canceled.load()) Sleep(5);return false;
+    };
+    std::thread startingReady([&]{readyResult=session.startWithReadyOffer(executable,approved,options,214,
+        std::string(64,'a'),waitReady,noConsent,5000);});
+    const auto readyUntil=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+    while(!waitingReady.load() && std::chrono::steady_clock::now()<readyUntil) Sleep(5);
+    assert(waitingReady.load());session.stop();startingReady.join();
+    assert(!readyResult && !unexpectedConsent && queue.drain().empty() && session.processId()==0);
+    readyCalled=false;
+    auto metadataOnly=[&](const LocalBridgeReady&,const std::atomic<bool>&,WindowsBridgeSession::OfferDeadline) {
+        readyCalled=true;assert(queue.drain().empty());return true;
+    };
+    assert(!session.startWithReadyOffer(executable,approved,options,215,std::string(64,'c'),metadataOnly,noConsent,2000));
+    assert(readyCalled && !unexpectedConsent && queue.drain().empty() && session.processId()==0);
 #else
     std::string output = "unchanged";
     assert(!inspectWindowsBridgeSha256(L"anything", output) && output == "unchanged");

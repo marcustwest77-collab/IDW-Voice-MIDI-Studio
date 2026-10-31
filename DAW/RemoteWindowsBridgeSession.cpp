@@ -268,7 +268,7 @@ bool WindowsBridgeSession::startWithTimedOffer(const std::wstring& executable,co
 bool WindowsBridgeSession::startWithOfferImpl(const std::wstring& executable,const std::string& approvedSha256,
         const LocalSocketReceiver::Options& options,std::uint64_t expectedEpoch,
         const std::string& approvedPeerSha256,const TimedOfferConsent& consentFor,unsigned timeoutMs,
-        const std::atomic<bool>* launchCanceled,std::uint64_t stopSequence) {
+        const std::atomic<bool>* launchCanceled,std::uint64_t stopSequence,const ReadyCallback* readyFor) {
     auto& p=*impl_;
     // Snapshot stop generation before checking the owner's flag: stop either
     // precedes entry (flag rejects it) or invalidates this startup's generation.
@@ -287,8 +287,17 @@ bool WindowsBridgeSession::startWithOfferImpl(const std::wstring& executable,con
             observed!=approvedSha256 || canonical.size()<4 ||
             _wcsicmp(canonical.c_str()+canonical.size()-4,L".exe")!=0 ||
             op->canceled.load() || p.stopSequence.load()!=stopSequence || !op->channel.create() ||
-            !p.launch(canonical,op,stopSequence,L"--idw-native-offer",expectedEpoch)) {
+            !p.launch(canonical,op,stopSequence,readyFor?L"--idw-native-ready-offer":L"--idw-native-offer",expectedEpoch)) {
             p.cleanup();return false;
+        }
+        if(readyFor) {
+            LocalBridgeReady ready;OfferDeadline deadline{};
+            if(!op->channel.receiveReadyFrom(p.process.value,ready,timeoutMs,&deadline) || ready.epoch!=expectedEpoch ||
+               op->canceled.load() || p.stopSequence.load()!=stopSequence ||
+               !(*readyFor)(ready,op->canceled,deadline) || op->canceled.load() ||
+               p.stopSequence.load()!=stopSequence || std::chrono::steady_clock::now()>=deadline) {
+                p.cleanup();return false;
+            }
         }
         LocalTLSOffer offer;
         OfferDeadline offerDeadline{};
@@ -316,8 +325,17 @@ bool WindowsBridgeSession::startWithOfferImpl(const std::wstring& executable,con
     } catch(...) {p.cleanup();return false;}
 #else
     (void)stopSequence;(void)executable;(void)approvedSha256;(void)options;(void)expectedEpoch;
-    (void)approvedPeerSha256;(void)consentFor;(void)timeoutMs;return false;
+    (void)approvedPeerSha256;(void)consentFor;(void)timeoutMs;(void)readyFor;return false;
 #endif
+}
+bool WindowsBridgeSession::startWithReadyOffer(const std::wstring& executable,const std::string& approvedSha256,
+        const LocalSocketReceiver::Options& options,std::uint64_t expectedEpoch,
+        const std::string& approvedPeerSha256,const ReadyCallback& readyFor,const TimedOfferConsent& consentFor,
+        unsigned timeoutMs,const std::atomic<bool>* launchCanceled) {
+    const auto stopSequence=impl_->stopSequence.load();
+    if(!readyFor) return false;
+    return startWithOfferImpl(executable,approvedSha256,options,expectedEpoch,approvedPeerSha256,
+        consentFor,timeoutMs,launchCanceled,stopSequence,&readyFor);
 }
 void WindowsBridgeSession::stop() {
     auto& p = *impl_;

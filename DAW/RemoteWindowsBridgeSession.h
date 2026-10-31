@@ -5,6 +5,7 @@
 #include <functional>
 #include <chrono>
 #include "RemoteTLSOfferWire.h"
+#include "RemoteBridgeReadyWire.h"
 
 namespace idw::daw::remote {
 // Diagnostic hash calculation only. Its result is NOT automatic approval of an
@@ -41,6 +42,14 @@ public:
     bool startWithTimedOffer(const std::wstring&,const std::string&,const LocalSocketReceiver::Options&,
                              std::uint64_t,const std::string&,const TimedOfferConsent&,
                              unsigned timeoutMs=30000,const std::atomic<bool>* launchCanceled=nullptr);
+    using ReadyCallback=std::function<bool(const LocalBridgeReady&,const std::atomic<bool>&,OfferDeadline)>;
+    // Native readiness profile. The callback may publish a non-secret port via
+    // trusted discovery, but it grants no TLS/track authority. Like consent it
+    // must be bounded, must not retain references or re-enter this manager.
+    // Call off the UI/audio thread, as for the other offer startup methods.
+    bool startWithReadyOffer(const std::wstring&,const std::string&,const LocalSocketReceiver::Options&,
+                             std::uint64_t,const std::string&,const ReadyCallback&,const TimedOfferConsent&,
+                             unsigned timeoutMs=30000,const std::atomic<bool>* launchCanceled=nullptr);
     bool onTransportLost(const LocalTransportBinding&);
     void stop();
     bool running() const;
@@ -48,7 +57,7 @@ public:
 private:
     bool startWithOfferImpl(const std::wstring&,const std::string&,const LocalSocketReceiver::Options&,
                             std::uint64_t,const std::string&,const TimedOfferConsent&,unsigned,
-                            const std::atomic<bool>*,std::uint64_t stopSequence);
+                            const std::atomic<bool>*,std::uint64_t stopSequence,const ReadyCallback* readyFor=nullptr);
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

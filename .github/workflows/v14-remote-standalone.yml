@@ -42,7 +42,7 @@ jobs:
               if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32 -lbcrypt); fi
               if [[ "${{ runner.os }}" == "macOS" ]]; then compile+=(-framework Security); fi
             fi
-            if [[ "$name" == "RemoteWindowsBootstrapChannelTests" ]]; then
+            if [[ "$name" == "RemoteWindowsBootstrapChannelTests" || "$name" == "RemotePrivateReadinessTests" ]]; then
               compile+=(DAW/RemoteWindowsBootstrapChannel.cpp DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
               if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32 -lbcrypt -ladvapi32); fi
               if [[ "${{ runner.os }}" == "macOS" ]]; then compile+=(-framework Security); fi
@@ -148,6 +148,7 @@ jobs:
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_native_tls_offer.py -v
           python DAW/network/test_windows_bridge_launch.py -v
           python DAW/network/test_native_tls_policy.py -v
+          python DAW/network/test_native_bridge_ready.py -v
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_managed_windows_tls_runtime.py -v
 
       - name: Test packaged TLS child through the actual pinned Windows manager
