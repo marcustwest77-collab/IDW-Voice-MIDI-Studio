@@ -549,6 +549,10 @@ bootstrap, native queue/pending review, EOF revocation, manager stop, and execut
 digest rejection. Its separate synthetic smoke test is not TLS verification.
 Packaging coverage runs only with explicit `IDW_PACKAGED_TLS_TESTS=1` on Windows;
 missing build dependencies or fixture failures fail that CI step.
+When built with the Codex-managed Python runtime, the test bundle also includes
+its adjacent `codex-rejected-cas.pem` file if present. That runtime loads the
+additional certificate-distrust policy during SSL context construction; preserving
+the file makes local frozen tests work without altering the runtime's TLS policy.
 
 The frozen child is **test only**: automatic test consent/command approvals,
 temporary certificate/key paths, and a fixed non-secret readiness file are baked

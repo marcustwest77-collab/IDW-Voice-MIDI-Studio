@@ -60,12 +60,18 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         entry = root / "fixture_entry.py"
         entry.write_text("from packaged_tls_child_fixture import run_fixture\n"
                          "if __name__ == '__main__':\n    run_fixture(" + repr(policy) + ")\n", encoding="utf-8")
+        # The Codex-managed Python runtime loads this additional certificate
+        # distrust policy when constructing SSLContext. Preserve it in frozen
+        # builds rather than editing ssl.py or weakening the runtime policy.
+        runtime_policy = Path(ssl.__file__).with_name("codex-rejected-cas.pem")
+        runtime_data = (["--add-data", str(runtime_policy) + os.pathsep + "."]
+                        if runtime_policy.is_file() else [])
         # Windows onedir keeps the TLS owner in the actual directly launched
         # process. Onefile's extra bootloader parent is not this launch contract.
         result = subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
             "--name", "IDWPackagedTLSFixture", "--paths", str(Path(__file__).resolve().parent),
             "--distpath", str(root / "dist"), "--workpath", str(root / "build"),
-            "--specpath", str(root), str(entry)], capture_output=True, timeout=180,
+            "--specpath", str(root), *runtime_data, str(entry)], capture_output=True, timeout=180,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if result.returncode:
             raise RuntimeError("test-only package build failed: " + result.stderr.decode(errors="replace")[-6000:])
