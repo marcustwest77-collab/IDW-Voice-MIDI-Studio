@@ -10,7 +10,7 @@ import time
 import unittest
 from tls_client import verified_tls_client
 from tls_worker_bootstrap import TLSWorkerProcess, fresh_session_secret
-from local_test_client import send_local_request
+from local_test_client import send_local_request, check_local_setup, FIELDS
 
 
 class TLSNativeWorkerTests(unittest.TestCase):
@@ -79,6 +79,21 @@ class TLSNativeWorkerTests(unittest.TestCase):
             code = worker.process.wait(timeout=6)
             self.assertEqual(worker.process.stdout.read(), b"")
             return reply, code
+
+    def test_offline_client_preflight(self):
+        config = self.config()
+        setup = {key: config[key] for key in FIELDS}
+        cert, key = str(self.root / "guest.crt"), str(self.root / "guest.key")
+        from unittest.mock import patch
+        with patch("socket.socket", side_effect=AssertionError("must remain offline")):
+            self.assertIn("No connection", check_local_setup(setup, cert, key))
+            with self.assertRaises(ValueError):
+                check_local_setup(dict(setup, client_pin="0" * 64), cert, key)
+            with self.assertRaises(ValueError):
+                check_local_setup(setup, cert, str(self.root / "localhost.key"))
+            with self.assertRaises(ValueError):
+                check_local_setup(dict(setup, server_key=key), cert, key)
+        self.assertEqual(self.operation("admitted"), "no")
 
     def test_success_and_replay_after_worker_restart(self):
         payload = b"1|45|1|arm1|arm|0"

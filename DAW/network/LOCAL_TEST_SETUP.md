@@ -22,6 +22,11 @@ in the setup file. Certificate/key paths are allowed.
    matching private key, and choose a listed request ID, Select track or Arm
    track, and the visible DAW track number (starting at 1). Python must include
    tkinter. The client window keeps this information only in memory.
+   Choose CHECK SETUP before starting the host. It checks local PEM loading,
+   certificate/key matching and the client fingerprint without connecting.
+   It does not prove trust, expiry, hostname validity or port availability;
+   those still require the live TLS test. This development test uses
+   unencrypted private keys, which must remain private on your computer.
 3. Choose START LOCAL TEST. Review the collaborator, fingerprint and selected
    executable, then explicitly confirm. Cancel leaves the listener off.
 4. Note the local session epoch displayed in the status. The TLS listener waits
