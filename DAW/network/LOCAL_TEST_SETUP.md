@@ -62,3 +62,31 @@ request. This never means approved or executed. On rejection, stop/restart the
 host test and update the epoch before retrying. One host test accepts one TLS
 connection. Closing the client does not stop the host; use STOP TEST in the DAW.
 No session token is loaded or sent by this client.
+
+## Create disposable certificates for this local test
+
+If you do not already have test certificates, the package includes
+`remote-worker/create_local_test_bundle.py`. It requires a trusted OpenSSL
+executable supporting `req -addext`; it does not download or install OpenSSL.
+Run this from PowerShell in the extracted Windows package, substituting the
+actual executable path and a NEW folder inside your private user directory:
+
+```powershell
+python .\remote-worker\create_local_test_bundle.py --openssl "C:\Path\To\openssl.exe" --output "$env:USERPROFILE\IDW-Local-Test"
+```
+
+The helper creates fresh RSA server/client keys, self-signed certificates valid
+for seven days, and a validated `local-test-setup.json` with the fingerprint.
+Load that JSON in both windows; select `guest.crt` and `guest.key` in the client.
+The request ID is `local_request_1`. Continue with START LOCAL TEST and copy the
+DAW epoch into the client as described above. Live TLS verification still applies.
+
+The new folder must not already exist, and its parent must exist. Failed
+generation removes only that newly created folder. Nothing is installed into
+Windows trust stores and no network connection is made by the helper. Private
+keys are unencrypted: keep this folder private to your Windows account and do
+not share/upload it. POSIX file permissions do not configure Windows ACLs.
+The JSON uses absolute paths, so keep the folder in place while testing. Stop
+the host test before deleting the disposable folder. Create a fresh folder when
+certificates expire. These credentials are for this localhost development test,
+not a remote collaborator deployment.
