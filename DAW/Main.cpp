@@ -1,4 +1,5 @@
 #include "RemoteNativeLocalReceiver.h"
+#include "RemoteWindowsWorkerProcess.h"
 #include "MidiSineSynth.h"
 #include "PlaybackTiming.h"
 #include "LoopbackWavAnalysis.h"
@@ -131,6 +132,7 @@ public:
             remoteReviewPanel.toFront(false);
         };
         remoteReviewPanel.onRevokeControl=[this] {
+            remoteWorker.stop();
             remoteLocalReceiver.stop();
             const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
             // Discard commands waiting in the transport mailbox as well as reviewed requests.
@@ -2029,6 +2031,7 @@ private:
     void onRemoteSessionEndedOnMessageThread(bool authenticationLost) {
         auto* manager=juce::MessageManager::getInstanceWithoutCreating();
         if (!manager || !manager->isThisTheMessageThread()) return;
+        remoteWorker.stop();
         remoteLocalReceiver.stop();
         if (authenticationLost) remoteTransportLifecycle.onAuthenticationLost();
         else remoteTransportLifecycle.onPeerDisconnected();
@@ -2052,6 +2055,66 @@ private:
         remoteReviewPanel.setApprovalEnabled(false);
         remoteReviewPanel.setConnectionStatus("Waiting for verified collaborator");
         return remoteLocalReceiver.port();
+    }
+    // Trusted LOCAL host-controller entry. Settings contain public connection
+    // metadata and certificate paths, never a session secret. UI is not wired yet.
+    bool startRemoteWorkerFromLocalHostOnMessageThread(
+        const juce::File& python, const juce::File& workerScript,
+        const juce::var& settings, bool localHostConsented) {
+        auto* manager=juce::MessageManager::getInstanceWithoutCreating();
+        if (!manager || !manager->isThisTheMessageThread() || !localHostConsented ||
+            !settings.isObject() || remoteLocalReceiver.port()!=0) return false;
+        const auto peer=settings["peer"].toString().toStdString();
+        if (!idw::daw::remote::validId(peer)) return false;
+        const auto& grant=remoteSessionReviews.grant();
+        if (grant.connected) return false;
+        const auto previous=std::max(remoteWorkerEpoch,std::max(grant.sessionEpoch,grant.revokedEpoch));
+        if (previous>=static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) return false;
+        const auto secret=idw::daw::remote::WindowsWorkerProcess::freshSecret();
+        const auto channel=idw::daw::remote::WindowsWorkerProcess::freshSecret();
+        if (secret.empty() || channel.empty()) return false; // Unsupported OS or secure RNG failure.
+        remoteWorker.stop();
+        remoteWorkerEpoch=previous+1; // Never reuse an epoch after a failed launch.
+        const auto port=startNativeLocalReceiverOnMessageThread(secret,peer,remoteWorkerEpoch,true,true);
+        if (port==0) return false;
+        auto* object=new juce::DynamicObject();
+        juce::var bootstrap(object);
+        for (const auto* key : {"tls_port","server_cert","server_key","client_ca",
+                                "client_pin","approved_requests"})
+            object->setProperty(key,settings[key]);
+        object->setProperty("version",1);
+        object->setProperty("native_port",static_cast<int>(port));
+        object->setProperty("token",juce::String(secret));
+        object->setProperty("peer",juce::String(peer));
+        object->setProperty("epoch",juce::var(static_cast<juce::int64>(remoteWorkerEpoch)));
+        object->setProperty("channel",juce::String(channel));
+        object->setProperty("host_approved",true);
+        object->setProperty("track_control",true);
+        if (!remoteWorker.start(python.getFullPathName().toWideCharPointer(),
+                                workerScript.getFullPathName().toWideCharPointer(),
+                                juce::JSON::toString(bootstrap,true).toStdString())) {
+            remoteLocalReceiver.stop();
+            remoteReviewPanel.setConnectionStatus("Offline: local worker could not start");
+            return false;
+        }
+        remoteWorkerLastState=idw::daw::remote::WindowsWorkerProcess::State::starting;
+        remoteReviewPanel.setConnectionStatus("Starting local TLS worker");
+        return true;
+    }
+    void pollRemoteWorkerOnMessageThread() {
+        using State=idw::daw::remote::WindowsWorkerProcess::State;
+        const auto state=remoteWorker.poll();
+        if (state==remoteWorkerLastState) return;
+        remoteWorkerLastState=state;
+        if (state==State::failed) {
+            onRemoteSessionEndedOnMessageThread(true);
+            remoteReviewPanel.setConnectionStatus("Offline: local TLS worker stopped or failed");
+        } else if (state==State::succeeded) {
+            // A successful one-request worker exit must not erase pending host review.
+            remoteReviewPanel.setConnectionStatus("Local request received; host review required");
+        } else if (state==State::ready && !remoteSessionReviews.grant().connected) {
+            remoteReviewPanel.setConnectionStatus("Waiting for verified collaborator");
+        }
     }
     // Restricted data-only handoff for a future authenticated transport worker.
     // The caller must attest TLS identity independently; this is NOT a network listener.
@@ -3272,6 +3335,7 @@ public:
         return false;
     }
     ~Workstation() override {
+        remoteWorker.stop();
         remoteLocalReceiver.stop();
         remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
@@ -3349,11 +3413,18 @@ public:
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
     idw::daw::remote::NativeLocalReceiver remoteLocalReceiver{remoteTransportEvents};
+    idw::daw::remote::WindowsWorkerProcess remoteWorker;
+    idw::daw::remote::WindowsWorkerProcess::State remoteWorkerLastState=
+        idw::daw::remote::WindowsWorkerProcess::State::idle;
+    std::uint64_t remoteWorkerEpoch=0;
     // Independent UI-thread poll remains active even when playback is stopped.
     struct RemoteEventPollTimer final : juce::Timer {
         Workstation& owner;
         explicit RemoteEventPollTimer(Workstation& w) : owner(w) {}
-        void timerCallback() override { owner.drainTrustedTransportEventsOnMessageThread(); }
+        void timerCallback() override {
+            owner.pollRemoteWorkerOnMessageThread();
+            owner.drainTrustedTransportEventsOnMessageThread();
+        }
     } remoteEventPollTimer{*this};
     idw::daw::remote::TransportSessionLifecycle remoteTransportLifecycle{remoteSessionReviews, remoteReviewMailbox};
     idw::daw::remote::HostReviewPanel remoteReviewPanel;
