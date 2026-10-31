@@ -10,6 +10,7 @@ import time
 import unittest
 from tls_client import verified_tls_client
 from tls_worker_bootstrap import TLSWorkerProcess, fresh_session_secret
+from local_test_client import send_local_request
 
 
 class TLSNativeWorkerTests(unittest.TestCase):
@@ -129,6 +130,18 @@ class TLSNativeWorkerTests(unittest.TestCase):
         self.assertIsNotNone(worker.process.poll())
         self.assertLess(time.monotonic()-start, 2.5)
         self.assertEqual(self.operation("drain"), "0")
+
+    def test_local_client_model_delivers_for_host_review(self):
+        config=self.config()
+        setup={key:config[key] for key in ("version","peer","tls_port","server_cert",
+                                           "server_key","client_ca","client_pin","approved_requests")}
+        with TLSWorkerProcess(config) as worker:
+            result=send_local_request(setup,str(self.root/"guest.crt"),str(self.root/"guest.key"),
+                                      epoch=45,sequence=1,request_id="arm1",action="select",track_number=1)
+            self.assertIn("queued",result)
+            self.assertEqual(worker.process.wait(timeout=6),0)
+        self.assertEqual(self.operation("admitted"),"yes")
+        self.assertEqual(self.operation("drain"),"1")
 
 
 if __name__ == "__main__":
