@@ -539,6 +539,31 @@ separate work.
 
 ## Managed TLS runtime policy and lifetime
 
+Windows standalone CI additionally freezes `packaged_tls_child_fixture.py` in
+PyInstaller onedir mode and drives it through `RemoteManagedTLSReviewFixture`.
+The native fixture uses the actual `WindowsBridgeSession::startWithOffer` pinned
+launcher, not the separate Python-interpreter test launcher. The Windows onedir
+layout keeps the TLS owner in the directly launched process, preserving the
+held-parent/child PID checks. The suite exercises real mTLS, private TLS offer and
+bootstrap, native queue/pending review, EOF revocation, manager stop, and executable
+digest rejection. Its separate synthetic smoke test is not TLS verification.
+Packaging coverage runs only with explicit `IDW_PACKAGED_TLS_TESTS=1` on Windows;
+missing build dependencies or fixture failures fail that CI step.
+When built with the Codex-managed Python runtime, the test bundle also includes
+its adjacent `codex-rejected-cas.pem` file if present. That runtime loads the
+additional certificate-distrust policy during SSL context construction; preserving
+the file makes local frozen tests work without altering the runtime's TLS policy.
+
+The frozen child is **test only**: automatic test consent/command approvals,
+temporary certificate/key paths, and a fixed non-secret readiness file are baked
+into the generated test entry. CI never uploads or installs its bundle. An exe
+hash does not authenticate its dependent DLLs, Python archive or external policy
+files; the test's private temporary directory supplies that ownership assumption.
+A production package still needs an independently trusted whole-bundle policy,
+protected credentials/configuration, discovery and actual local consent UI. This
+coverage does not enable the DAW, execute track actions or demonstrate LAN/two-PC
+collaboration. Do not distribute the fixture as a beta bridge.
+
 `native_tls_policy.build_native_server_context` constructs the managed bridge's
 TLS context from explicit absolute server certificate/key paths and a PEM client
 CA snapshot supplied by trusted local configuration. It requires client
