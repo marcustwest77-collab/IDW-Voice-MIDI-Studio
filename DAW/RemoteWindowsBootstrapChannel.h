@@ -2,6 +2,7 @@
 #include "RemoteLocalSessionOwner.h"
 #include "RemoteTLSOfferWire.h"
 #include <memory>
+#include <chrono>
 
 namespace idw::daw::remote {
 // Windows-only, single-use local bootstrap channel. No launch or auto activation.
@@ -18,7 +19,10 @@ public:
     // Optional two-stage handoff: verify the held client process, read its bounded
     // TLS offer, then let the host check policy/consent before deliverTo. One shared
     // deadline includes the host decision. Reading an offer does not authenticate TLS.
-    bool receiveOfferFrom(void* expectedClientProcess, LocalTLSOffer&, unsigned timeoutMs=2000);
+    // Managed consent may wait up to 30 seconds. Credential delivery remains
+    // limited to five seconds and cannot extend the offer's shared deadline.
+    bool receiveOfferFrom(void* expectedClientProcess, LocalTLSOffer&, unsigned timeoutMs=2000,
+                          std::chrono::steady_clock::time_point* deadlineOut=nullptr);
     bool deliverTo(void* expectedClientProcess, const LocalSessionBootstrap&,
                    unsigned timeoutMs = 2000);
     void cancel(); // Safe while deliverTo is waiting; no raw handle is exposed.

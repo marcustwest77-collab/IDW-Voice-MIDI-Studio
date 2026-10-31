@@ -21,11 +21,43 @@ from loopback_transport import send_frame, receive_frame
 from test_native_local_bridge import NativeFixture, issue_certificate
 from native_tls_receiver import NativeTLSLoopbackReceiver
 from native_tls_policy import build_native_server_context
+from native_tls_session import TLSConnectionIdentity
 
 WIRE = b"1|45|1|managed_runtime|arm|1"
 
 
 class RuntimeBoundaryTests(unittest.TestCase):
+    def test_provision_budget_keeps_the_tls_sessions_absolute_deadline(self):
+        launch = ManagedBridgeLaunch("\\\\.\\pipe\\IDW-LocalBootstrap-" + "a" * 64, 123, 45)
+        identity = TLSConnectionIdentity("guest", 45, "a" * 64, "b" * 64, "TLSv1.3")
+        phase_cancel = threading.Event();deadline = time.monotonic() + 3
+        @contextmanager
+        def hold(_): yield 456
+        with patch("managed_windows_tls_runtime.launch_api.hold_launch_parent", side_effect=hold), \
+                patch("managed_windows_tls_runtime.launch_api.launch_parent_is_alive", return_value=True), \
+                patch("managed_windows_tls_runtime.NativeTLSLoopbackReceiver") as receiver, \
+                patch("managed_windows_tls_runtime.receive_windows_native_lease") as receive:
+            def serve(**options):
+                options["provide_native_lease"](identity, cancel=phase_cancel, deadline=deadline)
+                return 0
+            receiver.return_value.__enter__.return_value.serve_once.side_effect = serve
+            self.assertEqual(serve_managed_windows_tls_once(launch, None, expected_peer_id="guest",
+                approved_client_sha256="a" * 64, host_consent=lambda _: True,
+                host_approval_ledger=NativeCommandApprovalLedger(), on_listening=lambda _: None), 0)
+            receive.assert_called_once_with(launch.pipe_name, 456, identity, send_offer=True,
+                                           timeout=30.0, cancel=phase_cancel, deadline=deadline)
+
+    def test_invalid_provision_budget_never_opens_parent_or_listener(self):
+        launch = ManagedBridgeLaunch("\\\\.\\pipe\\IDW-LocalBootstrap-" + "a" * 64, 123, 45)
+        with patch("managed_windows_tls_runtime.launch_api.hold_launch_parent") as hold:
+            for value in (True, 0, 31, float("nan"), float("inf"), 10**1000):
+                with self.assertRaises(ValueError):
+                    serve_managed_windows_tls_once(launch, None, expected_peer_id="guest",
+                        approved_client_sha256="a" * 64, host_consent=lambda _: True,
+                        host_approval_ledger=NativeCommandApprovalLedger(), on_listening=lambda _: None,
+                        native_provision_timeout=value)
+            hold.assert_not_called()
+
     def test_monitor_failure_cancels_receiver_and_preserves_teardown_errors(self):
         for teardown_fails in (False, True):
             with self.subTest(teardown_fails=teardown_fails):

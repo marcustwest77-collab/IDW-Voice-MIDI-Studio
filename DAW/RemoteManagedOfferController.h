@@ -21,16 +21,16 @@ public:
                const LocalSocketReceiver::Options& options,std::uint64_t epoch,
                const std::string& peerSha256,unsigned timeoutMs=2000) {
         if(operation_ || generation_==std::numeric_limits<std::uint64_t>::max() || epoch==0 ||
-           !validBootstrapHex(imageSha256) || !validBootstrapHex(peerSha256) || timeoutMs<20 || timeoutMs>5000) return false;
+           !validBootstrapHex(imageSha256) || !validBootstrapHex(peerSha256) || timeoutMs<20 || timeoutMs>30000) return false;
         auto op=std::make_shared<Operation>(++generation_);
         operation_=op;
         try {
             worker_=std::thread([this,op,executable,imageSha256,options,epoch,peerSha256,timeoutMs] {
                 try {
-                    op->success=manager_.startWithOffer(executable,imageSha256,options,epoch,peerSha256,
-                        [op,timeoutMs](const LocalTLSOffer& offer,LocalHostConsent& consent,const std::atomic<bool>& cancel) {
-                            return !op->canceled.load() && op->consent.request(offer,consent,cancel,
-                                std::chrono::milliseconds(timeoutMs));
+                    op->success=manager_.startWithTimedOffer(executable,imageSha256,options,epoch,peerSha256,
+                        [op](const LocalTLSOffer& offer,LocalHostConsent& consent,const std::atomic<bool>& cancel,
+                             WindowsBridgeSession::OfferDeadline deadline) {
+                            return !op->canceled.load() && op->consent.requestUntil(offer,consent,cancel,deadline);
                         },timeoutMs,&op->canceled);
                 } catch(...) {op->success=false;}
                 op->done.store(true,std::memory_order_release);

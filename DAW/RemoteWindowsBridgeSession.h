@@ -3,6 +3,7 @@
 #include <memory>
 #include <atomic>
 #include <functional>
+#include <chrono>
 #include "RemoteTLSOfferWire.h"
 
 namespace idw::daw::remote {
@@ -33,11 +34,21 @@ public:
     // launchCanceled, when supplied, must outlive startWithOffer. It closes the
     // pre-entry cancellation race for asynchronous owners; stop() still performs
     // cancellation/cleanup once the manager has started processing the request.
+    using OfferDeadline=std::chrono::steady_clock::time_point;
+    using TimedOfferConsent=std::function<bool(const LocalTLSOffer&,LocalHostConsent&,const std::atomic<bool>&,OfferDeadline)>;
+    // Explicit managed UI budget up to 30 seconds, with the private channel's
+    // exact shared deadline supplied to consent. Legacy startWithOffer stays <=5s.
+    bool startWithTimedOffer(const std::wstring&,const std::string&,const LocalSocketReceiver::Options&,
+                             std::uint64_t,const std::string&,const TimedOfferConsent&,
+                             unsigned timeoutMs=30000,const std::atomic<bool>* launchCanceled=nullptr);
     bool onTransportLost(const LocalTransportBinding&);
     void stop();
     bool running() const;
     std::uint32_t processId() const; // Diagnostic only; never used as authentication.
 private:
+    bool startWithOfferImpl(const std::wstring&,const std::string&,const LocalSocketReceiver::Options&,
+                            std::uint64_t,const std::string&,const TimedOfferConsent&,unsigned,
+                            const std::atomic<bool>*,std::uint64_t stopSequence);
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

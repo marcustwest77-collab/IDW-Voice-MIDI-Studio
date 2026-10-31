@@ -31,12 +31,13 @@ class ManagedHostFixture(NativeFixture):
         self.process.stdin.write((digest + "|" + peer_pin + "\n").encode("ascii"))
         self.process.stdin.flush()
 
-    def decide(self, *, allow=True, substitute=False):
+    def decide(self, *, allow=True, substitute=False, delay=0):
         prompt = self._read(142) # Fixed test epoch 45 + exact pin/nonce/version record.
         match = re.fullmatch(rb"OFFER (45\|([0-9a-f]{64})\|[0-9a-f]{64}\|1[23])\n", prompt)
         if match is None or match[2].decode("ascii") != self.peer_pin:
             raise RuntimeError("untrusted native offer prompt")
         binding = match[1]
+        if delay: time.sleep(delay) # Trusted test controller simulates reading the certificate.
         if substitute: binding = binding.replace(b"45|", b"46|", 1)
         self.process.stdin.write((b"ALLOW|" if allow else b"DENY|") + binding + b"\n")
         self.process.stdin.flush()
@@ -97,7 +98,7 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         self.addCleanup(host.close)
         return host
 
-    def connect(self, host, *, approve=True, substitute=False):
+    def connect(self, host, *, approve=True, substitute=False, decision_delay=0):
         deadline = time.monotonic() + 6
         while not self.ready.exists():
             if host.process.poll() is not None:
@@ -111,7 +112,7 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         client = context.wrap_socket(socket.create_connection(("127.0.0.1", port), timeout=3),
                                      server_hostname="localhost")
         client.settimeout(3);self.addCleanup(client.close)
-        host.decide(allow=approve, substitute=substitute)
+        host.decide(allow=approve, substitute=substitute, delay=decision_delay)
         if approve and not substitute: self.assertEqual(host._read(), b"ACTIVE\n")
         return client
 
@@ -132,6 +133,11 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         host = self.host();client = self.connect(host);self.command(host, client)
         self.assertEqual(host.pending("STOP"), 0)
         with self.assertRaises(OSError): receive_frame(client)
+
+    def test_human_consent_after_three_seconds_still_requires_exact_binding(self):
+        host = self.host();client = self.connect(host, decision_delay=3)
+        self.command(host, client)
+        self.assertEqual(host.pending("STOP"), 0)
 
     def test_unapproved_executable_digest_fails_before_readiness(self):
         host = self.host(digest="0" * 64)

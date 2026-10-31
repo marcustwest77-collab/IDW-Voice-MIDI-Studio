@@ -300,6 +300,18 @@ int main(int argc, char** argv) {
     Copy wrongEpoch(L"-wrong-epoch");called=false;
     assert(!session.startWithOffer(wrongEpoch.path,approved,options,208,std::string(64,'a'),denyOffer));
     assert(!called && queue.drain().empty() && session.processId()==0);
+    // Timed UI path exposes its actual shared channel deadline and keeps the
+    // legacy five-second API limit. Invalid budgets do not consume an epoch.
+    assert(!session.startWithOffer(executable,approved,options,209,std::string(64,'a'),denyOffer,5001));
+    auto timedConsent=[&](const LocalTLSOffer& offer,LocalHostConsent& grant,const std::atomic<bool>& cancel,
+                          WindowsBridgeSession::OfferDeadline deadline) {
+        const auto remaining=deadline-std::chrono::steady_clock::now();
+        assert(remaining>std::chrono::seconds(5) && remaining<=std::chrono::seconds(10));
+        return approveOffer(offer,grant,cancel);
+    };
+    assert(!session.startWithTimedOffer(executable,approved,options,209,std::string(64,'a'),timedConsent,30001));
+    assert(session.startWithTimedOffer(executable,approved,options,209,std::string(64,'a'),timedConsent,10000));
+    session.stop();queue.drain();
 #else
     std::string output = "unchanged";
     assert(!inspectWindowsBridgeSha256(L"anything", output) && output == "unchanged");
