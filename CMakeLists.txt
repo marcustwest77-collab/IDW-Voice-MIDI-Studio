@@ -180,6 +180,11 @@ if(IDW_BUILD_DAW)
         target_link_libraries(IDWDAWNativeLocalReviewFixture PRIVATE Threads::Threads)
         if(WIN32)
             target_link_libraries(IDWDAWNativeLocalReviewFixture PRIVATE ws2_32 bcrypt advapi32 shell32)
+              # Python packaging integration drives this fixture; never install it.
+              add_executable(IDWDAWManagedTLSReviewFixture DAW/tests/RemoteManagedTLSReviewFixture.cpp
+                  DAW/RemoteWindowsBridgeSession.cpp DAW/RemoteWindowsBootstrapChannel.cpp
+                  DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
+              target_link_libraries(IDWDAWManagedTLSReviewFixture PRIVATE Threads::Threads ws2_32 bcrypt advapi32 shell32)
         endif()
         if(APPLE)
             target_link_libraries(IDWDAWNativeLocalReviewFixture PRIVATE "${IDW_SECURITY_FRAMEWORK}")
