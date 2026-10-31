@@ -554,9 +554,33 @@ The packaged native test host now requires the test driver to respond explicitly
 to that offer over its private captured control pipe before it can print ACTIVE
 or admit native commands. Denied and substituted decisions fail closed. This
 pipe models a trusted local controller only; never expose it to the TLS peer.
-The handoff itself opens no listeners or windows and is not yet connected to the
-JUCE consent UI. Artifact/configuration trust and actual UI activation remain
-separate work.
+The handoff itself opens no listeners or windows. `ManagedOfferController` now
+owns asynchronous launcher startup, its consent handoff and worker teardown.
+The controller is owned by one UI thread; the worker never accesses JUCE objects.
+Each operation receives a local monotonic generation, so delayed decisions cannot
+approve a replacement even if all TLS metadata matches. A launch cancellation
+flag checked after the manager's stop-generation snapshot prevents stop-before-
+worker-entry from launching an orphan helper. Diagnostic startup results are
+one-shot and do not establish live authority; queue admission still does that.
+
+The JUCE workstation now polls this controller in its existing message-thread
+timer and shows the verified certificate fingerprint with explicit Allow track
+control / Deny connection controls in Remote Review. Each displayed prompt owns
+new buttons whose callbacks capture its immutable generation and binding. A
+stale callback is rejected, and repeated clicks are disabled before dispatch.
+Expiry/cancellation clears the prompt on polling; final resolution rechecks it
+even before that poll. Track commands retain their separate host approval gate.
+The obsolete synchronous Workstation startup hook is replaced by a private,
+explicitly configured asynchronous message-thread hook. No normal user action
+or default configuration calls it yet. Production artifact/dependency trust,
+protected credentials, discovery and activation remain separate work; existing
+bounded startup/provisioning deadlines still apply to consent.
+
+Tests cover the asynchronous controller with a fake backend, the actual manager's
+pre-entry cancellation, and real packaged TLS/native review through that same
+controller. A headless JUCE component test exercises exact displayed decisions,
+duplicate clicks, prompt removal, and an old callback after prompt replacement.
+It does not display the DAW or execute track actions.
 
 Windows standalone CI additionally freezes `packaged_tls_child_fixture.py` in
 PyInstaller onedir mode and drives it through `RemoteManagedTLSReviewFixture`.

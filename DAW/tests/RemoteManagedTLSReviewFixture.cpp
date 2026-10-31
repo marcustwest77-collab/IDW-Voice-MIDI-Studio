@@ -13,7 +13,7 @@
 #include <fcntl.h>
 #endif
 #include "../RemoteWindowsBridgeSession.h"
-#include "../RemoteLocalOfferConsent.h"
+#include "../RemoteManagedOfferController.h"
 #include "../RemoteTransportSessionLifecycle.h"
 #include "../RemoteValidatedCommandReviewReceiver.h"
 #include <iostream>
@@ -44,32 +44,25 @@ int main() {
     TrustedTransportEventQueue events;
     WindowsBridgeSession session(events);
     LocalSocketReceiver::Options options;options.sessionTimeoutMs=60000;
-    LocalOfferConsent consentHandoff;
-    std::atomic<bool> finished{false};bool started=false;
-    std::thread startup([&] {
-        started=session.startWithOffer(args[1],setup.substr(0,64),options,45,setup.substr(65),
-            [&](const LocalTLSOffer& offer,LocalHostConsent& consent,const std::atomic<bool>& cancel) {
-                return consentHandoff.request(offer,consent,cancel,std::chrono::milliseconds(4000));
-            },5000);
-        finished.store(true);
-    });
-    struct JoinStartup {
-        std::thread& thread;LocalOfferConsent& consent;WindowsBridgeSession& session;
-        ~JoinStartup(){if(thread.joinable()){consent.close();session.stop();thread.join();}}
-    } joinStartup{startup,consentHandoff,session};
+    ManagedOfferController<> controller(session);
+    if(!controller.start(args[1],setup.substr(0,64),options,45,setup.substr(65),5000)) return 4;
     // The test driver represents a trusted local UI/controller over private
     // captured stdio. This protocol must never be exposed to the TLS peer.
-    std::optional<LocalTLSOffer> prompt;
-    while(!(prompt=consentHandoff.pending()) && !finished.load()) Sleep(1);
-    if(!prompt) return 4;
-    const auto binding=std::to_string(prompt->epoch)+"|"+prompt->peerSha256+"|"+
-        prompt->connectionId+"|"+std::to_string(prompt->tlsVersion);
+    std::optional<LocalOfferPrompt> prompt;
+    while(!(prompt=controller.pending())) {
+        if(controller.takeStartupResult()) return 4;
+        Sleep(1);
+    }
+    const auto& offer=prompt->offer;
+    const auto binding=std::to_string(offer.epoch)+"|"+offer.peerSha256+"|"+
+        offer.connectionId+"|"+std::to_string(offer.tlsVersion);
     std::cout << "OFFER " << binding << '\n' << std::flush;
     std::string decision;
     if(!readLine(decision) || (decision!="ALLOW|"+binding && decision!="DENY|"+binding) ||
-       !consentHandoff.resolve(*prompt,decision=="ALLOW|"+binding)) return 4;
-    startup.join();
-    if(!started) return 4;
+       !controller.resolve(*prompt,decision=="ALLOW|"+binding)) return 4;
+    std::optional<bool> started;
+    while(!(started=controller.takeStartupResult())) Sleep(1);
+    if(!*started) return 4;
     std::cout << "ACTIVE\n" << std::flush;
     SessionReviewCoordinator coordinator;
     RemoteReviewMailbox mailbox;
@@ -79,7 +72,7 @@ int main() {
     std::string command;
     while(readLine(command)) {
         if(command=="QUIT") break;
-        if(command=="STOP") session.stop();
+        if(command=="STOP") controller.stop();
         else if(command!="DRAIN") return 5;
         for(const auto& event:events.drain()) {
             if(event.kind==TrustedTransportEvent::Kind::connected)
@@ -91,7 +84,7 @@ int main() {
         for(const auto& item:mailbox.drain()) review.receive(item.payload,live,item.trustedEpoch);
         std::cout << "PENDING " << coordinator.pending().size() << '\n' << std::flush;
     }
-    session.stop();return 0;
+    controller.stop();return 0;
 #else
     return 2;
 #endif

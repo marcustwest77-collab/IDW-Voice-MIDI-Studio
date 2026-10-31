@@ -247,8 +247,12 @@ bool WindowsBridgeSession::start(const std::wstring& executable, const std::stri
 }
 bool WindowsBridgeSession::startWithOffer(const std::wstring& executable,const std::string& approvedSha256,
         const LocalSocketReceiver::Options& options,std::uint64_t expectedEpoch,
-        const std::string& approvedPeerSha256,const OfferConsent& consentFor,unsigned timeoutMs) {
+        const std::string& approvedPeerSha256,const OfferConsent& consentFor,unsigned timeoutMs,
+        const std::atomic<bool>* launchCanceled) {
     auto& p=*impl_;const auto stopSequence=p.stopSequence.load();
+    // Snapshot stop generation before checking the owner's flag: stop either
+    // precedes entry (flag rejects it) or invalidates this startup's generation.
+    if(launchCanceled && launchCanceled->load()) return false;
     std::lock_guard<std::mutex> lock(p.mutex);
 #if defined(_WIN32)
     if(p.monitor.joinable() || p.process.value!=INVALID_HANDLE_VALUE || !consentFor ||

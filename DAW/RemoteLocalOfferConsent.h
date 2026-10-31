@@ -10,6 +10,10 @@
 #include <mutex>
 
 namespace idw::daw::remote {
+struct LocalOfferPrompt {
+    std::uint64_t generation=0; // Local controller instance, not peer-supplied authority.
+    LocalTLSOffer offer;
+};
 class LocalOfferConsent {
 public:
     using Clock=std::chrono::steady_clock;
