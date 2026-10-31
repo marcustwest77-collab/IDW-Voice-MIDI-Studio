@@ -539,6 +539,16 @@ separate work.
 
 ## Final host dispatch boundary
 
+The managed Windows runtime treats an exception from its parent-liveness monitor
+as loss of authority: it requests receiver cancellation, joins the monitor and
+closes the receiver before releasing the held parent handle. It reports the
+monitor failure to the trusted caller. If session processing or native revocation
+also fails, that error remains primary with an added monitor-failure diagnostic;
+an uncertain revocation is never converted to a successful return. Deterministic
+tests inject a monitor failure while serving and verify cancellation, disposal,
+parent-scope release and preservation of a concurrent teardown error. This does
+not add executable packaging, host UI activation or a two-computer demonstration.
+
 The JUCE host decision handler drains queued transport facts before reading its
 session grant. Final approval consumption and the short select/arm mutation also
 share the transport queue mutex with admission and termination. An accepted

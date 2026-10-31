@@ -6,6 +6,7 @@ command approvals. This assembles existing components; it is not a packaged exe.
 import threading
 import math
 import re
+import sys
 
 import windows_bridge_launch as launch_api
 from native_command_approval import NativeCommandApprovalLedger
@@ -43,10 +44,17 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
                                        handshake_timeout=handshake_timeout) as receiver:
             stopped = threading.Event()
             interrupted = threading.Event()
+            monitor_errors = [] # Written by watcher, read only after join.
             def watch_parent():
-                while not stopped.wait(.025):
-                    if cancel.is_set() or not launch_api.launch_parent_is_alive(parent):
-                        interrupted.set();receiver.request_cancel();return
+                try:
+                    while not stopped.wait(.025):
+                        if cancel.is_set() or not launch_api.launch_parent_is_alive(parent):
+                            interrupted.set();receiver.request_cancel();return
+                except Exception as error:
+                    # Losing the ability to establish parent liveness cannot
+                    # leave a serving child with unmonitored native authority.
+                    monitor_errors.append(error)
+                    interrupted.set();receiver.request_cancel()
             watcher = threading.Thread(target=watch_parent, name="idw-native-parent-watch")
             watcher.start()
             try:
@@ -64,3 +72,10 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
                     command_timeout=command_timeout, max_commands=max_commands)
             finally:
                 receiver.close();stopped.set();watcher.join()
+                if monitor_errors:
+                    if sys.exception() is not None:
+                        # Preserve session/revocation failures as the primary
+                        # error rather than hiding an uncertain native teardown.
+                        sys.exception().add_note("managed launch parent monitoring also failed")
+                    else:
+                        raise PermissionError("managed launch parent monitoring failed") from monitor_errors[0]
