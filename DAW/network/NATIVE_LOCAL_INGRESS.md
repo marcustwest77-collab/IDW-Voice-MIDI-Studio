@@ -539,6 +539,25 @@ separate work.
 
 ## Managed TLS runtime policy and lifetime
 
+`LocalOfferConsent` provides a single-use, thread-safe handoff between the
+background `startWithOffer` callback and a trusted local UI/controller. The worker
+publishes a validated offer and waits on an absolute deadline (20–5000 ms). The
+controller reads a snapshot and explicitly allows track control or denies it.
+Only an exact epoch, peer fingerprint, connection nonce and TLS version match can
+resolve the request, once. Expiry, cancellation or close prevents approval;
+failed requests leave the caller's output grant untouched. A concurrent second
+request cannot replace the pending offer. The owner must close/cancel and join
+the worker before disposing the handoff or cancellation flag. The manager's own
+shared provisioning deadline and binding checks remain authoritative.
+
+The packaged native test host now requires the test driver to respond explicitly
+to that offer over its private captured control pipe before it can print ACTIVE
+or admit native commands. Denied and substituted decisions fail closed. This
+pipe models a trusted local controller only; never expose it to the TLS peer.
+The handoff itself opens no listeners or windows and is not yet connected to the
+JUCE consent UI. Artifact/configuration trust and actual UI activation remain
+separate work.
+
 Windows standalone CI additionally freezes `packaged_tls_child_fixture.py` in
 PyInstaller onedir mode and drives it through `RemoteManagedTLSReviewFixture`.
 The native fixture uses the actual `WindowsBridgeSession::startWithOffer` pinned
@@ -554,7 +573,7 @@ its adjacent `codex-rejected-cas.pem` file if present. That runtime loads the
 additional certificate-distrust policy during SSL context construction; preserving
 the file makes local frozen tests work without altering the runtime's TLS policy.
 
-The frozen child is **test only**: automatic test consent/command approvals,
+The frozen child is **test only**: automatic child-side test consent/command approvals,
 temporary certificate/key paths, and a fixed non-secret readiness file are baked
 into the generated test entry. CI never uploads or installs its bundle. An exe
 hash does not authenticate its dependent DLLs, Python archive or external policy

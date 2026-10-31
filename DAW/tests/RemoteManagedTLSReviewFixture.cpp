@@ -13,9 +13,11 @@
 #include <fcntl.h>
 #endif
 #include "../RemoteWindowsBridgeSession.h"
+#include "../RemoteLocalOfferConsent.h"
 #include "../RemoteTransportSessionLifecycle.h"
 #include "../RemoteValidatedCommandReviewReceiver.h"
 #include <iostream>
+#include <thread>
 using namespace idw::daw::remote;
 
 int main() {
@@ -42,12 +44,32 @@ int main() {
     TrustedTransportEventQueue events;
     WindowsBridgeSession session(events);
     LocalSocketReceiver::Options options;options.sessionTimeoutMs=60000;
-    // These are intentionally trusted TEST approvals, not a production consent UI.
-    const auto approve=[](const LocalTLSOffer& offer,LocalHostConsent& consent,const std::atomic<bool>& cancel) {
-        if(cancel.load()) return false;
-        consent={offer.epoch,offer.peerSha256,offer.connectionId,true,true};return true;
-    };
-    if(!session.startWithOffer(args[1],setup.substr(0,64),options,45,setup.substr(65),approve,5000)) return 4;
+    LocalOfferConsent consentHandoff;
+    std::atomic<bool> finished{false};bool started=false;
+    std::thread startup([&] {
+        started=session.startWithOffer(args[1],setup.substr(0,64),options,45,setup.substr(65),
+            [&](const LocalTLSOffer& offer,LocalHostConsent& consent,const std::atomic<bool>& cancel) {
+                return consentHandoff.request(offer,consent,cancel,std::chrono::milliseconds(4000));
+            },5000);
+        finished.store(true);
+    });
+    struct JoinStartup {
+        std::thread& thread;LocalOfferConsent& consent;WindowsBridgeSession& session;
+        ~JoinStartup(){if(thread.joinable()){consent.close();session.stop();thread.join();}}
+    } joinStartup{startup,consentHandoff,session};
+    // The test driver represents a trusted local UI/controller over private
+    // captured stdio. This protocol must never be exposed to the TLS peer.
+    std::optional<LocalTLSOffer> prompt;
+    while(!(prompt=consentHandoff.pending()) && !finished.load()) Sleep(1);
+    if(!prompt) return 4;
+    const auto binding=std::to_string(prompt->epoch)+"|"+prompt->peerSha256+"|"+
+        prompt->connectionId+"|"+std::to_string(prompt->tlsVersion);
+    std::cout << "OFFER " << binding << '\n' << std::flush;
+    std::string decision;
+    if(!readLine(decision) || (decision!="ALLOW|"+binding && decision!="DENY|"+binding) ||
+       !consentHandoff.resolve(*prompt,decision=="ALLOW|"+binding)) return 4;
+    startup.join();
+    if(!started) return 4;
     std::cout << "ACTIVE\n" << std::flush;
     SessionReviewCoordinator coordinator;
     RemoteReviewMailbox mailbox;

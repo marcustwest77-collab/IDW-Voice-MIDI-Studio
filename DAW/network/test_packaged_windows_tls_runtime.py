@@ -5,6 +5,7 @@ readiness file and approvals are owned exclusively by this temporary test run.
 """
 import hashlib
 import os
+import re
 from pathlib import Path
 import socket
 import ssl
@@ -23,10 +24,21 @@ WIRE = b"1|45|1|packaged_runtime|arm|1"
 class ManagedHostFixture(NativeFixture):
     def __init__(self, executable, digest, peer_pin):
         self.native_lease = None
+        self.peer_pin = peer_pin
         self.process = subprocess.Popen([os.environ["IDW_MANAGED_TLS_FIXTURE"], str(executable)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
             close_fds=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         self.process.stdin.write((digest + "|" + peer_pin + "\n").encode("ascii"))
+        self.process.stdin.flush()
+
+    def decide(self, *, allow=True, substitute=False):
+        prompt = self._read(142) # Fixed test epoch 45 + exact pin/nonce/version record.
+        match = re.fullmatch(rb"OFFER (45\|([0-9a-f]{64})\|[0-9a-f]{64}\|1[23])\n", prompt)
+        if match is None or match[2].decode("ascii") != self.peer_pin:
+            raise RuntimeError("untrusted native offer prompt")
+        binding = match[1]
+        if substitute: binding = binding.replace(b"45|", b"46|", 1)
+        self.process.stdin.write((b"ALLOW|" if allow else b"DENY|") + binding + b"\n")
         self.process.stdin.flush()
 
 
@@ -38,6 +50,7 @@ class NativeManagedHostSmokeTests(unittest.TestCase):
         bridge = Path(os.environ["IDW_SYNTHETIC_BRIDGE_FIXTURE"]).resolve()
         host = ManagedHostFixture(bridge, hashlib.sha256(bridge.read_bytes()).hexdigest(), "a" * 64)
         self.addCleanup(host.close)
+        host.decide()
         self.assertEqual(host._read(), b"ACTIVE\n")
         self.assertEqual(host.pending(), 1)
         self.assertEqual(host.pending("STOP"), 0)
@@ -84,7 +97,7 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         self.addCleanup(host.close)
         return host
 
-    def connect(self, host):
+    def connect(self, host, *, approve=True, substitute=False):
         deadline = time.monotonic() + 6
         while not self.ready.exists():
             if host.process.poll() is not None:
@@ -98,7 +111,8 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         client = context.wrap_socket(socket.create_connection(("127.0.0.1", port), timeout=3),
                                      server_hostname="localhost")
         client.settimeout(3);self.addCleanup(client.close)
-        self.assertEqual(host._read(), b"ACTIVE\n")
+        host.decide(allow=approve, substitute=substitute)
+        if approve and not substitute: self.assertEqual(host._read(), b"ACTIVE\n")
         return client
 
     def command(self, host, client):
@@ -123,6 +137,14 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         host = self.host(digest="0" * 64)
         self.assertEqual(host.process.wait(timeout=5), 4)
         self.assertFalse(self.ready.exists())
+
+    def test_denied_or_substituted_native_consent_never_activates_session(self):
+        for approve, substitute in ((False, False), (True, True)):
+            with self.subTest(approve=approve, substitute=substitute):
+                host = self.host();client = self.connect(host, approve=approve, substitute=substitute)
+                self.assertEqual(host.process.wait(timeout=5), 4)
+                self.assertNotIn(b"ACTIVE", host.process.stdout.read())
+                with self.assertRaises(OSError): receive_frame(client)
 
 
 if __name__ == "__main__": unittest.main()
