@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 from tls_worker_bootstrap import (MAX_BOOTSTRAP, TLSWorkerProcess, encode_bootstrap,
                                   fresh_session_secret, read_bootstrap)
+from tls_native_worker import signal_ready
 
 
 class BootstrapTests(unittest.TestCase):
@@ -25,6 +26,14 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(read_bootstrap(io.BytesIO(encode_bootstrap(self.config))), self.config)
         self.assertRegex(self.config["token"], r"^[a-f0-9]{64}$")
         self.assertNotEqual(self.config["token"], fresh_session_secret())
+
+    def test_ready_uses_exact_bytes_with_windows_text_translation(self):
+        raw = io.BytesIO()
+        # Reproduce Windows newline translation even when the test runs on Linux.
+        with io.TextIOWrapper(raw, encoding="utf-8", newline="\r\n") as console:
+            with patch("tls_native_worker.sys.stdout", console):
+                signal_ready()
+            self.assertEqual(raw.getvalue(), b"READY\n")
 
     def test_invalid_config_never_launches(self):
         invalid = [("version", True), ("epoch", True), ("epoch", 2**64),

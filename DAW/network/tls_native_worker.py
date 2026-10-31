@@ -9,6 +9,13 @@ from tls_worker_bootstrap import read_bootstrap
 from verified_event_producer import VerifiedEventProducer
 
 
+def signal_ready():
+    # This is a byte protocol, not console text. Windows text-mode stdout would
+    # translate LF to CRLF and make the parent's exact READY check fail.
+    sys.stdout.buffer.write(b"READY\n")
+    sys.stdout.buffer.flush()
+
+
 def run(config):
     peer, epoch = config["peer"], config["epoch"]
     session = BoundSession(peer, epoch, config["channel"])
@@ -29,7 +36,7 @@ def run(config):
 
     class Ready:
         def set(self):
-            print("READY", flush=True)
+            signal_ready()
 
     serve_tls_once(
         config["tls_port"], config["server_cert"], config["server_key"], ready=Ready(),
