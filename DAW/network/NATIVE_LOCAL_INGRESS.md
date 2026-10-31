@@ -539,6 +539,40 @@ separate work.
 
 ## Managed TLS runtime policy and lifetime
 
+The native private pipe now supports an opt-in readiness -> TLS offer -> bootstrap
+profile. `LocalBridgeReady` / `NativeBridgeReady` encode a fixed 15-byte `IDWR` v1
+record containing only the host-planned epoch and IPv4-loopback TLS port. This is
+non-secret discovery data, not TLS identity, consent, native admission or a DAW
+execution receipt. The TLS port is distinct from the native command socket port
+in the later bootstrap.
+
+`WindowsBootstrapChannel::receiveReadyFrom` verifies the held helper process
+before accepting metadata, retains that process and connection for the offer,
+and preserves the shared deadline. The later offer must come from that same
+connection/process and match the readiness epoch. Credential delivery refuses a
+readiness-only connection. The C++ consumer verifies its held server process
+before writing either record. Wrong peers, malformed metadata, cancellation and
+failed stages close the single-use endpoint; there is no legacy-profile fallback.
+
+`WindowsBridgeSession::startWithReadyOffer` selects the fixed non-secret
+`--idw-native-ready-offer` launch profile. Only matching planned epochs reach its
+bounded readiness callback; the callback may publish a port via trusted local
+discovery, but it cannot bypass the subsequent approved client certificate pin
+and exact-offer local consent. It must not retain references or re-enter the
+manager. Readiness, offer and consent share the same absolute deadline and stop
+cancellation. Native tests use synthetic readiness/TLS metadata and verify no
+native queue admission before consent, wrong-epoch/pin rejection, denied/expired
+readiness and owned stop. Separate real pipe tests verify wrong process rejection,
+shared deadlines and refusal to disclose any credential byte before an offer.
+
+This step adds the native stage and matching Python codec only. The Python runtime
+and its launch parser do not yet select the readiness profile, and the packaged
+TLS integration still uses its temporary readiness file. Next integration must
+open the process-verified private pipe before TLS accept and reuse it through the
+offer/bootstrap transaction, rather than reconnecting. Existing timed/legacy
+profiles remain unchanged and default startup stays disabled. No two-computer or
+new packaged-readiness demonstration is claimed.
+
 The managed JUCE consent path now has an explicit **maximum 30-second shared
 budget** through `WindowsBridgeSession::startWithTimedOffer`. The private channel
 returns its actual absolute deadline; that same value reaches the controller and

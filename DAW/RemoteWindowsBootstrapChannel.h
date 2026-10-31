@@ -1,6 +1,7 @@
 #pragma once
 #include "RemoteLocalSessionOwner.h"
 #include "RemoteTLSOfferWire.h"
+#include "RemoteBridgeReadyWire.h"
 #include <memory>
 #include <chrono>
 
@@ -16,6 +17,10 @@ public:
     WindowsBootstrapChannel& operator=(const WindowsBootstrapChannel&) = delete;
     bool create();
     std::wstring name() const; // Non-secret discovery path; never contains token.
+    // Optional readiness -> TLS offer -> credentials, on the same held-process
+    // verified connection and shared deadline. No credentials before the offer.
+    bool receiveReadyFrom(void* expectedClientProcess,LocalBridgeReady&,unsigned timeoutMs=2000,
+                          std::chrono::steady_clock::time_point* deadlineOut=nullptr);
     // Optional two-stage handoff: verify the held client process, read its bounded
     // TLS offer, then let the host check policy/consent before deliverTo. One shared
     // deadline includes the host decision. Reading an offer does not authenticate TLS.
@@ -31,10 +36,13 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
-// Verify the server against the trusted held process handle before reading.
+// Verify the server against the trusted held process before writing metadata or
+// reading credentials. Optional readiness requires a matching, already-owned
+// TLS offer; this helper does not own a pre-handshake TLS lifecycle.
 // The bounded, synchronous consumer must validate/use the binding before true.
 // It must not log secrets, retain the reference, or block indefinitely.
 bool receiveWindowsBootstrap(const std::wstring& name, void* expectedServerProcess,
                              const LocalSessionOwner::Provisioner& consume,
-                             unsigned timeoutMs = 2000, const LocalTLSOffer* offer = nullptr);
+                             unsigned timeoutMs = 2000, const LocalTLSOffer* offer = nullptr,
+                             const LocalBridgeReady* ready = nullptr);
 }
