@@ -18,6 +18,18 @@ class NativeLocalCommandBridge:
             raise ValueError("bounded timeout required")
         self.port, self.token, self.timeout = port, session_token, timeout
 
+    def connected(self, peer_id, epoch):
+        """Called by the trusted TLS worker only AFTER real certificate checks.
+
+        Local startup must already have explicit host track-control consent.
+        An ACK means the connection event was queued, not UI admission completed.
+        """
+        if (type(epoch) is not int or not 0 < epoch < 2**64 or
+                not isinstance(peer_id, str) or
+                not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", peer_id)):
+            return False
+        return self._send(peer_id, f"CONNECT|{epoch}")
+
     def deliver(self, event):
         if not isinstance(event, VerifiedCommandEvent):
             return False
@@ -29,8 +41,11 @@ class NativeLocalCommandBridge:
         fields = event.wire.split("|")
         if len(fields) != 6 or fields[1] != str(event.epoch):
             return False
+        return self._send(event.peer_id, event.wire)
+
+    def _send(self, peer_id, wire):
         try:
-            packet = f"IDWIPC1\n{self.token}\n{event.peer_id}\n{event.wire}".encode("ascii")
+            packet = f"IDWIPC1\n{self.token}\n{peer_id}\n{wire}".encode("ascii")
         except UnicodeError:
             return False
         if len(packet) > 4096:

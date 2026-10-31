@@ -2013,10 +2013,12 @@ private:
         bool hostAllowsTrackControl) {
         auto* manager=juce::MessageManager::getInstanceWithoutCreating();
         if (!manager || !manager->isThisTheMessageThread()) return false;
+        if (remoteLocalReceiver.port()!=0 && remoteLocalReceiver.epoch()!=epoch) return false;
         const bool connected=remoteTransportLifecycle.onVerifiedPeerConnected(
             epoch,tlsVerified,hostConsented,hostAllowsTrackControl);
         if (!connected) return false;
-        remoteLocalReceiver.stop(); // End any previous local worker before a new admission.
+        // This connection event belongs to the waiting receiver. Stopping it
+        // here would revoke the epoch before its first command can be reviewed.
         remoteReviewPanel.setApprovalEnabled(hostAllowsTrackControl);
         remoteReviewPanel.setConnectionStatus(hostAllowsTrackControl
             ? "Authenticated guest: track selection/arming only"
@@ -2034,19 +2036,22 @@ private:
         remoteReviewPanel.setConnectionStatus("Offline: remote session ended");
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
     }
-    // Internal activation after local TLS/consent admission. Provision token and
-    // peer through a trusted launcher; never take them from a network request.
+    // Internal preparation after explicit LOCAL host consent, before TLS admission.
+    // The receiver cannot accept commands until its token-bound TLS worker sends
+    // CONNECT after independently verifying the peer certificate and pin.
     // No launcher/UI currently calls this, so the listener stays off by default.
     unsigned short startNativeLocalReceiverOnMessageThread(
-        const std::string& sessionSecret, const std::string& verifiedPeer,
-        std::uint64_t epoch) {
+        const std::string& sessionSecret, const std::string& expectedPeer,
+        std::uint64_t epoch, bool localHostConsented, bool localTrackControlAllowed) {
         auto* manager=juce::MessageManager::getInstanceWithoutCreating();
         if (!manager || !manager->isThisTheMessageThread()) return 0;
         const auto& grant=remoteSessionReviews.grant();
-        if (!grant.connected || !grant.authenticated || !grant.hostApproved ||
-            !grant.controlGranted || grant.sessionEpoch!=epoch) return 0;
-        return remoteLocalReceiver.start(sessionSecret,verifiedPeer,epoch)
-            ? remoteLocalReceiver.port() : 0;
+        if (!localHostConsented || !localTrackControlAllowed || grant.connected ||
+            epoch==0 || epoch<=grant.sessionEpoch || epoch<=grant.revokedEpoch) return 0;
+        if (!remoteLocalReceiver.start(sessionSecret,expectedPeer,epoch)) return 0;
+        remoteReviewPanel.setApprovalEnabled(false);
+        remoteReviewPanel.setConnectionStatus("Waiting for verified collaborator");
+        return remoteLocalReceiver.port();
     }
     // Restricted data-only handoff for a future authenticated transport worker.
     // The caller must attest TLS identity independently; this is NOT a network listener.

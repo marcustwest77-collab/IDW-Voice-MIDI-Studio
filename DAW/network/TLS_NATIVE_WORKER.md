@@ -30,7 +30,12 @@ Configuration must come from the local host controller, never remote input:
 The worker does not admit the session while parsing bootstrap. Its admission
 callback runs only after the TLS server verifies the client certificate against
 the configured trust, checks the pin, and maps that certificate to the approved
-peer. Recording permission stays disabled. Commands still pass the one-use host
+peer. The callback sends a token-bound CONNECT event to the waiting native
+receiver before any command. Startup and malformed credentials cannot create a
+native admitted session. The native receiver rejects commands until this event
+has been accepted into the queue; the DAW then processes admission on its own
+message thread before reviewing commands. Recording permission stays disabled.
+Commands still pass the one-use host
 approval ledger, replay checks, producer validation, native token/peer/epoch
 checks, and bounded queue insertion. TLS success means queued for host review;
 the existing JUCE message-thread permission checks and approval remain required.
@@ -38,7 +43,9 @@ the existing JUCE message-thread permission checks and approval remain required.
 Host permission is a bootstrap snapshot. The controller must stop the worker
 and revoke the native receiver on revocation or session end. Closing the worker
 alone does not revoke already queued requests. Native receiver revocation is
-tested to reject delivery even when an older worker snapshot still grants it.
+tested to reject both reconnection and delivery even when an older worker
+snapshot still grants it. A repeated CONNECT during a live epoch is idempotent
+and does not reset host-review or replay state.
 If delivery fails, TLS reports failure; retries require a new approved request
 and sequence. Restarting a worker does not reset native replay state.
 
