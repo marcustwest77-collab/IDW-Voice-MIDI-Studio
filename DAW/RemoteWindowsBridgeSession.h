@@ -29,7 +29,10 @@ public:
     bool startWithOffer(const std::wstring& executable,const std::string& approvedSha256,
                        const LocalSocketReceiver::Options&,std::uint64_t expectedEpoch,
                        const std::string& approvedPeerSha256,const OfferConsent&,
-                       unsigned timeoutMs=2000);
+                       unsigned timeoutMs=2000,const std::atomic<bool>* launchCanceled=nullptr);
+    // launchCanceled, when supplied, must outlive startWithOffer. It closes the
+    // pre-entry cancellation race for asynchronous owners; stop() still performs
+    // cancellation/cleanup once the manager has started processing the request.
     bool onTransportLost(const LocalTransportBinding&);
     void stop();
     bool running() const;

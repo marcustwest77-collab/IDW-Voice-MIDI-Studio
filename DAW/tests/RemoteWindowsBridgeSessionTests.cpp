@@ -232,6 +232,11 @@ int main(int argc, char** argv) {
     session.stop();queue.drain();
     // Two-stage managed launch uses synthetic TLS offers from the pinned child.
     // Actual localhost TLS/private offer coverage is in the Python integration suite.
+    std::atomic<bool> canceledBeforeEntry{true};
+    assert(!session.startWithOffer(executable,approved,options,200,std::string(64,'a'),
+        [](const LocalTLSOffer&,LocalHostConsent&,const std::atomic<bool>&){assert(false);return true;},
+        2000,&canceledBeforeEntry));
+    assert(queue.drain().empty() && session.processId()==0);
     auto approveOffer=[&](const LocalTLSOffer& offer,LocalHostConsent& grant,const std::atomic<bool>& canceled) {
         assert(queue.drain().empty()); // No native admission before host consent.
         if(canceled.load()) return false;

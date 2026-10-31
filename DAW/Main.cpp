@@ -30,6 +30,7 @@
 #include "RemoteTrustedTransportEventQueue.h"
 #include "RemoteVerifiedLocalCommandQueueAdapter.h"
 #include "RemoteWindowsBridgeSession.h"
+#include "RemoteManagedOfferController.h"
 #include "RemoteReviewMailbox.h"
 #include "RemoteValidatedCommandReviewReceiver.h"
 #include "RemoteTrackControlAdapter.h"
@@ -132,6 +133,7 @@ public:
         };
         remoteReviewPanel.onRevokeControl=[this] {
             endAuthenticatedLocalIngress();
+            remoteReviewPanel.showLocalConsent(std::nullopt);
             const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
             // Discard commands waiting in the transport mailbox as well as reviewed requests.
             remoteReviewMailbox.clear();
@@ -140,6 +142,11 @@ public:
                 ? "Remote control revoked; pending requests cleared"
                 : "Offline: no active remote control to revoke");
             remoteReviewPanel.showPending(remoteSessionReviews.pending());
+        };
+        remoteReviewPanel.onLocalConsentDecision=[this](const idw::daw::remote::LocalOfferPrompt& reviewed,bool allow) {
+            const bool accepted=remoteOfferController.resolve(reviewed,allow);
+            remoteReviewPanel.setConnectionStatus(!accepted ? "Connection request expired or ended"
+                : allow ? "Consent accepted; waiting for authenticated session" : "Remote connection denied");
         };
         remoteReviewPanel.onHostDecision=[this](const std::string& id, bool approve) {
             // Reflect queued loss/replacement before reading the UI grant.
@@ -2039,16 +2046,32 @@ private:
         return remoteTransportEvents.push(std::move(event));
     }
     void endAuthenticatedLocalIngress() {
-        remoteLocalBridge.stop();
+        remoteOfferController.stop();
     }
-    // Development-only trusted-owner hooks. The TLS implementation must supply
-    // real evidence and a trusted executable pin. No UI/automatic start.
-    bool startAuthenticatedLocalSocketReceiver(
-            const std::wstring& executable, const std::string& approvedSha256,
-            const idw::daw::remote::LocalSocketReceiver::Options& options,
-            const idw::daw::remote::LocalTransportBinding& transport,
-            const idw::daw::remote::LocalHostConsent& consent) {
-        return remoteLocalBridge.start(executable, approvedSha256, options, transport, consent);
+    // Trusted development/controller entry only. No executable selection, launch
+    // arguments, peer configuration or automatic start is exposed through the UI.
+    bool startManagedLocalBridgeOnMessageThread(const std::wstring& executable,const std::string& approvedSha256,
+            const idw::daw::remote::LocalSocketReceiver::Options& options,std::uint64_t epoch,
+            const std::string& approvedPeerSha256) {
+        auto* manager=juce::MessageManager::getInstanceWithoutCreating();
+        if(!manager || !manager->isThisTheMessageThread() || remoteOfferController.busy() ||
+           remoteLocalBridge.running()) return false;
+        if(!remoteOfferController.start(executable,approvedSha256,options,epoch,approvedPeerSha256,5000)) return false;
+        remoteReviewPanel.setApprovalEnabled(false);
+        remoteReviewPanel.setConnectionStatus("Waiting for authenticated bridge connection");
+        remoteReviewPanel.setVisible(true);remoteReviewPanel.toFront(false);return true;
+    }
+    void pollLocalOfferConsentOnMessageThread() {
+        auto* manager=juce::MessageManager::getInstanceWithoutCreating();
+        if(!manager || !manager->isThisTheMessageThread()) return;
+        remoteReviewPanel.showLocalConsent(remoteOfferController.pending());
+        if(const auto result=remoteOfferController.takeStartupResult()) {
+            if(!*result) {
+                remoteOfferController.stop();
+                remoteReviewPanel.showLocalConsent(std::nullopt);
+                remoteReviewPanel.setConnectionStatus("Remote connection unavailable, denied or expired");
+            }
+        }
     }
     bool onVerifiedLocalTransportLost(
             const idw::daw::remote::LocalTransportBinding& transport) {
@@ -3263,7 +3286,7 @@ public:
         return false;
     }
     ~Workstation() override {
-        remoteLocalBridge.stop();
+        remoteOfferController.stop();
         remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
@@ -3340,11 +3363,15 @@ public:
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
     idw::daw::remote::WindowsBridgeSession remoteLocalBridge{remoteTransportEvents};
+    idw::daw::remote::ManagedOfferController<> remoteOfferController{remoteLocalBridge};
     // Independent UI-thread poll remains active even when playback is stopped.
     struct RemoteEventPollTimer final : juce::Timer {
         Workstation& owner;
         explicit RemoteEventPollTimer(Workstation& w) : owner(w) {}
-        void timerCallback() override { owner.drainTrustedTransportEventsOnMessageThread(); }
+        void timerCallback() override {
+            owner.pollLocalOfferConsentOnMessageThread();
+            owner.drainTrustedTransportEventsOnMessageThread();
+        }
     } remoteEventPollTimer{*this};
     idw::daw::remote::TransportSessionLifecycle remoteTransportLifecycle{remoteSessionReviews, remoteReviewMailbox};
     idw::daw::remote::HostReviewPanel remoteReviewPanel;
