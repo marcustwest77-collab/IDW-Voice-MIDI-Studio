@@ -19,6 +19,7 @@
 #include <thread>
 #include <vector>
 #include <chrono>
+#include <algorithm>
 
 namespace idw::daw::remote {
 #if defined(_WIN32)
@@ -249,7 +250,26 @@ bool WindowsBridgeSession::startWithOffer(const std::wstring& executable,const s
         const LocalSocketReceiver::Options& options,std::uint64_t expectedEpoch,
         const std::string& approvedPeerSha256,const OfferConsent& consentFor,unsigned timeoutMs,
         const std::atomic<bool>* launchCanceled) {
-    auto& p=*impl_;const auto stopSequence=p.stopSequence.load();
+    const auto stopSequence=impl_->stopSequence.load();
+    if(!consentFor || timeoutMs<20 || timeoutMs>5000) return false;
+    return startWithOfferImpl(executable,approvedSha256,options,expectedEpoch,approvedPeerSha256,
+        [&](const LocalTLSOffer& offer,LocalHostConsent& consent,const std::atomic<bool>& cancel,OfferDeadline) {
+            return consentFor(offer,consent,cancel);
+        },timeoutMs,launchCanceled,stopSequence);
+}
+bool WindowsBridgeSession::startWithTimedOffer(const std::wstring& executable,const std::string& approvedSha256,
+        const LocalSocketReceiver::Options& options,std::uint64_t expectedEpoch,
+        const std::string& approvedPeerSha256,const TimedOfferConsent& consentFor,unsigned timeoutMs,
+        const std::atomic<bool>* launchCanceled) {
+    const auto stopSequence=impl_->stopSequence.load();
+    return startWithOfferImpl(executable,approvedSha256,options,expectedEpoch,approvedPeerSha256,
+        consentFor,timeoutMs,launchCanceled,stopSequence);
+}
+bool WindowsBridgeSession::startWithOfferImpl(const std::wstring& executable,const std::string& approvedSha256,
+        const LocalSocketReceiver::Options& options,std::uint64_t expectedEpoch,
+        const std::string& approvedPeerSha256,const TimedOfferConsent& consentFor,unsigned timeoutMs,
+        const std::atomic<bool>* launchCanceled,std::uint64_t stopSequence) {
+    auto& p=*impl_;
     // Snapshot stop generation before checking the owner's flag: stop either
     // precedes entry (flag rejects it) or invalidates this startup's generation.
     if(launchCanceled && launchCanceled->load()) return false;
@@ -257,7 +277,7 @@ bool WindowsBridgeSession::startWithOffer(const std::wstring& executable,const s
 #if defined(_WIN32)
     if(p.monitor.joinable() || p.process.value!=INVALID_HANDLE_VALUE || !consentFor ||
         expectedEpoch==0 || expectedEpoch<=p.highestOfferEpoch || !validBootstrapHex(approvedSha256) ||
-        !validBootstrapHex(approvedPeerSha256) || timeoutMs<20 || timeoutMs>5000) return false;
+        !validBootstrapHex(approvedPeerSha256) || timeoutMs<20 || timeoutMs>30000) return false;
     p.highestOfferEpoch=expectedEpoch; // Failed offers cannot reuse an epoch.
     try {
         const auto op=std::make_shared<Impl::Operation>(LocalTransportBinding{});
@@ -271,8 +291,8 @@ bool WindowsBridgeSession::startWithOffer(const std::wstring& executable,const s
             p.cleanup();return false;
         }
         LocalTLSOffer offer;
-        const auto offerDeadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(timeoutMs);
-        if(!op->channel.receiveOfferFrom(p.process.value,offer,timeoutMs) ||
+        OfferDeadline offerDeadline{};
+        if(!op->channel.receiveOfferFrom(p.process.value,offer,timeoutMs,&offerDeadline) ||
             offer.epoch!=expectedEpoch || offer.peerSha256!=approvedPeerSha256) {
             p.cleanup();return false;
         }
@@ -282,12 +302,12 @@ bool WindowsBridgeSession::startWithOffer(const std::wstring& executable,const s
         std::atomic_store(&op->binding,std::make_shared<const LocalTransportBinding>(p.binding));
         LocalHostConsent consent;
         if(op->canceled.load() || p.stopSequence.load()!=stopSequence ||
-            !consentFor(offer,consent,op->canceled) || op->canceled.load() ||
+            !consentFor(offer,consent,op->canceled,offerDeadline) || op->canceled.load() ||
             p.stopSequence.load()!=stopSequence || std::chrono::steady_clock::now()>=offerDeadline ||
             !alive(p.process.value) ||
             !p.owner.start(options,p.binding,consent,[&](const LocalSessionBootstrap& bootstrap) {
                 if(op->canceled.load() || p.stopSequence.load()!=stopSequence) return false;
-                return op->channel.deliverTo(p.process.value,bootstrap,timeoutMs);
+                return op->channel.deliverTo(p.process.value,bootstrap,std::min(timeoutMs,5000U));
             }) || op->canceled.load() || p.stopSequence.load()!=stopSequence || !alive(p.process.value)) {
             p.cleanup();return false;
         }

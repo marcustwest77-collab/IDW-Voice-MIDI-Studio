@@ -54,6 +54,22 @@ int main() {
         consent.close();assert(!consent.request(offer(),grant,cancel,1s));
     }
     {
+        LocalOfferConsent consent;LocalHostConsent grant;std::atomic<bool> cancel{false};
+        assert(!consent.request(offer(),grant,cancel,5001ms)); // Legacy duration limit remains five seconds.
+        assert(!consent.requestUntil(offer(),grant,cancel,LocalOfferConsent::Clock::now()-1ms));
+        assert(!consent.requestUntil(offer(),grant,cancel,LocalOfferConsent::Clock::now()+31s));
+        const auto deadline=LocalOfferConsent::Clock::now()+10s;
+        bool accepted=false;
+        std::thread worker([&]{accepted=consent.requestUntil(offer(),grant,cancel,deadline);});
+        const auto prompt=awaitPrompt(consent);assert(consent.resolve(prompt,true));worker.join();assert(accepted);
+    }
+    {
+        LocalOfferConsent consent;LocalHostConsent grant;std::atomic<bool> cancel{false};
+        const auto deadline=LocalOfferConsent::Clock::now()+50ms;
+        std::this_thread::sleep_for(60ms); // Budget consumed before entering the callback is never renewed.
+        assert(!consent.requestUntil(offer(),grant,cancel,deadline));assert(!consent.pending());
+    }
+    {
         LocalOfferConsent consent;LocalHostConsent first,second;std::atomic<bool> cancel{false};
         bool accepted=true;
         std::thread worker([&]{accepted=consent.request(offer(),first,cancel,1s);});

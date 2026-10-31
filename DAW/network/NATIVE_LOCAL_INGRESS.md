@@ -539,6 +539,32 @@ separate work.
 
 ## Managed TLS runtime policy and lifetime
 
+The managed JUCE consent path now has an explicit **maximum 30-second shared
+budget** through `WindowsBridgeSession::startWithTimedOffer`. The private channel
+returns its actual absolute deadline; that same value reaches the controller and
+`LocalOfferConsent::requestUntil`. TLS/IPC time already spent is never renewed
+when the prompt appears. Native admission and bootstrap acknowledgment must still
+finish before that deadline. Bootstrap credential delivery itself remains capped
+at five seconds. The legacy `startWithOffer`, one-phase bootstrap and relative
+`LocalOfferConsent::request` APIs retain their five-second maxima.
+
+The managed Python runtime's native offer/provisioning wait defaults to 30 seconds
+and is explicitly configurable up to that bound. Its existing absolute TLS session
+deadline may only shorten the wait. A longer TLS session budget, if needed to
+leave command time after consent, remains trusted caller policy (at most 60
+seconds). The low-level Python/C++ bootstrap clients accept the longer wait only
+with an explicit TLS-offer record; ordinary bootstrap retains its five-second
+maximum. A codec record is not TLS verification: this profile must remain inside
+the already verified/pinned TLS session owner. No wire format changes or timeout
+negotiation through peer messages are added. Accept, handshake, command, revoke,
+process monitoring, cancellation and exact-binding approval checks are unchanged.
+
+The packaged integration test waits three seconds before explicit local approval,
+then requires real TLS/native pending review and successful stop cleanup. This
+would fail with the old two-second private provisioning timeout. Boundary tests
+reject oversized budgets, retain legacy limits, preserve the TLS absolute
+deadline, and reject a deadline already consumed before the consent callback.
+
 `LocalOfferConsent` provides a single-use, thread-safe handoff between the
 background `startWithOffer` callback and a trusted local UI/controller. The worker
 publishes a validated offer and waits on an absolute deadline (20–5000 ms). The

@@ -2056,7 +2056,7 @@ private:
         auto* manager=juce::MessageManager::getInstanceWithoutCreating();
         if(!manager || !manager->isThisTheMessageThread() || remoteOfferController.busy() ||
            remoteLocalBridge.running()) return false;
-        if(!remoteOfferController.start(executable,approvedSha256,options,epoch,approvedPeerSha256,5000)) return false;
+        if(!remoteOfferController.start(executable,approvedSha256,options,epoch,approvedPeerSha256,30000)) return false;
         remoteReviewPanel.setApprovalEnabled(false);
         remoteReviewPanel.setConnectionStatus("Waiting for authenticated bridge connection");
         remoteReviewPanel.setVisible(true);remoteReviewPanel.toFront(false);return true;

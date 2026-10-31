@@ -63,13 +63,15 @@ def receive_windows_bootstrap(name, expected_server_handle, *, expected_epoch,
     the caller must discard any captured bootstrap when this returns False.
     Callback exceptions propagate with no acknowledgment. No secure Python wipe.
     An optional absolute monotonic deadline caps, never extends, the local timeout.
+    The explicit TLS-offer profile permits up to 30 seconds for local consent;
+    the legacy no-offer profile retains its five-second maximum.
     """
     if (not isinstance(name, str) or not _NAME.fullmatch(name) or
             type(expected_server_handle) is not int or not 0 < expected_server_handle < 2**(8 * ctypes.sizeof(ctypes.c_void_p)) or
             type(expected_epoch) is not int or not 1 <= expected_epoch <= 2**64 - 1 or
             any(not isinstance(s, str) or not _HEX.fullmatch(s)
                 for s in (expected_peer_sha256, expected_connection_id)) or not callable(consume) or
-            type(timeout) not in (int, float) or not .02 <= timeout <= 5 or not math.isfinite(timeout) or
+            type(timeout) not in (int, float) or not .02 <= timeout <= (30 if offer is not None else 5) or not math.isfinite(timeout) or
             (deadline is not None and (type(deadline) not in (int, float) or
                 not -1e12 <= deadline <= 1e12 or not math.isfinite(deadline))) or
             (cancel is not None and not isinstance(cancel, threading.Event))):

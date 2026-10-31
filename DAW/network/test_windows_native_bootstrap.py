@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from windows_native_bootstrap import receive_windows_bootstrap
+from native_tls_offer import NativeTLSOffer
 from test_native_local_bridge import NativeFixture, binding
 import test_native_tls_receiver as receivers
 import test_native_tls_session as sessions
@@ -22,6 +23,14 @@ def options():
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_only_tls_offer_profile_accepts_the_longer_canceled_wait(self):
+        cancel = threading.Event();cancel.set()
+        offer = NativeTLSOffer(45, "a" * 64, "b" * 64, "TLSv1.3")
+        self.assertFalse(receive_windows_bootstrap(NAME, 1, **(options() | dict(timeout=30, offer=offer, cancel=cancel))))
+        for changes in (dict(timeout=6), dict(timeout=31, offer=offer)):
+            with self.assertRaises(ValueError):
+                receive_windows_bootstrap(NAME, 1, **(options() | changes | dict(cancel=cancel)))
+
     def test_invalid_input_is_rejected(self):
         for name, handle, changes in (("\\\\remote\\pipe\\x", 1, {}), (NAME, 0, {}),
                 (NAME, True, {}), (NAME, 1, dict(expected_epoch=True)),

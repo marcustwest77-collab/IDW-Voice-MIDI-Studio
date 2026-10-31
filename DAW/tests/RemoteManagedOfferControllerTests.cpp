@@ -9,10 +9,12 @@ struct FakeManager {
     std::mutex mutex;
     std::atomic<bool> canceled{false},entered{false};
     std::atomic<unsigned> admitted{0},calls{0},stops{0};
-    bool pauseAtEntry=false,throwOnStart=false;
-    bool startWithOffer(const std::wstring&,const std::string&,const LocalSocketReceiver::Options&,
-                        std::uint64_t epoch,const std::string& peer,const WindowsBridgeSession::OfferConsent& consent,
-                        unsigned,const std::atomic<bool>* ownerCanceled) {
+    bool pauseAtEntry=false,throwOnStart=false,expiredOffer=false;
+    bool startWithTimedOffer(const std::wstring&,const std::string&,const LocalSocketReceiver::Options&,
+                        std::uint64_t epoch,const std::string& peer,const WindowsBridgeSession::TimedOfferConsent& consent,
+                        unsigned timeoutMs,const std::atomic<bool>* ownerCanceled) {
+        const auto deadline=expiredOffer ? std::chrono::steady_clock::now()-1ms
+            : std::chrono::steady_clock::now()+std::chrono::milliseconds(timeoutMs);
         ++calls;entered.store(true);
         if(pauseAtEntry) while(!ownerCanceled->load()) std::this_thread::yield();
         {
@@ -22,7 +24,7 @@ struct FakeManager {
         }
         if(throwOnStart) throw 1;
         LocalHostConsent grant;
-        const bool accepted=consent({epoch,peer,std::string(64,'b'),13},grant,canceled);
+        const bool accepted=consent({epoch,peer,std::string(64,'b'),13},grant,canceled,deadline);
         if(!accepted || canceled.load() || ownerCanceled->load()) return false;
         assert(grant.epoch==epoch && grant.peerSha256==peer && grant.connectionId==std::string(64,'b'));
         assert(grant.hostApproved && grant.trackControlGranted);++admitted;return true;
@@ -70,10 +72,24 @@ int main() {
         assert(manager.admitted.load()==0 && !controller.pending());
     }
     {
+        FakeManager manager;manager.expiredOffer=true;
+        ManagedOfferController<FakeManager> controller(manager);
+        assert(controller.start(L"test.exe",image,options,45,peer,1000));
+        std::optional<bool> result;
+        await([&]{
+            // Renewing the relative timeout would expose a prompt that this
+            // eager local controller would approve. An expired deadline cannot.
+            if(const auto prompt=controller.pending()) controller.resolve(*prompt,true);
+            result=controller.takeStartupResult();return bool(result);
+        });
+        assert(!*result && manager.admitted.load()==0);
+    }
+    {
         FakeManager manager;ManagedOfferController<FakeManager> controller(manager);
         assert(!controller.start(L"test.exe","bad",options,45,peer));
         assert(!controller.start(L"test.exe",image,options,0,peer));
         assert(!controller.start(L"test.exe",image,options,45,peer,0));
+        assert(!controller.start(L"test.exe",image,options,45,peer,30001));
         assert(manager.calls.load()==0);
     }
 }

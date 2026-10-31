@@ -17,7 +17,8 @@ from windows_native_lease import receive_windows_native_lease
 def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approved_client_sha256,
                                    host_consent, host_approval_ledger, on_listening,
                                    cancel=None, accept_timeout=5.0, handshake_timeout=2.0,
-                                   session_timeout=30.0, command_timeout=2.0, max_commands=16):
+                                   session_timeout=30.0, command_timeout=2.0, max_commands=16,
+                                   native_provision_timeout=30.0):
     """Hold the verified launch parent before binding, and through all teardown.
 
     on_listening receives a non-secret localhost port and must be bounded. It
@@ -27,6 +28,9 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
     its independent bounded revoke allowance and reports failure. A trusted host
     callback cannot be forcibly preempted and must honor its own time bound.
     Returns queue receipt count, never host approvals or executed DAW actions.
+    Native offer/consent provisioning may wait up to 30 seconds after verified
+    TLS, but the existing absolute TLS session deadline can only shorten it.
+    Handshake, accept, command and revocation deadlines are unchanged.
     """
     if (not isinstance(launch, launch_api.ManagedBridgeLaunch) or not callable(on_listening) or
             not callable(host_consent) or not isinstance(host_approval_ledger, NativeCommandApprovalLedger) or
@@ -34,7 +38,7 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
             not isinstance(approved_client_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", approved_client_sha256) or
             type(max_commands) is not int or not 1 <= max_commands <= 32 or
             any(type(value) not in (int, float) or not .05 <= value <= limit or not math.isfinite(value)
-                for value, limit in ((session_timeout, 60), (command_timeout, 5))) or
+                for value, limit in ((session_timeout, 60), (command_timeout, 5), (native_provision_timeout, 30))) or
             (cancel is not None and not isinstance(cancel, threading.Event))):
         raise ValueError("invalid managed TLS runtime configuration")
     cancel = cancel if cancel is not None else threading.Event()
@@ -64,7 +68,7 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
                 if interrupted.is_set() or cancel.is_set(): return 0
                 def provide(identity, *, cancel, deadline):
                     return receive_windows_native_lease(launch.pipe_name, parent, identity,
-                        send_offer=True, cancel=cancel, deadline=deadline)
+                        send_offer=True, timeout=native_provision_timeout, cancel=cancel, deadline=deadline)
                 return receiver.serve_once(expected_peer_id=expected_peer_id,
                     approved_client_sha256=approved_client_sha256, epoch=launch.epoch,
                     host_consent=host_consent, provide_native_lease=provide,

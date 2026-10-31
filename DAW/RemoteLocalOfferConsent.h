@@ -26,11 +26,18 @@ public:
     // enforces its own shared bootstrap deadline after this callback returns.
     bool request(const LocalTLSOffer& offer,LocalHostConsent& out,const std::atomic<bool>& canceled,
                  std::chrono::milliseconds timeout=std::chrono::milliseconds(2000)) {
-        LocalTLSOfferBytes checked{};
-        if(!encodeTLSOffer(offer,checked) || timeout.count()<20 || timeout.count()>5000) return false;
+        if(timeout.count()<20 || timeout.count()>5000) return false;
+        return requestUntil(offer,out,canceled,Clock::now()+timeout);
+    }
+    // Managed UI path: preserve the launcher's absolute deadline rather than
+    // starting another timeout after TLS/IPC work has already consumed time.
+    bool requestUntil(const LocalTLSOffer& offer,LocalHostConsent& out,const std::atomic<bool>& canceled,
+                      Clock::time_point deadline) {
+        LocalTLSOfferBytes checked{};const auto now=Clock::now();
+        if(!encodeTLSOffer(offer,checked) || deadline<=now || deadline-now>std::chrono::seconds(30)) return false;
         std::unique_lock<std::mutex> lock(mutex_);
         if(used_ || closed_ || canceled.load()) return false;
-        offer_=offer;used_=true;waiting_=true;canceled_=&canceled;deadline_=Clock::now()+timeout;
+        offer_=offer;used_=true;waiting_=true;canceled_=&canceled;deadline_=deadline;
         while(active() && !decided_) {
             const auto next=std::min(deadline_,Clock::now()+std::chrono::milliseconds(10));
             changed_.wait_until(lock,next);
