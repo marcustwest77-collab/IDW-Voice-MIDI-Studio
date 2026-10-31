@@ -59,6 +59,7 @@ jobs:
             Copy-Item -Destination beta-windows/remote-worker
           Copy-Item DAW/network/LOCAL_TEST_SETUP.md beta-windows/LOCAL-REMOTE-TEST.txt
           Copy-Item DAW/network/local-test-setup.example.json beta-windows/local-test-setup.example.json
+          Copy-Item DAW/network/OPEN-LOCAL-TEST-CLIENT.cmd beta-windows/OPEN-LOCAL-TEST-CLIENT.cmd
           @'
           IDW Voice MIDI Studio — V14 Windows Testing Beta
           ------------------------------------------------

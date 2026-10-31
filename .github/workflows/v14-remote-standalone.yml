@@ -47,6 +47,7 @@ jobs:
           g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteNativeLocalReceiverFixture.cpp -o remote-test-bin/native-receiver "${libs[@]}"
           IDW_NATIVE_RECEIVER_FIXTURE=remote-test-bin/native-receiver python DAW/network/test_native_local_receiver.py
           python DAW/network/test_tls_worker_bootstrap.py
+          python DAW/network/test_local_test_client.py
           IDW_NATIVE_RECEIVER_FIXTURE=remote-test-bin/native-receiver python DAW/network/test_tls_native_worker.py
 
       - name: Test native Windows worker process ownership
@@ -56,6 +57,7 @@ jobs:
           set -euo pipefail
           g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteWindowsWorkerFixture.cpp -o remote-test-bin/windows-worker -pthread -lws2_32 -lbcrypt
           IDW_WINDOWS_WORKER_FIXTURE=remote-test-bin/windows-worker IDW_NATIVE_RECEIVER_FIXTURE=remote-test-bin/native-receiver python DAW/network/test_windows_worker_owner.py
+          python DAW/network/test_local_test_client_ui.py
 
       - name: Test loopback-only Python TCP transport
         shell: bash
