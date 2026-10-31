@@ -147,6 +147,7 @@ jobs:
           python DAW/network/test_native_provisioning_lifetime.py -v
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_native_tls_offer.py -v
           python DAW/network/test_windows_bridge_launch.py -v
+          python DAW/network/test_native_tls_policy.py -v
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_managed_windows_tls_runtime.py -v
 
       - name: Test mTLS approved client certificate pinning

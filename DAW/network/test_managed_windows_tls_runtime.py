@@ -20,6 +20,7 @@ from windows_bridge_launch import ManagedBridgeLaunch, parse_managed_bridge_argu
 from loopback_transport import send_frame, receive_frame
 from test_native_local_bridge import NativeFixture, issue_certificate
 from native_tls_receiver import NativeTLSLoopbackReceiver
+from native_tls_policy import build_native_server_context
 
 WIRE = b"1|45|1|managed_runtime|arm|1"
 
@@ -155,9 +156,11 @@ class ManagedRuntimeIntegrationTests(unittest.TestCase):
         self.addCleanup(fixture.close)
         return fixture
 
-    def connect(self, fixture, credentials=True):
+    def connect(self, fixture, credentials=True, unrelated=False):
         context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=str(self.cert))
-        if credentials: context.load_cert_chain(str(self.guest_cert), str(self.guest_key))
+        if credentials:
+            context.load_cert_chain(str(self.cert if unrelated else self.guest_cert),
+                                    str(self.key if unrelated else self.guest_key))
         client = context.wrap_socket(socket.create_connection(("127.0.0.1", fixture.port), timeout=3),
                                      server_hostname="localhost")
         client.settimeout(3);self.addCleanup(client.close);return client
@@ -180,6 +183,19 @@ class ManagedRuntimeIntegrationTests(unittest.TestCase):
         send_frame(client, b"1|45|1|managed_runtime|arm|2")
         with self.assertRaises(OSError): receive_frame(client)
         self.wait_revoked(fixture)
+
+    def test_missing_or_unrelated_client_certificate_never_reaches_native_review(self):
+        for credentials, unrelated in ((False, False), (True, True)):
+            with self.subTest(credentials=credentials, unrelated=unrelated):
+                fixture = self.fixture()
+                # TLS 1.3 may report the server's rejection only on first I/O.
+                with self.assertRaises(OSError):
+                    client = self.connect(fixture, credentials=credentials, unrelated=unrelated)
+                    send_frame(client, WIRE)
+                    receive_frame(client)
+                self.assertNotEqual(fixture.process.wait(timeout=5), 0)
+                # Native host cannot construct a session without the private
+                # post-handshake TLS offer; it exits rather than admitting one.
 
     def test_unapproved_host_pin_or_client_pin_fails_before_native_admission(self):
         for changes in (dict(host_pin="0" * 64), dict(child_pin="0" * 64)):
@@ -209,9 +225,8 @@ class ManagedRuntimeIntegrationTests(unittest.TestCase):
 def runtime_child():
     launch = parse_managed_bridge_arguments(["--idw-native-offer", *sys.argv[2:5]])
     config = json.loads(Path(sys.argv[5]).read_text()) # Trusted test policy, not peer input.
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.minimum_version = ssl.TLSVersion.TLSv1_2
-    context.verify_mode = ssl.CERT_REQUIRED
-    context.load_cert_chain(config["cert"], config["key"]);context.load_verify_locations(cafile=config["client_ca"])
+    context = build_native_server_context(certificate_file=config["cert"], private_key_file=config["key"],
+                                         client_ca_pem=Path(config["client_ca"]).read_text())
     ledger = NativeCommandApprovalLedger();calls = 0;cancel = threading.Event()
     def consent(identity):
         nonlocal calls
