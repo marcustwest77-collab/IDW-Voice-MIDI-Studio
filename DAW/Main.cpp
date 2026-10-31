@@ -1,3 +1,4 @@
+#include "RemoteNativeLocalReceiver.h"
 #include "MidiSineSynth.h"
 #include "PlaybackTiming.h"
 #include "LoopbackWavAnalysis.h"
@@ -130,6 +131,7 @@ public:
             remoteReviewPanel.toFront(false);
         };
         remoteReviewPanel.onRevokeControl=[this] {
+            remoteLocalReceiver.stop();
             const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
             // Discard commands waiting in the transport mailbox as well as reviewed requests.
             remoteReviewMailbox.clear();
@@ -2014,6 +2016,7 @@ private:
         const bool connected=remoteTransportLifecycle.onVerifiedPeerConnected(
             epoch,tlsVerified,hostConsented,hostAllowsTrackControl);
         if (!connected) return false;
+        remoteLocalReceiver.stop(); // End any previous local worker before a new admission.
         remoteReviewPanel.setApprovalEnabled(hostAllowsTrackControl);
         remoteReviewPanel.setConnectionStatus(hostAllowsTrackControl
             ? "Authenticated guest: track selection/arming only"
@@ -2024,11 +2027,26 @@ private:
     void onRemoteSessionEndedOnMessageThread(bool authenticationLost) {
         auto* manager=juce::MessageManager::getInstanceWithoutCreating();
         if (!manager || !manager->isThisTheMessageThread()) return;
+        remoteLocalReceiver.stop();
         if (authenticationLost) remoteTransportLifecycle.onAuthenticationLost();
         else remoteTransportLifecycle.onPeerDisconnected();
         remoteReviewPanel.setApprovalEnabled(false);
         remoteReviewPanel.setConnectionStatus("Offline: remote session ended");
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
+    }
+    // Internal activation after local TLS/consent admission. Provision token and
+    // peer through a trusted launcher; never take them from a network request.
+    // No launcher/UI currently calls this, so the listener stays off by default.
+    unsigned short startNativeLocalReceiverOnMessageThread(
+        const std::string& sessionSecret, const std::string& verifiedPeer,
+        std::uint64_t epoch) {
+        auto* manager=juce::MessageManager::getInstanceWithoutCreating();
+        if (!manager || !manager->isThisTheMessageThread()) return 0;
+        const auto& grant=remoteSessionReviews.grant();
+        if (!grant.connected || !grant.authenticated || !grant.hostApproved ||
+            !grant.controlGranted || grant.sessionEpoch!=epoch) return 0;
+        return remoteLocalReceiver.start(sessionSecret,verifiedPeer,epoch)
+            ? remoteLocalReceiver.port() : 0;
     }
     // Restricted data-only handoff for a future authenticated transport worker.
     // The caller must attest TLS identity independently; this is NOT a network listener.
@@ -3249,6 +3267,7 @@ public:
         return false;
     }
     ~Workstation() override {
+        remoteLocalReceiver.stop();
         remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
@@ -3324,6 +3343,7 @@ public:
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
+    idw::daw::remote::NativeLocalReceiver remoteLocalReceiver{remoteTransportEvents};
     // Independent UI-thread poll remains active even when playback is stopped.
     struct RemoteEventPollTimer final : juce::Timer {
         Workstation& owner;
