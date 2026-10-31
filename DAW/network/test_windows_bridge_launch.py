@@ -19,6 +19,8 @@ class LaunchContractTests(unittest.TestCase):
     def test_only_fixed_canonical_non_secret_arguments_are_accepted(self):
         self.assertEqual(parse_managed_bridge_arguments(["--idw-native-offer", NAME, "123", "45"]),
                          ManagedBridgeLaunch(NAME, 123, 45))
+        self.assertEqual(parse_managed_bridge_arguments(["--idw-native-ready-offer", NAME, "123", "45"]),
+                         ManagedBridgeLaunch(NAME, 123, 45, True))
         for arguments in ([], ["--idw-native-bootstrap", NAME, "123", "45"],
                 ["--idw-native-offer", NAME, "123", "45", "credential"],
                 ["--idw-native-offer", NAME, "00123", "45"],
@@ -28,6 +30,15 @@ class LaunchContractTests(unittest.TestCase):
                 ["--idw-native-offer", NAME, "4294967296", "45"]):
             with self.assertRaises(ValueError): parse_managed_bridge_arguments(arguments)
         with self.assertRaises(ValueError): ManagedBridgeLaunch(NAME, True, 45)
+        with self.assertRaises(ValueError): ManagedBridgeLaunch(NAME, 123, 45, "ready")
+
+    def test_ready_profile_requires_the_pre_handshake_runtime_scope(self):
+        identity = TLSConnectionIdentity("guest", 45, "a" * 64, "b" * 64, "TLSv1.3")
+        with patch.object(launch_api, "hold_launch_parent") as hold:
+            with self.assertRaises(ValueError):
+                receive_managed_windows_lease(ManagedBridgeLaunch(NAME, 123, 45, True), identity,
+                                             cancel=threading.Event(), deadline=123.0)
+            hold.assert_not_called()
 
     def test_session_epoch_mismatch_opens_no_process(self):
         identity = TLSConnectionIdentity("guest", 46, "a" * 64, "b" * 64, "TLSv1.3")

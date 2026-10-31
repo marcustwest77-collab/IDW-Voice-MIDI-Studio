@@ -9,7 +9,7 @@ import threading
 import time
 
 from native_tls_session import TLSConnectionIdentity, native_socket_lease
-from windows_native_bootstrap import receive_windows_bootstrap
+from windows_native_bootstrap import receive_windows_bootstrap, WindowsReadyBootstrap
 from native_tls_offer import NativeTLSOffer
 
 
@@ -22,7 +22,8 @@ class NativeLeaseRollbackError(ConnectionError):
 
 
 def receive_windows_native_lease(name, expected_server_handle, identity, *,
-                                 timeout=2.0, revoke_timeout=1.0, cancel=None, deadline=None, send_offer=False):
+                                 timeout=2.0, revoke_timeout=1.0, cancel=None, deadline=None, send_offer=False,
+                                 ready_channel=None):
     """Acknowledge only after constructing a lease bound to the actual TLS owner.
 
     Caller supplies trusted pipe discovery, a held server handle valid through
@@ -32,6 +33,8 @@ def receive_windows_native_lease(name, expected_server_handle, identity, *,
     The returned lease belongs to the caller and must always be closed. If host
     cancellation races return, the session owner must check cancellation and close
     that returned lease (run_native_tls_session already does so).
+    An optional WindowsReadyBootstrap reuses its verified pre-handshake pipe;
+    it is single-use, requires send_offer, and never extends its original deadline.
     """
     if (not isinstance(identity, TLSConnectionIdentity) or
             type(identity.epoch) is not int or not 1 <= identity.epoch <= 2**64 - 1 or
@@ -46,6 +49,8 @@ def receive_windows_native_lease(name, expected_server_handle, identity, *,
             type(send_offer) is not bool or (cancel is not None and not isinstance(cancel, threading.Event))):
         raise ValueError("invalid native lease identity or revocation configuration")
     cancel = cancel if cancel is not None else threading.Event()
+    if ready_channel is not None and (not isinstance(ready_channel, WindowsReadyBootstrap) or not send_offer):
+        raise ValueError("prepared readiness requires the TLS-offer profile")
     lease = None
     def consume(bootstrap):
         nonlocal lease
@@ -60,7 +65,8 @@ def receive_windows_native_lease(name, expected_server_handle, identity, *,
             raise ConnectionAbortedError("native lease provisioning canceled")
         if deadline is not None and time.monotonic() >= deadline:
             raise TimeoutError("native lease provisioning deadline")
-        accepted = receive_windows_bootstrap(name, expected_server_handle,
+        receive = ready_channel.receive if ready_channel is not None else receive_windows_bootstrap
+        accepted = receive(name, expected_server_handle,
             expected_epoch=identity.epoch, expected_peer_sha256=identity.peer_sha256,
             expected_connection_id=identity.connection_id, consume=consume,
             timeout=timeout, cancel=cancel, deadline=deadline,

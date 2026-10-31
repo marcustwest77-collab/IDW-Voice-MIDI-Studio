@@ -20,24 +20,27 @@ class ManagedBridgeLaunch:
     pipe_name: str
     parent_pid: int
     epoch: int
+    ready_profile: bool = False
 
     def __post_init__(self):
         if (not isinstance(self.pipe_name, str) or
                 not re.fullmatch(r"\\\\\.\\pipe\\IDW-LocalBootstrap-[0-9a-f]{64}", self.pipe_name) or
                 type(self.parent_pid) is not int or not 1 <= self.parent_pid <= 2**32 - 1 or
-                type(self.epoch) is not int or not 1 <= self.epoch <= 2**64 - 1):
+                type(self.epoch) is not int or not 1 <= self.epoch <= 2**64 - 1 or type(self.ready_profile) is not bool):
             raise ValueError("invalid managed bridge launch")
 
 
 def parse_managed_bridge_arguments(arguments):
-    """Parse the four fixed non-secret arguments emitted by startWithOffer."""
+    """Parse the four fixed non-secret native offer/readiness launch arguments."""
     if (type(arguments) not in (list, tuple) or len(arguments) != 4 or
-            any(type(value) is not str for value in arguments) or arguments[0] != "--idw-native-offer"):
+            any(type(value) is not str for value in arguments) or
+            arguments[0] not in ("--idw-native-offer", "--idw-native-ready-offer")):
         raise ValueError("managed offer arguments required")
     for value in arguments[2:]:
         if not re.fullmatch(r"[1-9][0-9]{0,19}", value):
             raise ValueError("canonical launch identity required")
-    return ManagedBridgeLaunch(arguments[1], int(arguments[2]), int(arguments[3]))
+    return ManagedBridgeLaunch(arguments[1], int(arguments[2]), int(arguments[3]),
+                               arguments[0] == "--idw-native-ready-offer")
 
 
 if os.name == "nt":
@@ -117,9 +120,9 @@ def launch_parent_is_alive(handle):
 
 
 def receive_managed_windows_lease(launch, identity, *, cancel, deadline):
-    """Compose verified launch scope, private session offer and revocable lease."""
+    """Legacy post-handshake composition; readiness needs the managed runtime scope."""
     if (not isinstance(launch, ManagedBridgeLaunch) or not isinstance(identity, TLSConnectionIdentity) or
-            type(identity.epoch) is not int or identity.epoch != launch.epoch):
+            type(identity.epoch) is not int or identity.epoch != launch.epoch or launch.ready_profile):
         raise ValueError("managed launch/session epoch mismatch")
     with hold_launch_parent(launch) as parent:
         return receive_windows_native_lease(launch.pipe_name, parent, identity,

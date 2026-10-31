@@ -30,6 +30,13 @@ struct FakeManager {
         assert(grant.hostApproved && grant.trackControlGranted);++admitted;return true;
     }
     void stop(){std::lock_guard<std::mutex> lock(mutex);++stops;canceled.store(true);}
+    bool startWithReadyOffer(const std::wstring& file,const std::string& image,const LocalSocketReceiver::Options& options,
+                            std::uint64_t epoch,const std::string& peer,const WindowsBridgeSession::ReadyCallback& ready,
+                            const WindowsBridgeSession::TimedOfferConsent& consent,unsigned timeoutMs,
+                            const std::atomic<bool>* ownerCanceled) {
+        if(!ready({epoch,12345},*ownerCanceled,std::chrono::steady_clock::now()+std::chrono::milliseconds(timeoutMs))) return false;
+        return startWithTimedOffer(file,image,options,epoch,peer,consent,timeoutMs,ownerCanceled);
+    }
 };
 template<class Test> void await(Test test) {
     const auto deadline=std::chrono::steady_clock::now()+2s;
@@ -38,6 +45,15 @@ template<class Test> void await(Test test) {
 int main() {
     LocalSocketReceiver::Options options;
     const auto image=std::string(64,'a'),peer=std::string(64,'c');
+    {
+        FakeManager manager;ManagedOfferController<FakeManager> controller(manager);
+        assert(controller.start(L"test.exe",image,options,45,peer,1000,true));
+        std::optional<LocalBridgeReady> ready;
+        await([&]{ready=controller.takeReadiness();return bool(ready);});
+        assert(ready->epoch==45 && ready->tlsPort==12345 && !controller.takeReadiness() && manager.admitted.load()==0);
+        await([&]{return bool(controller.pending());});assert(controller.resolve(*controller.pending(),false));
+        controller.stop();assert(!controller.takeReadiness());
+    }
     {
         FakeManager manager;ManagedOfferController<FakeManager> controller(manager);
         assert(!controller.pending() && !controller.takeStartupResult());

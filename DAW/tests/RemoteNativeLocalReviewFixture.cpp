@@ -50,7 +50,8 @@ bool readControl(std::string& line) {
 int main(int argc, char** argv) {
     if (!privateStdio()) return 2; // Never print a credential to a terminal/file.
     const bool runtimeChild=argc==5 && std::string(argv[1])=="--runtime-child-host";
-    const bool privateOffer=runtimeChild || (argc==3 && std::string(argv[1])=="--private-offer");
+    const bool privateReady=argc==3 && std::string(argv[1])=="--private-ready-offer";
+    const bool privateOffer=runtimeChild || privateReady || (argc==3 && std::string(argv[1])=="--private-offer");
     const bool privateBootstrap=privateOffer || (argc==3 && std::string(argv[1])=="--private-bootstrap");
     if (argc!=1 && !privateBootstrap) return 2;
     WindowsBootstrapChannel channel;
@@ -87,6 +88,11 @@ int main(int argc, char** argv) {
             if(!launchPythonTLSFixture(channel.name(),peer.value,runtimeJob,ready)) return 6;
             std::cout << ready << '\n' << std::flush;
         } else if(!emitPipe()) return 6;
+        if(privateReady) {
+            LocalBridgeReady ready;
+            if(!channel.receiveReadyFrom(peer.value,ready) || ready.epoch!=45) return 6;
+            std::cout << "READY_ACCEPTED\n" << std::flush;
+        }
         if(!channel.receiveOfferFrom(peer.value,offer,runtimeChild?5000:2000) ||
             offer.epoch!=45 || offer.peerSha256!=setup.substr(0,64)) return 6;
         // Trusted test bridge owns the actual TLS socket. This fixture policy

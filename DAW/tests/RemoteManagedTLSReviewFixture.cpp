@@ -28,7 +28,8 @@ int main() {
        _setmode(_fileno(stdin),_O_BINARY)==-1 || _setmode(_fileno(stdout),_O_BINARY)==-1) return 2;
     int count=0;auto args=CommandLineToArgvW(GetCommandLineW(),&count);
     struct FreeArgs {wchar_t** value;~FreeArgs(){if(value) LocalFree(value);}} freeArgs{args};
-    if(!args || count!=2) return 2;
+    const bool readyProfile=args && count==3 && std::wstring(args[1])==L"--ready-profile";
+    if(!args || (count!=2 && !readyProfile)) return 2;
     auto readLine=[](std::string& line) {
         line.clear();char c=0;
         while(std::cin.get(c)) {
@@ -45,11 +46,13 @@ int main() {
     WindowsBridgeSession session(events);
     LocalSocketReceiver::Options options;options.sessionTimeoutMs=60000;
     ManagedOfferController<> controller(session);
-    if(!controller.start(args[1],setup.substr(0,64),options,45,setup.substr(65),5000)) return 4;
+    if(!controller.start(args[readyProfile?2:1],setup.substr(0,64),options,45,setup.substr(65),5000,readyProfile)) return 4;
     // The test driver represents a trusted local UI/controller over private
     // captured stdio. This protocol must never be exposed to the TLS peer.
     std::optional<LocalOfferPrompt> prompt;
-    while(!(prompt=controller.pending())) {
+    for(;;) {
+        if(const auto ready=controller.takeReadiness()) std::cout << "READY " << ready->tlsPort << '\n' << std::flush;
+        if((prompt=controller.pending())) break;
         if(controller.takeStartupResult()) return 4;
         Sleep(1);
     }

@@ -25,6 +25,7 @@ def run_fixture(policy):
                            b"1|45|1|packaged_runtime|arm|1")
         return True # Trusted TEST policy, never a production consent decision.
     def ready(port):
+        if launch.ready_profile: return # Port already published on the verified private pipe.
         # Only non-secret readiness; fixed owner-selected TEST path, not IPC auth.
         destination = Path(policy["ready"])
         temporary = destination.with_suffix(".tmp")
