@@ -53,16 +53,23 @@ public:
         if(!offer) return std::nullopt;
         return LocalOfferPrompt{operation_->generation,*offer};
     }
-    // Non-secret discovery only, one report for the currently owned operation.
+    // Non-secret discovery only, a live snapshot for the owned operation.
     // Only while startup is pending and its original deadline remains live.
     // The caller must still verify TLS; this is never native control authority.
-    std::optional<LocalBridgeReady> takeReadiness() {
-        if(!operation_ || operation_->readyReported || operation_->canceled.load() ||
+    std::optional<LocalBridgeReady> pendingReadiness() const {
+        if(!operation_ || operation_->canceled.load() ||
            operation_->done.load(std::memory_order_acquire)) return std::nullopt;
         const auto ready=std::atomic_load(&operation_->ready);
         if(!ready || std::chrono::steady_clock::now()>=ready->deadline ||
            operation_->done.load(std::memory_order_acquire)) return std::nullopt;
-        operation_->readyReported=true;return ready->value;
+        return ready->value;
+    }
+    // One-shot consumer retained for drivers; it does not hide the live UI state.
+    std::optional<LocalBridgeReady> takeReadiness() {
+        if(!operation_ || operation_->readyReported) return std::nullopt;
+        const auto ready=pendingReadiness();
+        if(ready) operation_->readyReported=true;
+        return ready;
     }
     bool resolve(const LocalOfferPrompt& reviewed,bool allowTrackControl) {
         return operation_ && reviewed.generation==operation_->generation &&

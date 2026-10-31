@@ -2047,16 +2047,18 @@ private:
     }
     void endAuthenticatedLocalIngress() {
         remoteOfferController.stop();
+        remoteReviewPanel.showLocalReadiness(std::nullopt);
     }
     // Trusted development/controller entry only. No executable selection, launch
     // arguments, peer configuration or automatic start is exposed through the UI.
     bool startManagedLocalBridgeOnMessageThread(const std::wstring& executable,const std::string& approvedSha256,
             const idw::daw::remote::LocalSocketReceiver::Options& options,std::uint64_t epoch,
-            const std::string& approvedPeerSha256) {
+            const std::string& approvedPeerSha256,bool readinessProfile=false) {
         auto* manager=juce::MessageManager::getInstanceWithoutCreating();
         if(!manager || !manager->isThisTheMessageThread() || remoteOfferController.busy() ||
            remoteLocalBridge.running()) return false;
-        if(!remoteOfferController.start(executable,approvedSha256,options,epoch,approvedPeerSha256,30000)) return false;
+        if(!remoteOfferController.start(executable,approvedSha256,options,epoch,approvedPeerSha256,30000,readinessProfile)) return false;
+        remoteReviewPanel.showLocalReadiness(std::nullopt);
         remoteReviewPanel.setApprovalEnabled(false);
         remoteReviewPanel.setConnectionStatus("Waiting for authenticated bridge connection");
         remoteReviewPanel.setVisible(true);remoteReviewPanel.toFront(false);return true;
@@ -2065,6 +2067,7 @@ private:
         auto* manager=juce::MessageManager::getInstanceWithoutCreating();
         if(!manager || !manager->isThisTheMessageThread()) return;
         remoteReviewPanel.showLocalConsent(remoteOfferController.pending());
+        remoteReviewPanel.showLocalReadiness(remoteOfferController.pendingReadiness());
         if(const auto result=remoteOfferController.takeStartupResult()) {
             if(!*result) {
                 remoteOfferController.stop();
