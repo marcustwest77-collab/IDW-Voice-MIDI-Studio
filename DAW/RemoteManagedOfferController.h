@@ -33,13 +33,15 @@ public:
                         };
                     if(readinessProfile) {
                         op->success=manager_.startWithReadyOffer(executable,imageSha256,options,epoch,peerSha256,
-                            [op](const LocalBridgeReady& ready,const std::atomic<bool>& cancel,WindowsBridgeSession::OfferDeadline) {
-                                if(op->canceled.load() || cancel.load()) return false;
-                                std::atomic_store(&op->ready,std::make_shared<const LocalBridgeReady>(ready));return true;
+                            [op,epoch](const LocalBridgeReady& ready,const std::atomic<bool>& cancel,WindowsBridgeSession::OfferDeadline deadline) {
+                                if(op->canceled.load() || cancel.load() || ready.epoch!=epoch || ready.tlsPort==0 ||
+                                   std::chrono::steady_clock::now()>=deadline) return false;
+                                std::atomic_store(&op->ready,std::make_shared<const Readiness>(Readiness{ready,deadline}));return true;
                             },consentFor,timeoutMs,&op->canceled);
                     } else op->success=manager_.startWithTimedOffer(executable,imageSha256,options,epoch,peerSha256,
                         consentFor,timeoutMs,&op->canceled);
                 } catch(...) {op->success=false;}
+                std::atomic_store(&op->ready,std::shared_ptr<const Readiness>{});
                 op->done.store(true,std::memory_order_release);
             });
         } catch(...) {operation_.reset();return false;}
@@ -52,12 +54,15 @@ public:
         return LocalOfferPrompt{operation_->generation,*offer};
     }
     // Non-secret discovery only, one report for the currently owned operation.
+    // Only while startup is pending and its original deadline remains live.
     // The caller must still verify TLS; this is never native control authority.
     std::optional<LocalBridgeReady> takeReadiness() {
-        if(!operation_ || operation_->readyReported || operation_->canceled.load()) return std::nullopt;
+        if(!operation_ || operation_->readyReported || operation_->canceled.load() ||
+           operation_->done.load(std::memory_order_acquire)) return std::nullopt;
         const auto ready=std::atomic_load(&operation_->ready);
-        if(!ready) return std::nullopt;
-        operation_->readyReported=true;return *ready;
+        if(!ready || std::chrono::steady_clock::now()>=ready->deadline ||
+           operation_->done.load(std::memory_order_acquire)) return std::nullopt;
+        operation_->readyReported=true;return ready->value;
     }
     bool resolve(const LocalOfferPrompt& reviewed,bool allowTrackControl) {
         return operation_ && reviewed.generation==operation_->generation &&
@@ -75,11 +80,15 @@ public:
         operation_.reset();
     }
 private:
+    struct Readiness {
+        LocalBridgeReady value;
+        WindowsBridgeSession::OfferDeadline deadline;
+    };
     struct Operation {
         explicit Operation(std::uint64_t value):generation(value){}
         const std::uint64_t generation;
         LocalOfferConsent consent;
-        std::shared_ptr<const LocalBridgeReady> ready;
+        std::shared_ptr<const Readiness> ready;
         std::atomic<bool> canceled{false},done{false};
         bool success=false,reported=false,readyReported=false;
     };

@@ -10,6 +10,8 @@ struct FakeManager {
     std::atomic<bool> canceled{false},entered{false};
     std::atomic<unsigned> admitted{0},calls{0},stops{0};
     bool pauseAtEntry=false,throwOnStart=false,expiredOffer=false;
+    unsigned readyMode=0;
+    std::atomic<bool> readyPublished{false},releaseReady{false};
     bool startWithTimedOffer(const std::wstring&,const std::string&,const LocalSocketReceiver::Options&,
                         std::uint64_t epoch,const std::string& peer,const WindowsBridgeSession::TimedOfferConsent& consent,
                         unsigned timeoutMs,const std::atomic<bool>* ownerCanceled) {
@@ -34,7 +36,15 @@ struct FakeManager {
                             std::uint64_t epoch,const std::string& peer,const WindowsBridgeSession::ReadyCallback& ready,
                             const WindowsBridgeSession::TimedOfferConsent& consent,unsigned timeoutMs,
                             const std::atomic<bool>* ownerCanceled) {
-        if(!ready({epoch,12345},*ownerCanceled,std::chrono::steady_clock::now()+std::chrono::milliseconds(timeoutMs))) return false;
+        const auto deadline=std::chrono::steady_clock::now()+(readyMode==1 ? -1ms :
+            std::chrono::milliseconds(readyMode==4 ? 60 : timeoutMs));
+        if(!ready({readyMode==2 ? epoch+1 : epoch,static_cast<std::uint16_t>(readyMode==3 ? 0 : 12345)},
+                  *ownerCanceled,deadline)) return false;
+        readyPublished.store(true);
+        if(readyMode==4 || readyMode==5) {
+            while(!releaseReady.load() && !ownerCanceled->load()) std::this_thread::yield();
+            return false;
+        }
         return startWithTimedOffer(file,image,options,epoch,peer,consent,timeoutMs,ownerCanceled);
     }
 };
@@ -45,6 +55,43 @@ template<class Test> void await(Test test) {
 int main() {
     LocalSocketReceiver::Options options;
     const auto image=std::string(64,'a'),peer=std::string(64,'c');
+    for(unsigned mode=1;mode<=5;++mode) {
+        FakeManager manager;manager.readyMode=mode;
+        ManagedOfferController<FakeManager> controller(manager);
+        assert(controller.start(L"test.exe",image,options,45,peer,1000,true));
+        std::optional<bool> result;
+        if(mode>=4) {
+            await([&]{return manager.readyPublished.load();});
+            if(mode==4) {
+                // Keep the worker pending past the original readiness budget.
+                std::this_thread::sleep_for(80ms);
+                assert(!controller.takeReadiness());
+            }
+            manager.releaseReady.store(true);
+        }
+        await([&]{result=controller.takeStartupResult();return bool(result);});
+        assert(!*result && !controller.takeReadiness() && !controller.pending());
+        assert(manager.admitted.load()==0);
+        controller.stop();
+        // A replacement operation cannot inherit the old port or deadline.
+        manager.readyMode=0;manager.readyPublished.store(false);
+        assert(controller.start(L"test.exe",image,options,46,peer,1000,true));
+        std::optional<LocalBridgeReady> replacement;
+        await([&]{replacement=controller.takeReadiness();return bool(replacement);});
+        assert(replacement->epoch==46 && !controller.takeReadiness());
+        controller.stop();
+    }
+    {
+        FakeManager manager;ManagedOfferController<FakeManager> controller(manager);
+        assert(controller.start(L"test.exe",image,options,45,peer,1000,true));
+        await([&]{return bool(controller.pending());});
+        assert(controller.resolve(*controller.pending(),true));
+        std::optional<bool> result;
+        await([&]{result=controller.takeStartupResult();return bool(result);});
+        // Discovery is no longer pending after admission, either.
+        assert(*result && manager.admitted.load()==1 && !controller.takeReadiness());
+        controller.stop();
+    }
     {
         FakeManager manager;ManagedOfferController<FakeManager> controller(manager);
         assert(controller.start(L"test.exe",image,options,45,peer,1000,true));
