@@ -3,11 +3,13 @@ import hashlib
 import os
 from pathlib import Path
 import socket
+import shutil
 import ssl
 import subprocess
 import tempfile
 import time
 import unittest
+from create_local_test_bundle import create_bundle
 from tls_client import verified_tls_client
 from tls_worker_bootstrap import TLSWorkerProcess, fresh_session_secret
 from local_test_client import send_local_request, check_local_setup, create_local_setup, load_setup, FIELDS
@@ -18,13 +20,8 @@ class TLSNativeWorkerTests(unittest.TestCase):
     def setUpClass(cls):
         cls.folder = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.folder.cleanup)
-        cls.root = Path(cls.folder.name)
-        for name in ("localhost", "guest"):
-            subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-                            "-keyout", str(cls.root / (name+".key")),
-                            "-out", str(cls.root / (name+".crt")), "-days", "1",
-                            "-subj", "/CN="+name, "-addext", "subjectAltName=DNS:"+name],
-                           check=True, capture_output=True, timeout=25)
+        cls.root = Path(cls.folder.name) / "credentials"
+        create_bundle(cls.root, str(Path(shutil.which("openssl")).resolve()))
         cls.pin = hashlib.sha256(ssl.PEM_cert_to_DER_cert(
             (cls.root / "guest.crt").read_text())).hexdigest()
 

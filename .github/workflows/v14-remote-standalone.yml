@@ -48,6 +48,7 @@ jobs:
           IDW_NATIVE_RECEIVER_FIXTURE=remote-test-bin/native-receiver python DAW/network/test_native_local_receiver.py
           python DAW/network/test_tls_worker_bootstrap.py
           python DAW/network/test_local_test_client.py
+          python DAW/network/test_local_test_bundle.py
           IDW_NATIVE_RECEIVER_FIXTURE=remote-test-bin/native-receiver python DAW/network/test_tls_native_worker.py
 
       - name: Test native Windows worker process ownership

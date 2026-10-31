@@ -64,6 +64,6 @@ allows up to 60 seconds for a local client to connect; handshake/read timeouts
 remain unchanged. See `LOCAL_TEST_SETUP.md`.
 
 The Windows package also includes a Tk local test client for select/arm requests.
-Still needed: desktop acceptance, certificate provisioning, a remote collaborator
+Still needed: desktop acceptance, production certificate provisioning, a remote collaborator
 client, and ongoing sessions. No application autostart, LAN access, remote recording, or
 video is enabled by this component.
