@@ -38,6 +38,15 @@ jobs:
           g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteCrossLanguageHandoffFixture.cpp -o remote-test-bin/handoff-fixture -pthread
           python DAW/network/test_cpp_command_handoff.py remote-test-bin/handoff-fixture
 
+      - name: Test Python delivery to native authenticated socket receiver
+        shell: bash
+        run: |
+          set -euo pipefail
+          libs=(-pthread)
+          if [[ "$RUNNER_OS" == "Windows" ]]; then libs+=(-lws2_32); fi
+          g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteNativeLocalReceiverFixture.cpp -o remote-test-bin/native-receiver "${libs[@]}"
+          IDW_NATIVE_RECEIVER_FIXTURE=remote-test-bin/native-receiver python DAW/network/test_native_local_receiver.py
+
       - name: Test loopback-only Python TCP transport
         shell: bash
         run: python DAW/network/test_loopback_transport.py
