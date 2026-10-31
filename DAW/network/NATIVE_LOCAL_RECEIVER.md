@@ -13,10 +13,10 @@ cryptographically random 32-byte secret encoded as 64 lowercase hex characters,
 the expected peer ID, and the reserved epoch. The UI stays in a waiting state,
 with approvals disabled, until the TLS worker verifies the actual certificate
 and sends its token-bound `CONNECT|<epoch>` message. That message queues the
-connection event ahead of any command. Secret generation,
-OS-protected provisioning to the TLS process, and a launcher/UI that calls this
-method remain unfinished in the Workstation. A Python parent/child pipe bootstrap
-and TLS-to-native worker now exist; see `TLS_NATIVE_WORKER.md`. Do not put tokens
+connection event ahead of any command. The Windows local-test UI now calls the
+Workstation process owner, which generates secrets and provisions the worker
+through its private pipe. See `LOCAL_TEST_SETUP.md` and `TLS_NATIVE_WORKER.md`.
+Do not put tokens
 in arguments, logs, or project files.
 The activation method is not exposed as a network operation.
 

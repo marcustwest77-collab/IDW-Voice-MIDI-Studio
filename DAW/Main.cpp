@@ -1,5 +1,6 @@
 #include "RemoteNativeLocalReceiver.h"
 #include "RemoteWindowsWorkerProcess.h"
+#include "RemoteLocalTestSetup.h"
 #include "MidiSineSynth.h"
 #include "PlaybackTiming.h"
 #include "LoopbackWavAnalysis.h"
@@ -124,6 +125,15 @@ public:
         addAndMakeVisible(remoteReviewButton);
         remoteReviewButton.setButtonText("REMOTE REVIEW");
         addChildComponent(remoteReviewPanel);
+        remoteReviewPanel.onLoadTestSetup=[this] { chooseRemoteTestSetup(false); };
+        remoteReviewPanel.onChoosePython=[this] { chooseRemoteTestSetup(true); };
+        remoteReviewPanel.onStartLocalTest=[this] { confirmRemoteLocalTest(); };
+        remoteReviewPanel.onStopLocalTest=[this] {
+            ++remoteSetupGeneration; // Cancel any outstanding start confirmation.
+            onRemoteSessionEndedOnMessageThread(false);
+            refreshRemoteTestControls();
+        };
+        refreshRemoteTestControls();
         remoteReviewPanel.setApprovalEnabled(false); // no verified session or dispatcher yet
         remoteReviewButton.onClick=[this] {
             drainTrustedTransportEventsOnMessageThread();
@@ -132,6 +142,7 @@ public:
             remoteReviewPanel.toFront(false);
         };
         remoteReviewPanel.onRevokeControl=[this] {
+            ++remoteSetupGeneration;
             remoteWorker.stop();
             remoteLocalReceiver.stop();
             const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
@@ -142,6 +153,7 @@ public:
                 ? "Remote control revoked; pending requests cleared"
                 : "Offline: no active remote control to revoke");
             remoteReviewPanel.showPending(remoteSessionReviews.pending());
+            refreshRemoteTestControls();
         };
         remoteReviewPanel.onHostDecision=[this](const std::string& id, bool approve) {
             if (approve) {
@@ -878,7 +890,7 @@ public:
         limitLabel.setBounds(ceilingRow.removeFromLeft(145));
         ceilingControl.setBounds(ceilingRow.removeFromLeft(220));
         connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
-        remoteReviewPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,630),260));
+        remoteReviewPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,760),310));
         aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
         pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
     }
@@ -2038,11 +2050,100 @@ private:
         remoteReviewPanel.setApprovalEnabled(false);
         remoteReviewPanel.setConnectionStatus("Offline: remote session ended");
         remoteReviewPanel.showPending(remoteSessionReviews.pending());
+        refreshRemoteTestControls();
     }
-    // Internal preparation after explicit LOCAL host consent, before TLS admission.
+    static constexpr bool localRemoteTestsSupported() {
+#if JUCE_WINDOWS
+        return true;
+#else
+        return false;
+#endif
+    }
+    juce::File remoteWorkerScript() const {
+        return juce::File::getSpecialLocation(juce::File::currentExecutableFile)
+            .getParentDirectory().getChildFile("remote-worker/tls_native_worker.py");
+    }
+    void refreshRemoteTestControls() {
+        const bool active=remoteLocalReceiver.port()!=0 || remoteSessionReviews.grant().connected;
+        const bool configured=remoteTestSettings.isObject() && remotePython.existsAsFile() &&
+                              remoteWorkerScript().existsAsFile();
+        remoteReviewPanel.setTestControls(localRemoteTestsSupported(),configured,active);
+        if (localRemoteTestsSupported()) {
+            auto summary=remoteTestSettings.isObject()
+                ? "Peer: "+remoteTestSettings["peer"].toString()+" | local port "+remoteTestSettings["tls_port"].toString()
+                : juce::String("Load a local test setup");
+            summary+=remotePython.existsAsFile() ? " | Python selected" : " | Choose Python";
+            if (!remoteWorkerScript().existsAsFile()) summary+=" | Worker files missing";
+            remoteReviewPanel.setSetupSummary(summary);
+        }
+    }
+    void chooseRemoteTestSetup(bool choosePython) {
+        if (!localRemoteTestsSupported() || remoteLocalReceiver.port()!=0) return;
+        const auto generation=++remoteSetupGeneration;
+        auto chooser=std::make_shared<juce::FileChooser>(
+            choosePython ? "Choose your trusted Python executable" : "Load local Remote Studio test setup",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+            choosePython ? "*.exe" : "*.json");
+        juce::Component::SafePointer<Workstation> safe(this);
+        chooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,
+            [safe,chooser,choosePython,generation](const juce::FileChooser& selected) {
+                if (!safe || generation!=safe->remoteSetupGeneration || safe->remoteLocalReceiver.port()!=0) return;
+                const auto file=selected.getResult();
+                if (file==juce::File()) return;
+                if (choosePython) {
+                    if (!file.existsAsFile() || !file.hasFileExtension("exe") ||
+                        !(file.getFileNameWithoutExtension().equalsIgnoreCase("python") ||
+                          file.getFileNameWithoutExtension().equalsIgnoreCase("python3"))) {
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                            "Choose Python","Select python.exe or python3.exe from your trusted Python installation.");
+                        return;
+                    }
+                    safe->remotePython=file;
+                } else {
+                    juce::var settings;
+                    const auto parsed=file.getSize()>0 && file.getSize()<=16384
+                        ? juce::JSON::parse(file.loadFileAsString(),settings)
+                        : juce::Result::fail("The setup must be a JSON file no larger than 16 KiB.");
+                    const auto validation=parsed.wasOk()
+                        ? idw::daw::remote::validateLocalTestSetup(settings) : parsed;
+                    if (validation.failed()) {
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                            "Invalid local test setup",validation.getErrorMessage());
+                        return;
+                    }
+                    safe->remoteTestSettings=settings;
+                }
+                safe->refreshRemoteTestControls();
+            });
+    }
+    void confirmRemoteLocalTest() {
+        if (!localRemoteTestsSupported() || remoteLocalReceiver.port()!=0 || !remotePython.existsAsFile() ||
+            !remoteWorkerScript().existsAsFile() ||
+            idw::daw::remote::validateLocalTestSetup(remoteTestSettings).failed()) return;
+        const auto generation=++remoteSetupGeneration;
+        auto* dialog=new juce::AlertWindow("Start one local collaboration test?",
+            "Collaborator: "+remoteTestSettings["peer"].toString()+
+            "\nCertificate fingerprint: "+remoteTestSettings["client_pin"].toString()+
+            "\nPython: "+remotePython.getFullPathName()+
+            "\n\nOnly this computer can connect. The listener waits up to 60 seconds. "
+            "Track selection and arming requests still require your approval. Recording is disabled.",
+            juce::MessageBoxIconType::QuestionIcon);
+        dialog->addButton("Start local test",1);
+        dialog->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
+        juce::Component::SafePointer<Workstation> safe(this);
+        dialog->enterModalState(true,juce::ModalCallbackFunction::create([safe,generation](int result) {
+            if (!safe || result!=1 || generation!=safe->remoteSetupGeneration) return;
+            if (!safe->startRemoteWorkerFromLocalHostOnMessageThread(
+                    safe->remotePython,safe->remoteWorkerScript(),safe->remoteTestSettings,true))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "Local test could not start","Check the setup, Python installation and bundled worker files.");
+            safe->refreshRemoteTestControls();
+        }),true);
+    }
+    // Preparation after explicit LOCAL host consent, before TLS admission.
     // The receiver cannot accept commands until its token-bound TLS worker sends
     // CONNECT after independently verifying the peer certificate and pin.
-    // No launcher/UI currently calls this, so the listener stays off by default.
+    // Only the local test controller starts this; the listener stays off by default.
     unsigned short startNativeLocalReceiverOnMessageThread(
         const std::string& sessionSecret, const std::string& expectedPeer,
         std::uint64_t epoch, bool localHostConsented, bool localTrackControlAllowed) {
@@ -2057,13 +2158,14 @@ private:
         return remoteLocalReceiver.port();
     }
     // Trusted LOCAL host-controller entry. Settings contain public connection
-    // metadata and certificate paths, never a session secret. UI is not wired yet.
+    // metadata and certificate paths, never a session secret.
     bool startRemoteWorkerFromLocalHostOnMessageThread(
         const juce::File& python, const juce::File& workerScript,
         const juce::var& settings, bool localHostConsented) {
         auto* manager=juce::MessageManager::getInstanceWithoutCreating();
         if (!manager || !manager->isThisTheMessageThread() || !localHostConsented ||
-            !settings.isObject() || remoteLocalReceiver.port()!=0) return false;
+            idw::daw::remote::validateLocalTestSetup(settings).failed() ||
+            remoteLocalReceiver.port()!=0) return false;
         const auto peer=settings["peer"].toString().toStdString();
         if (!idw::daw::remote::validId(peer)) return false;
         const auto& grant=remoteSessionReviews.grant();
@@ -2098,7 +2200,7 @@ private:
             return false;
         }
         remoteWorkerLastState=idw::daw::remote::WindowsWorkerProcess::State::starting;
-        remoteReviewPanel.setConnectionStatus("Starting local TLS worker");
+        remoteReviewPanel.setConnectionStatus("Starting local TLS worker | epoch "+juce::String(static_cast<juce::int64>(remoteWorkerEpoch)));
         return true;
     }
     void pollRemoteWorkerOnMessageThread() {
@@ -2109,11 +2211,12 @@ private:
         if (state==State::failed) {
             onRemoteSessionEndedOnMessageThread(true);
             remoteReviewPanel.setConnectionStatus("Offline: local TLS worker stopped or failed");
+            refreshRemoteTestControls();
         } else if (state==State::succeeded) {
             // A successful one-request worker exit must not erase pending host review.
             remoteReviewPanel.setConnectionStatus("Local request received; host review required");
         } else if (state==State::ready && !remoteSessionReviews.grant().connected) {
-            remoteReviewPanel.setConnectionStatus("Waiting for verified collaborator");
+            remoteReviewPanel.setConnectionStatus("Waiting up to 60s | local epoch "+juce::String(static_cast<juce::int64>(remoteWorkerEpoch)));
         }
     }
     // Restricted data-only handoff for a future authenticated transport worker.
@@ -3417,6 +3520,9 @@ public:
     idw::daw::remote::WindowsWorkerProcess::State remoteWorkerLastState=
         idw::daw::remote::WindowsWorkerProcess::State::idle;
     std::uint64_t remoteWorkerEpoch=0;
+    juce::var remoteTestSettings;
+    juce::File remotePython;
+    std::uint64_t remoteSetupGeneration=0;
     // Independent UI-thread poll remains active even when playback is stopped.
     struct RemoteEventPollTimer final : juce::Timer {
         Workstation& owner;

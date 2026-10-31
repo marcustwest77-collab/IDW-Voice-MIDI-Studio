@@ -56,8 +56,13 @@ shutdown, and parent-controlled worker termination. The C++ receiver fixture
 stands in for the running Workstation. This is not a two-computer application
 test.
 
-Still needed: a JUCE host UI/controller that owns secret generation and pipes,
-starts the guarded native receiver, launches this worker from the installed
-runtime, provisions host-selected certificates and permissions, and handles
-ongoing sessions. No application autostart, LAN access, remote recording, or video
-is enabled by this component.
+The Windows local-test UI now loads validated nonsecret settings, lets the host
+select a trusted Python executable, and confirms consent before invoking the
+Workstation owner. That owner generates secrets and starts the guarded receiver
+and worker. The Windows package includes the worker scripts. The one-shot worker
+allows up to 60 seconds for a local client to connect; handshake/read timeouts
+remain unchanged. See `LOCAL_TEST_SETUP.md`.
+
+Still needed: desktop acceptance, certificate provisioning, an end-user client,
+and ongoing sessions. No application autostart, LAN access, remote recording, or
+video is enabled by this component.

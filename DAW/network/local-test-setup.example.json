@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "peer": "guest",
+  "tls_port": 49200,
+  "server_cert": "C:/IDW-Test/localhost.crt",
+  "server_key": "C:/IDW-Test/localhost.key",
+  "client_ca": "C:/IDW-Test/guest.crt",
+  "client_pin": "REPLACE_WITH_THE_64_CHARACTER_LOWERCASE_CLIENT_CERTIFICATE_SHA256",
+  "approved_requests": ["local_arm_1"]
+}

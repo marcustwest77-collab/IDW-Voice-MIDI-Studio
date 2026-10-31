@@ -45,7 +45,7 @@ def run(config):
         client_cafile=config["client_ca"], approved_client_sha256=config["client_pin"],
         approved_peer_by_sha256={config["client_pin"]: peer},
         host_approval=admit_verified_peer, host_approval_ledger=ledger,
-        accepted_command_sink=producer.accepted_command_sink)
+        accepted_command_sink=producer.accepted_command_sink, accept_timeout=60)
 
 
 def main():

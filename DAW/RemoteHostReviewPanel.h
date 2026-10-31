@@ -13,6 +13,7 @@ public:
     // refresh live grant/track state and use HostReviewController::approve.
     std::function<void(const std::string&, bool approve)> onHostDecision;
     std::function<void()> onRevokeControl;
+    std::function<void()> onLoadTestSetup,onChoosePython,onStartLocalTest,onStopLocalTest;
 
     static const char* actionName(Action action) noexcept {
         switch (action) {
@@ -36,6 +37,15 @@ public:
         addAndMakeVisible(revokeButton_);
         revokeButton_.setButtonText("REVOKE CONTROL");
         revokeButton_.onClick=[this] { if (onRevokeControl) onRevokeControl(); };
+        for (auto* button : {&setupButton_,&pythonButton_,&startButton_,&stopButton_})
+            addAndMakeVisible(*button);
+        setupButton_.onClick=[this] { if (onLoadTestSetup) onLoadTestSetup(); };
+        pythonButton_.onClick=[this] { if (onChoosePython) onChoosePython(); };
+        startButton_.onClick=[this] { if (onStartLocalTest) onStartLocalTest(); };
+        stopButton_.onClick=[this] { if (onStopLocalTest) onStopLocalTest(); };
+        addAndMakeVisible(setupSummary_);
+        setupSummary_.setText("Local test only: load setup and choose Python",juce::dontSendNotification);
+        setTestControls(false,false,false);
         addAndMakeVisible(emptyState_);
         emptyState_.setText("No pending remote requests", juce::dontSendNotification);
     }
@@ -48,6 +58,17 @@ public:
     void setApprovalEnabled(bool enabled) {
         approvalEnabled_ = enabled;
         for (auto& row : rows_) row->approve.setEnabled(enabled);
+    }
+    void setTestControls(bool supported,bool configured,bool active) {
+        setupButton_.setEnabled(supported && !active);
+        pythonButton_.setEnabled(supported && !active);
+        startButton_.setEnabled(supported && configured && !active);
+        stopButton_.setEnabled(supported && active);
+        if (!supported) setupSummary_.setText("Local worker tests require Windows",juce::dontSendNotification);
+    }
+    void setSetupSummary(const juce::String& text) {
+        setupSummary_.setText(text,juce::dontSendNotification);
+        setupSummary_.setTooltip(text);
     }
 
     void showPending(const std::vector<PendingReview>& pending) {
@@ -81,6 +102,11 @@ public:
         revokeButton_.setBounds(headerArea.removeFromRight(150).reduced(2));
         header_.setBounds(headerArea);
         status_.setBounds(area.removeFromTop(24));
+        auto controls=area.removeFromTop(32);
+        const auto width=controls.getWidth()/4;
+        for (auto* button : {&setupButton_,&pythonButton_,&startButton_,&stopButton_})
+            button->setBounds(controls.removeFromLeft(width).reduced(2));
+        setupSummary_.setBounds(area.removeFromTop(24));
         emptyState_.setBounds(area.removeFromTop(rows_.empty() ? 30 : 0));
         for (auto& row : rows_) row->setBounds(area.removeFromTop(36));
     }
@@ -102,6 +128,9 @@ private:
     };
     bool approvalEnabled_ = false; // deny by default until live authenticated DAW integration
     juce::TextButton revokeButton_;
+    juce::TextButton setupButton_{"LOAD TEST SETUP"},pythonButton_{"CHOOSE PYTHON"},
+        startButton_{"START LOCAL TEST"},stopButton_{"STOP TEST"};
+    juce::Label setupSummary_;
     juce::Label header_, status_, emptyState_;
     std::vector<std::unique_ptr<ReviewRow>> rows_;
 };

@@ -25,9 +25,11 @@ files, or logs. Python bootstrap validation and TLS identity checks still apply.
 
 The controller entry point takes trusted Python/worker paths and nonsecret
 settings (`peer`, `tls_port`, certificate/key paths, client pin, approved request
-IDs). It is not exposed as a network operation. A UI for selecting trusted
-runtime/certificates and granting consent is still required; no button calls this
-method yet. Runtime packaging and a desktop acceptance test are also pending.
+IDs). It is not exposed as a network operation. REMOTE REVIEW now has local-test
+setup, Python selection, confirmed Start, and Stop controls. Setup selection and
+permissions are not saved to projects or restored automatically. The Windows
+package includes the worker scripts; the host supplies Python and certificates.
+A desktop acceptance test is still required.
 macOS/Linux return unsupported for this process owner; their receiver/tests remain
 available. This change does not enable LAN collaboration, recording, or video.
 
