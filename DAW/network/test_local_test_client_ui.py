@@ -51,6 +51,19 @@ class ClientUITests(unittest.TestCase):
         self.assertNotIn("private detail",self.client.status.get())
         self.assertEqual(self.client.sequence.get(),"1")
 
+    def test_preflight_reports_result_without_sending(self):
+        with patch("local_test_client_ui.check_local_setup", return_value="No connection was made.") as check, \
+             patch("local_test_client_ui.send_local_request") as send:
+            self.client.check_setup()
+            check.assert_called_once()
+            send.assert_not_called()
+        self.assertIn("No connection", self.client.status.get())
+        self.assertEqual(self.client.sequence.get(), "1")
+        with patch("local_test_client_ui.check_local_setup", side_effect=ValueError("private detail")):
+            self.client.check_setup()
+        self.assertIn("failed", self.client.status.get())
+        self.assertNotIn("private detail", self.client.status.get())
+
     def test_invalid_request_never_starts_network(self):
         self.client.epoch.set("invalid")
         with patch("local_test_client_ui.messagebox.showerror") as error, \

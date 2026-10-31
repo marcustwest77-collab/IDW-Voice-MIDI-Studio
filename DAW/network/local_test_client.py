@@ -1,4 +1,6 @@
 """Bounded localhost-only client requests; no native session token is used."""
+import hashlib
+import ssl
 import json
 from pathlib import Path
 import re
@@ -78,3 +80,30 @@ def send_local_request(setup, client_cert, client_key, **request):
     if reply != payload:
         raise PermissionError("The host did not acknowledge this request.")
     return "Request queued. Review it in the DAW; no track action has been approved yet."
+
+
+def check_local_setup(setup, client_cert, client_key):
+    """Check local material without opening sockets or prompting for key passwords."""
+    validate_setup(setup)
+    if not _existing_file(client_cert) or not _existing_file(client_key):
+        raise ValueError("Choose the client certificate and matching private key.")
+    with open(client_cert, "rb") as source:
+        pem = source.read(65537)
+    if len(pem) > 65536 or pem.count(b"-----BEGIN CERTIFICATE-----") != 1:
+        raise ValueError("Choose one PEM client certificate, at most 64 KiB.")
+    try:
+        der = ssl.PEM_cert_to_DER_cert(pem.decode("ascii"))
+    except (ValueError, UnicodeError):
+        raise ValueError("The client certificate must be valid PEM.") from None
+    if hashlib.sha256(der).hexdigest() != setup["client_pin"]:
+        raise ValueError("The client certificate fingerprint does not match the setup.")
+    try:
+        host = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        host.load_cert_chain(setup["server_cert"], setup["server_key"], password=lambda: "")
+        host.load_verify_locations(cafile=setup["client_ca"])
+        client = ssl.create_default_context(cafile=setup["server_cert"])
+        client.load_cert_chain(client_cert, client_key, password=lambda: "")
+    except (OSError, ssl.SSLError):
+        raise ValueError("Certificate/key loading failed. Check matching keys, PEM files and trust files; this test uses unencrypted keys.") from None
+    return ("Local files and fingerprint checked. No connection was made. "
+            "The live test still verifies certificate trust, expiry and localhost identity.")

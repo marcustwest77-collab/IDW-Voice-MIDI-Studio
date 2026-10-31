@@ -3,7 +3,7 @@ import queue
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from local_test_client import build_request, load_setup, send_local_request
+from local_test_client import build_request, check_local_setup, load_setup, send_local_request
 
 
 class LocalTestClient:
@@ -55,11 +55,14 @@ class LocalTestClient:
                 editor = ttk.Entry(frame, textvariable=variable)
             editor.grid(row=row, column=1, columnspan=2, sticky="ew")
             self.controls.append((editor, "readonly" if isinstance(editor, ttk.Combobox) else "normal"))
+        self.check_button = ttk.Button(frame, text="CHECK SETUP (NO CONNECTION)", command=self.check_setup)
+        self.check_button.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(12, 0))
+        self.controls.append((self.check_button, "normal"))
         self.send_button = ttk.Button(frame, text="SEND REQUEST FOR HOST REVIEW", command=self.send)
-        self.send_button.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(16, 10))
+        self.send_button.grid(row=11, column=0, columnspan=3, sticky="ew", pady=(16, 10))
         self.status = tk.StringVar(value="Start the local test in the DAW, then copy its session epoch here.")
         ttk.Label(frame, textvariable=self.status, wraplength=580).grid(
-            row=11, column=0, columnspan=3, sticky="w")
+            row=12, column=0, columnspan=3, sticky="w")
         self.poll_id = root.after(100, self.poll)
         root.protocol("WM_DELETE_WINDOW", self.close)
 
@@ -87,6 +90,14 @@ class LocalTestClient:
             else:
                 self.client_cert = path
                 self.cert_label.set("Client certificate selected")
+
+    def check_setup(self):
+        if self.pending:
+            return
+        try:
+            self.status.set(check_local_setup(self.setup, self.client_cert, self.client_key))
+        except (ValueError, OSError):
+            self.status.set("Setup check failed. Verify the selected setup, certificate fingerprint, matching keys and PEM trust files. This test requires unencrypted keys.")
 
     def send(self):
         if self.pending:
