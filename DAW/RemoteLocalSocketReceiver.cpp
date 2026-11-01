@@ -108,6 +108,7 @@ struct LocalSocketReceiver::Impl {
     std::thread worker;
     std::atomic<bool> stopping{false}, active{false};
     std::atomic<std::uint16_t> boundPort{0};
+    std::atomic<Clock::duration::rep> sessionDeadlineTicks{0};
     Socket listener = invalidSocket; // closed only after worker is joined
     std::uint64_t sessionEpoch = 0;
     bool networkReady = true;
@@ -139,9 +140,8 @@ struct LocalSocketReceiver::Impl {
         send(client, &receipt, 1, 0);
 #endif
     }
-    void run(Options options) noexcept {
+    void run(Options options, Clock::time_point sessionDeadline) noexcept {
         try {
-            const auto sessionDeadline = Clock::now() + std::chrono::milliseconds(options.sessionTimeoutMs);
             for (unsigned count = 0; count < options.maxConnections;) {
                 if (!waitReadable(listener, sessionDeadline, stopping)) break;
                 sockaddr_in peer{};
@@ -193,9 +193,11 @@ bool LocalSocketReceiver::start(const Options& options, std::string secret,
     p.sessionEpoch = epoch;
     listener.value = invalidSocket;
     p.stopping.store(false);
+    const auto sessionDeadline=Clock::now()+std::chrono::milliseconds(options.sessionTimeoutMs);
+    p.sessionDeadlineTicks.store(sessionDeadline.time_since_epoch().count());
     p.active.store(true);
     p.boundPort.store(ntohs(address.sin_port));
-    try { p.worker = std::thread([&p, options] { p.run(options); }); }
+    try { p.worker = std::thread([&p, options, sessionDeadline] { p.run(options,sessionDeadline); }); }
     catch (...) {
         p.ingress.endSession(p.sessionEpoch);
         closeSocket(p.listener);
@@ -219,6 +221,9 @@ void LocalSocketReceiver::stop() {
     p.boundPort.store(0);
     p.active.store(false);
 }
-bool LocalSocketReceiver::running() const { return impl_->active.load(); }
-std::uint16_t LocalSocketReceiver::port() const { return impl_->boundPort.load(); }
+bool LocalSocketReceiver::running() const {
+    return impl_->active.load() && !impl_->stopping.load() &&
+        Clock::now().time_since_epoch().count()<impl_->sessionDeadlineTicks.load();
+}
+std::uint16_t LocalSocketReceiver::port() const { return running() ? impl_->boundPort.load() : 0; }
 } // namespace idw::daw::remote

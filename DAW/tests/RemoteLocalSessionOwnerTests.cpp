@@ -194,10 +194,16 @@ int main() {
     owner.stop();
     queue.drain();
     transport.epoch = consent.epoch = 51;
-    assert(!owner.start(shortLife, transport, consent, [](const LocalSessionBootstrap&) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100)); return true;
+    assert(!owner.start(shortLife, transport, consent, [&](const LocalSessionBootstrap&) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // Expiry is a synchronous admission fact, not worker-cleanup progress.
+        assert(!owner.running() && owner.port()==0);
+        return true;
     }));
     assert(!owner.running() && owner.port() == 0);
+    bool retried=false;
+    assert(!owner.start(options,transport,consent,[&](const LocalSessionBootstrap&){retried=true;return true;}));
+    assert(!retried); // Expired provisioning still consumes its epoch.
     queue.drain();
     transport.epoch = consent.epoch = 52;
     { LocalSessionOwner scoped(queue);
