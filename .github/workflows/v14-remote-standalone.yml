@@ -19,6 +19,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+      - name: Verify isolated remote package and failure detection
+        if: runner.os == 'Windows'
+        shell: bash
+        run: python DAW/tests/TestRemotePackage.py
+
       - name: Compile and run remote tests in Release-equivalent mode
         shell: bash
         run: |

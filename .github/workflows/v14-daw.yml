@@ -74,6 +74,11 @@ jobs:
           '@ | Set-Content -Path beta-windows/README-WINDOWS-BETA.txt
           Get-FileHash beta-windows/IDW-DAW-V14-Beta.exe -Algorithm SHA256 |
             Format-List | Out-File beta-windows/SHA256.txt
+      - name: Verify packaged remote tools in isolation
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: python DAW/tests/VerifyRemotePackage.py beta-windows
+
       - name: Upload Windows testing beta
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4

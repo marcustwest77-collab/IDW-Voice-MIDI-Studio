@@ -90,3 +90,15 @@ The JSON uses absolute paths, so keep the folder in place while testing. Stop
 the host test before deleting the disposable folder. Create a fresh folder when
 certificates expire. These credentials are for this localhost development test,
 not a remote collaborator deployment.
+
+## Package validation
+
+Before uploading a Windows beta, CI checks the copied remote tools from a
+separate temporary working directory with source imports disabled. It verifies
+required files, rejects bundled test credentials, imports the worker/client,
+generates temporary certificates, reloads the generated setup, and validates a
+track request. Temporary credentials are deleted after the check. This is a
+package dependency check; it does not launch the DAW or replace the two-window
+Windows desktop acceptance test. Python (with tkinter) and OpenSSL remain
+external prerequisites; passing on a build runner does not install them on
+your computer.
