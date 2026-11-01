@@ -1,15 +1,18 @@
 """Single-use process-verified private command decision transaction, Windows only.
 
-No discovery/launch, ledger mutation or automatic mailbox resolution. Use only
-with independently held trusted native-host process identity and local policy.
+No discovery, launch or default approval. The raw transaction returns data only;
+the explicit adapter applies verified decisions through a live local mailbox.
+Use only with independently held trusted native-host identity and local policy.
 """
 import ctypes
 import math
 import re
 import threading
+import time
 
 from native_command_review_wire import encode_command_proposal, match_command_decision, MAX_DECISION_BYTES
 from windows_native_bootstrap import _VerifiedPipe
+from native_command_review import NativeCommandReview
 
 
 def receive_windows_command_decision(name, expected_server_handle, prompt, *,
@@ -43,3 +46,46 @@ def receive_windows_command_decision(name, expected_server_handle, prompt, *,
         return match_command_decision(bytes(response),prompt)
     finally:
         connection.close()
+
+
+def review_windows_native_command(identity, payload, *, ledger, name, expected_server_handle,
+                                  cancel, deadline, timeout=2.0):
+    """Trusted TLS callback: exact native decision -> live mailbox -> ledger.
+
+    Invoke off UI/audio threads. Endpoint and held host identity are supplied by
+    trusted local policy, never peer fields. Each invocation owns a fresh mailbox
+    lifetime and worker. The pipe decision alone cannot approve a stale proposal;
+    the mailbox must still be live, match exactly and belong to the active ledger.
+    Always close/join the mailbox worker, including I/O, cancellation and errors.
+    Session owner independently consumes approval, rechecks consent and revokes.
+    No endpoint discovery, process launch, reconnect or default activation here.
+    """
+    review=NativeCommandReview(ledger)
+    results=[];errors=[];done=threading.Event()
+    def request():
+        try: results.append(review.request(identity,payload,cancel=cancel,deadline=deadline))
+        except BaseException as error: errors.append(error)
+        finally: done.set()
+    worker=threading.Thread(target=request,name="idw-private-command-mailbox")
+    try: worker.start()
+    except BaseException:
+        review.close();raise
+    try:
+        prompt=None
+        while not done.is_set():
+            prompt=review.pending()
+            if prompt is not None: break
+            # request validates the scope; do not touch unvalidated cancel/time
+            # inputs here. Invalid scopes finish the worker without pipe access.
+            done.wait(.005)
+        if prompt is None:
+            if errors: raise errors[0]
+            return False
+        allow=receive_windows_command_decision(name,expected_server_handle,prompt,
+            cancel=cancel,deadline=deadline,timeout=timeout)
+        if not review.resolve(prompt,allow): return False
+        worker.join()
+        if errors: raise errors[0]
+        return bool(results and results[0])
+    finally:
+        review.close();worker.join()

@@ -788,6 +788,45 @@ mailbox resolution and native-host review UI wiring remain unfinished. Existing
 packaged TLS compatibility behavior is unchanged; no production activation, DAW
 execution or two-computer collaboration is added by this standalone channel.
 
+### Applying a verified decision through a live mailbox
+
+`review_windows_native_command` is an explicit adapter for the TLS owner's
+`host_command_review` callback. Trusted local policy supplies the one-use endpoint
+and held native-host process handle; peer messages supply neither. Each call
+owns a fresh `NativeCommandReview` mailbox lifetime and a worker, publishes the
+actual TLS identity/exact command, and passes the original session cancellation
+event and absolute command deadline unchanged through the verified pipe exchange.
+It resolves only the exact still-live mailbox snapshot after receiving an
+authenticated matching native decision, then waits for that mailbox's result.
+The session still consumes the exact single-use ledger approval and rechecks
+deadline, peer pin and host consent before native queue delivery.
+
+Denial, invalid/inactive scope, expired/canceled/revoked proposals and late allows
+cannot produce approval. Pipe/configuration/worker errors propagate without retry;
+every path closes and joins the mailbox worker. A worker-start failure opens no
+pipe. The adapter itself performs no endpoint discovery, process launch or
+automatic approval, and must run off the UI/audio thread. Owners must hold their
+trusted endpoint/process policy and retain the session/ledger through teardown.
+
+Windows integration tests now exercise real mTLS -> verified C++ decision pipe
+-> live mailbox/ledger -> native pending review, with no Python preapproval. The
+trusted TEST controller explicitly sends an allow to the separate C++ review
+fixture only after verifying zero native pending review and no ledger approval;
+the exact queue receipt follows, and EOF revokes pending review. Native denial,
+TLS-binding substitution, native expiry, cancellation while the reviewer waits
+and consent revoked before an eventual allow all produce no queued command.
+Unit tests cover exact single-use approval, fresh mailbox lifetimes, unchanged
+deadline/cancel context, late decisions, failure cleanup and joined workers.
+
+These tests use separate C++ review and native queue fixtures, not a running
+Workstation or the production managed bridge's parent process. The review
+fixture receives the real connection binding and its TEST-controller decision
+over private captured stdin; that is not production provisioning/UI. Normal
+endpoint provisioning, same-host Workstation integration, production bundle and
+credential trust and activation remain unfinished. The packaged compatibility
+fixture still uses its fixed automatic TEST approval. No DAW execution or live
+two-computer collaboration is claimed.
+
 ### Native receiver expiry independent of worker scheduling
 
 The native receiver fixes its absolute steady-clock session deadline before

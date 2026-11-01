@@ -21,8 +21,14 @@ int main(int argc,char** argv) {
     LocalTLSOffer expected{45,std::string(64,'a'),std::string(64,'b'),13};
     WindowsCommandReviewChannel channel;
 #if defined(_WIN32)
-    if(argc==4 && std::string(argv[1])=="--test-host") {
+    if(argc==4 && (std::string(argv[1])=="--test-host" || std::string(argv[1])=="--test-bound-host")) {
         if(_setmode(_fileno(stdout),_O_BINARY)==-1) return 2;
+        if(std::string(argv[1])=="--test-bound-host") {
+            if(_setmode(_fileno(stdin),_O_BINARY)==-1) return 2;
+            LocalTLSOfferBytes offer{};
+            std::cin.read(reinterpret_cast<char*>(offer.data()),static_cast<std::streamsize>(offer.size()));
+            if(!std::cin || !decodeTLSOffer(offer,expected)) return 2;
+        }
         // TEST ONLY: trusted driver supplies its own PID; production API uses
         // an already held independently trusted child process handle instead.
         const auto pid=std::stoul(argv[2]);const std::string mode=argv[3];
@@ -37,6 +43,25 @@ int main(int argc,char** argv) {
         const bool result=channel.reviewFrom(peer,expected,"guest",
             [&](const LocalCommandProposal&,bool& allow,const std::atomic<bool>& canceled,WindowsCommandReviewChannel::Deadline until) {
                 std::cout << "REVIEW\n" << std::flush;
+                if(mode=="manual") {
+                    // TEST driver is the local decision owner over captured
+                    // stdin, separate from both TLS and the private review pipe.
+                    const auto input=GetStdHandle(STD_INPUT_HANDLE);
+                    while(!canceled.load() && std::chrono::steady_clock::now()<until) {
+                        DWORD available=0;
+                        if(!PeekNamedPipe(input,nullptr,0,nullptr,&available,nullptr)) return false;
+                        if(available) {
+                            if(available!=6) return false;
+                            char command[6]{};DWORD read=0;
+                            if(!ReadFile(input,command,6,&read,nullptr) || read!=6) return false;
+                            const std::string decision(command,command+6);
+                            if(decision!="ALLOW\n" && decision!="DENY!\n") return false;
+                            allow=decision=="ALLOW\n";return true;
+                        }
+                        Sleep(1);
+                    }
+                    return false;
+                }
                 if(mode=="expire") std::this_thread::sleep_until(until+std::chrono::milliseconds(10));
                 if(mode=="slow") Sleep(1000);
                 if(mode=="throw") throw 1;
