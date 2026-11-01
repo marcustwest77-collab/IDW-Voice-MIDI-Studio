@@ -711,6 +711,42 @@ review plumbing only; production cross-process approval IPC and Workstation UI
 wiring remain unfinished. The packaged compatibility fixture retains its fixed
 automatic TEST approval, and no new DAW execution or two-computer claim is made.
 
+### Data-only native/Python command-review wire format
+
+`RemoteCommandReviewWire.h` and `native_command_review_wire.py` define matching
+bounded codecs for a future private approval channel. A proposal is `IDWQ`,
+version 1, an eight-byte big-endian local generation, 32 lowercase hexadecimal
+mailbox-lifetime characters, a one-byte peer-ID length and ASCII peer ID, the
+existing 142-byte TLS offer, a two-byte big-endian command length and exact
+canonical command bytes. Peer IDs are bounded to 64 characters; commands to 128
+bytes, select/arm only, the offer's epoch and tracks 0–127. Proposal records are
+at most 382 bytes. No bootstrap credential is included.
+
+A decision is `IDWD`, version 1, an explicit byte 0 (deny) or 1 (allow), and the
+complete proposal it answers, at most 388 bytes total. Matching compares the
+whole expected canonical proposal: generation, mailbox lifetime, peer ID, TLS
+epoch/certificate/connection/version and command content. Truncation, trailing
+bytes, invalid lengths, noncanonical commands and changed decision fields fail
+closed. C++ failed decodes/matches leave caller output unchanged.
+
+These are codecs only. There is no approval listener, pipe transaction or
+Workstation activation in this step. A decoded allow is data, not authority; it
+does not resolve `NativeCommandReview`, write a ledger entry or queue a command.
+The future transport must verify held process identities before exchanging any
+records, bind the expected proposal to the live session and retain the local
+absolute deadline/cancellation across the transaction. Deadlines are deliberately
+not copied into peer-controlled messages or renewed by decoding. The local
+mailbox must still reject stale decisions. Never carry decisions on the remote
+client's TLS command path.
+
+Strict C++ tests and Python/C++ subprocess interoperability cover both encoding
+directions, explicit allow/deny, maximum integer/identifier fields, every
+truncation and substituted decision field, malformed lengths and no authority
+side effects after decoding a live mailbox's allow record. Full Workstation CI
+builds and runs the new C++ codec test; native-platform CI also runs cross-language
+checks. This is a prerequisite for production private approval IPC, which remains
+unfinished, and supplies no additional DAW execution or two-computer evidence.
+
 ### Native receiver expiry independent of worker scheduling
 
 The native receiver fixes its absolute steady-clock session deadline before
