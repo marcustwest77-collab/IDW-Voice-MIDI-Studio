@@ -871,6 +871,41 @@ mailbox, optional panel and fixture integrations, not a running Workstation TLS
 session, DAW execution or two-computer collaboration. Production bundle and
 credential trust and same-host lifecycle/UI ownership still need completion.
 
+### Owned asynchronous native review operation
+
+`WindowsCommandReviewOperation` owns one pipe/mailbox transaction for a trusted
+controller thread, including its background worker and peer-handle lifetime.
+`start()` duplicates the independently trusted peer handle synchronously before
+returning, so the caller may release its borrowed source before background I/O.
+One deadline starts at entry and includes policy/setup, pipe creation, scheduling,
+proposal and decision. A trusted absolute owner deadline may only shorten it.
+The operation launches no process and cannot establish TLS/artifact trust itself.
+
+The endpoint name is cached before worker entry: controller/UI polling never
+calls the channel's mutex-held `name()` during I/O. `endpoint()` and `pending()`
+hide expired, completed, canceled or dead-peer attempts. `resolve()` delegates
+only the exact live mailbox snapshot. `takeResult()` reports exchange completion
+once; an explicit denial can be a successful exchange. Neither outcome proves
+client acceptance, native admission or DAW execution. Ownership remains
+busy until `stop()` closes the mailbox, cancels/drains and joins the worker, then
+closes the endpoint and owned handle. Repeated stop is safe. Stop never terminates
+the peer, whose process lifecycle belongs to its launch owner. The controller
+must stop on host/session revocation and join before disposing related state.
+
+Tests close the borrowed source immediately after scheduling, then complete real
+allow/deny exchanges through the duplicate. They cover polling during a pending
+decision, immediate stop/late worker entry, stop while the mailbox waits, original
+deadline expiry, peer exit and once-only results/resource retirement. The real
+TLS/native adapter tests also run with this operation as the review host, using
+the actual connection binding and explicit TEST-controller decisions. Existing
+raw-channel integration remains separately exercised in CI. These still use
+separate review and queue fixtures, not a running Workstation parent process.
+
+This supplies the asynchronous lifecycle owner needed by the optional JUCE
+controls, but normal Workstation endpoint provisioning, verified-session wiring,
+production bundle/credential trust and activation remain unfinished. No default
+endpoint/helper, DAW execution or live two-computer collaboration is added.
+
 ### Native receiver expiry independent of worker scheduling
 
 The native receiver fixes its absolute steady-clock session deadline before
