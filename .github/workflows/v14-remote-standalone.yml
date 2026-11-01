@@ -159,6 +159,7 @@ jobs:
           review_pipe_fixture=remote-test-bin/RemoteWindowsCommandReviewTests
           if [[ "${{ runner.os }}" == "Windows" ]]; then review_pipe_fixture+=.exe; fi
           IDW_COMMAND_REVIEW_PIPE_FIXTURE="$review_pipe_fixture" python DAW/network/test_windows_native_command_review.py -v
+          IDW_NATIVE_LOCAL_FIXTURE="$fixture" IDW_COMMAND_REVIEW_PIPE_FIXTURE="$review_pipe_fixture" python DAW/network/test_native_command_review_adapter.py -v
           python DAW/network/test_native_provisioning_lifetime.py -v
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_native_tls_offer.py -v
           python DAW/network/test_windows_bridge_launch.py -v
