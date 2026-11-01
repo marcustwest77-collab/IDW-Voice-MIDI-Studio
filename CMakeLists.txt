@@ -104,6 +104,12 @@ target_compile_definitions(IDWVoiceMIDIStudio_Standalone PRIVATE JUCE_USE_CUSTOM
 # V14 DAW prototype is opt-in and does not modify the existing plugin formats.
 option(IDW_BUILD_DAW "Build experimental V14 DAW shell" OFF)
 if(IDW_BUILD_DAW)
+    # Share backend flags with the enumeration regression so a green test cannot
+    # accidentally use a different audio-device configuration from the DAW.
+    add_library(IDWDAWAudioBackendConfig INTERFACE)
+    if(WIN32)
+        target_compile_definitions(IDWDAWAudioBackendConfig INTERFACE JUCE_ASIO=1)
+    endif()
     juce_add_gui_app(IDWDAW
         PRODUCT_NAME "IDW DAW V14 Foundation"
         COMPANY_NAME "In Da Wind Entertainment"
@@ -113,7 +119,7 @@ if(IDW_BUILD_DAW)
         DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp DAW/RemoteWindowsBootstrapChannel.cpp
         DAW/RemoteWindowsBridgeSession.cpp)
     target_include_directories(IDWDAW PRIVATE DAW)
-    target_link_libraries(IDWDAW PRIVATE juce::juce_gui_extra juce::juce_audio_utils
+    target_link_libraries(IDWDAW PRIVATE IDWDAWAudioBackendConfig juce::juce_gui_extra juce::juce_audio_utils
         juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
     target_compile_definitions(IDWDAW PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     if(WIN32)
@@ -125,6 +131,17 @@ if(IDW_BUILD_DAW)
     endif()
     if(BUILD_TESTING)
         find_package(Threads REQUIRED)
+        add_executable(IDWDAWAudioBackendTests DAW/tests/AudioBackendTests.cpp)
+        target_link_libraries(IDWDAWAudioBackendTests PRIVATE IDWDAWAudioBackendConfig juce::juce_audio_devices)
+        target_compile_definitions(IDWDAWAudioBackendTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+        add_test(NAME IDWDAWAudioBackends COMMAND IDWDAWAudioBackendTests)
+        set_tests_properties(IDWDAWAudioBackends PROPERTIES TIMEOUT 30)
+        add_executable(IDWDAWAudioCallbackIsolationTests DAW/tests/AudioCallbackIsolationTests.cpp)
+        target_include_directories(IDWDAWAudioCallbackIsolationTests PRIVATE DAW)
+        target_link_libraries(IDWDAWAudioCallbackIsolationTests PRIVATE juce::juce_audio_formats juce::juce_audio_devices)
+        target_compile_definitions(IDWDAWAudioCallbackIsolationTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+        add_test(NAME IDWDAWAudioCallbackIsolation COMMAND IDWDAWAudioCallbackIsolationTests)
+        set_tests_properties(IDWDAWAudioCallbackIsolation PROPERTIES TIMEOUT 30)
         add_executable(IDWDAWTLSOfferWireTests DAW/tests/RemoteTLSOfferWireTests.cpp)
         add_test(NAME IDWDAWTLSOfferWire COMMAND IDWDAWTLSOfferWireTests)
         add_executable(IDWDAWBridgeReadyWireTests DAW/tests/RemoteBridgeReadyWireTests.cpp)

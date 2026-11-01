@@ -64,3 +64,48 @@ monitoring off initially.
 - Existing recording-interruption, project-persistence, and stereo-bounce
   regression executables also pass locally. These checks do not establish
   physical AudioBox latency, monitoring quality, or full UI acceptance.
+
+## AudioBox playback follow-up
+
+The user subsequently clarified that playback had been silent throughout;
+the earlier audible-playback response is superseded. Moving meters and a
+waveform are not proof of audible output. Windows' own AudioBox test is audible,
+but the DAW device-selector test remains silent even with input disabled.
+The app volume/output assignment was checked by the user. Accessibility confirms
+Windows Audio, Speakers (AudioBox USB 96), outputs 1/2 enabled, and 44.1 kHz.
+The exact cause of the Windows Audio silence remains unproven.
+
+The installed registry contains an AudioBox ASIO Driver, but prior DAW builds
+omitted JUCE's ASIO backend. Windows DAW builds now enable `JUCE_ASIO=1`, using
+the headers bundled with the pinned JUCE release. Windows Audio remains available;
+this change neither installs a driver nor automatically changes the selected device.
+A regression verifies backend factory availability using the same CMake
+configuration as the workstation, without opening physical devices in CI.
+
+In the separate updated Windows build, select **ASIO** and **AudioBox ASIO Driver**
+in **AUDIO DEVICES**, enable its stereo outputs, and try **Test**. Hardware playback
+remains pending until the user actually hears that tone and their recorded take.
+See [JUCE 9.0.2 backend configuration](https://github.com/juce-framework/JUCE/blob/9.0.2/modules/juce_audio_devices/juce_audio_devices.h).
+
+DirectSound subsequently produced the test tone, but the user also reported a
+whining sound that continued after the test ended. Listening acceptance is
+therefore failed, not passed. Save the test project and close that old build;
+use low headphone levels when validating a corrected build.
+
+Code inspection identified an independent, reproducible output-contract defect:
+the workstation registered capture engines directly with AudioDeviceManager.
+These engines may return without writing output, or add monitor/pulse samples to
+existing output. JUCE mixes each registered callback's scratch buffer without
+clearing it between secondary callbacks. The workstation now registers an
+`IDWIsolatedAudioCallback` for each capture engine: it clears that callback's
+output before delegating, while JUCE still mixes the independent playback stream.
+Lifecycle callbacks are forwarded and registration/removal use the same wrappers.
+This removes the stale-output path; whether it accounts for all reported hardware
+noise/silence still requires the physical retest.
+
+`IDWDAWAudioCallbackIsolationTests` feeds dirty scratch through the real single,
+multitrack, and loopback capture engines. It verifies repeated idle silence,
+silence during unmonitored capture and after interruption, isolated monitoring,
+bounded calibration pulses and silence after completion, plus input-only/null
+output handling. No hardware is opened. See
+[JUCE's callback summation](https://github.com/juce-framework/JUCE/blob/9.0.2/modules/juce_audio_devices/audio_io/juce_AudioDeviceManager.cpp).

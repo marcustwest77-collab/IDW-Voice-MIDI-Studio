@@ -16,6 +16,7 @@
 #include "TimelineMath.h"
 #include "TakeRecorder.h"
 #include "MultiTakeRecorder.h" // compile-check experimental multitrack engine
+#include "IsolatedAudioCallback.h"
 #include "SessionPersistence.h"
 #include "SessionRecovery.h"
 #include "AudioRelink.h"
@@ -114,9 +115,9 @@ public:
         formats.registerBasicFormats();
         setAudioChannels(8,2); // Request up to eight available hardware inputs.
         deviceManager.addChangeListener(this);
-        deviceManager.addAudioCallback(&recorder);
-        deviceManager.addAudioCallback(&multiRecorder);
-        deviceManager.addAudioCallback(&loopbackCapture);
+        deviceManager.addAudioCallback(&recorderCallback);
+        deviceManager.addAudioCallback(&multiRecorderCallback);
+        deviceManager.addAudioCallback(&loopbackCallback);
         title.setText("IDW  |  VOICE MIDI STUDIO  |  NEO STUDIO BETA",juce::dontSendNotification);
         title.setColour(juce::Label::textColourId,juce::Colour(0xff4adfff));
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
@@ -3290,7 +3291,7 @@ public:
     }
     ~Workstation() override {
         remoteOfferController.stop();
-        remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+        remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCallback);deviceManager.removeAudioCallback(&multiRecorderCallback);deviceManager.removeAudioCallback(&recorderCallback);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
     juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton,skinToolsButton;
@@ -3381,6 +3382,9 @@ public:
     IDWTakeRecorder recorder;
     IDWMultiTakeRecorder multiRecorder;
     IDWLoopbackCapture loopbackCapture;
+    IDWIsolatedAudioCallback recorderCallback{recorder};
+    IDWIsolatedAudioCallback multiRecorderCallback{multiRecorder};
+    IDWIsolatedAudioCallback loopbackCallback{loopbackCapture};
     std::vector<std::pair<std::size_t,juce::File>> multiTakes;
     juce::AudioFormatManager formats;
     juce::AudioThumbnailCache waveformCache{32};
