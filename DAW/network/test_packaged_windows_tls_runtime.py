@@ -16,6 +16,7 @@ import time
 import unittest
 
 from loopback_transport import send_frame, receive_frame
+from native_tls_client import connect_native_tls_client
 from test_native_local_bridge import NativeFixture, issue_certificate
 
 WIRE = b"1|45|1|packaged_runtime|arm|1"
@@ -114,8 +115,13 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
                 time.sleep(.01)
             port = int(self.ready.read_text(encoding="ascii"))
         self.assertTrue(1 <= port <= 65535)
+        if credentials:
+            return self.enterContext(connect_native_tls_client(port,
+                approved_server_sha256=hashlib.sha256(ssl.PEM_cert_to_DER_cert(self.cert.read_text())).hexdigest(),
+                server_ca_pem=self.cert.read_text(), certificate_file=self.client_cert,
+                private_key_file=self.client_key, timeout=3))
         context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=str(self.cert))
-        if credentials: context.load_cert_chain(str(self.client_cert), str(self.client_key))
+        # Deliberately credential-free client for the negative mTLS test only.
         client = context.wrap_socket(socket.create_connection(("127.0.0.1", port), timeout=3),
                                      server_hostname="localhost")
         client.settimeout(3);self.addCleanup(client.close)
