@@ -17,6 +17,7 @@ import unittest
 
 from loopback_transport import send_frame, receive_frame
 from native_tls_client import connect_native_tls_client
+from native_tls_command_client import open_native_command_client, NativeQueueReceipt
 from test_native_local_bridge import NativeFixture, issue_certificate
 
 WIRE = b"1|45|1|packaged_runtime|arm|1"
@@ -101,7 +102,7 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         self.addCleanup(host.close)
         return host
 
-    def tls_client(self, host, *, credentials=True):
+    def discovery_port(self, host):
         deadline = time.monotonic() + 6
         if host.ready_profile:
             record = host._read()
@@ -115,6 +116,10 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
                 time.sleep(.01)
             port = int(self.ready.read_text(encoding="ascii"))
         self.assertTrue(1 <= port <= 65535)
+        return port
+
+    def tls_client(self, host, *, credentials=True):
+        port=self.discovery_port(host)
         if credentials:
             return self.enterContext(connect_native_tls_client(port,
                 approved_server_sha256=hashlib.sha256(ssl.PEM_cert_to_DER_cert(self.cert.read_text())).hexdigest(),
@@ -163,6 +168,25 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
             send_frame(client, WIRE);receive_frame(client)
         self.assertEqual(host.process.wait(timeout=5), 4)
         self.assertNotIn(b"OFFER", host.process.stdout.read())
+        self.assertFalse(self.ready.exists())
+
+    def test_bounded_command_client_returns_queue_receipt_then_revokes_on_exit(self):
+        host=self.host(ready_profile=True)
+        with open_native_command_client(self.discovery_port(host),epoch=45,
+                approved_server_sha256=hashlib.sha256(ssl.PEM_cert_to_DER_cert(self.cert.read_text())).hexdigest(),
+                server_ca_pem=self.cert.read_text(),certificate_file=self.client_cert,
+                private_key_file=self.client_key,command_timeout=3) as client:
+            host.decide();self.assertEqual(host._read(),b"ACTIVE\n")
+            receipt=client.submit(WIRE)
+            self.assertIsInstance(receipt,NativeQueueReceipt)
+            self.assertEqual((receipt.epoch,receipt.sequence),(45,1))
+            self.assertEqual(host.pending(),1) # Pending host review, not executed.
+            with self.assertRaises(ValueError): client.submit(WIRE)
+            self.assertEqual(host.pending(),1)
+        deadline=time.monotonic()+3
+        while host.pending()!=0:
+            if time.monotonic()>=deadline: self.fail("command-client exit did not revoke pending review")
+            time.sleep(.025)
         self.assertFalse(self.ready.exists())
 
     def test_manager_stop_clears_pending_review_and_terminates_tls_child(self):
