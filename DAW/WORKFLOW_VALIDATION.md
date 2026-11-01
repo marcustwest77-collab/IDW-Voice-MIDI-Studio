@@ -1,0 +1,66 @@
+# Record, edit, save, reopen, export acceptance
+
+## Automated engine check
+
+Build `IDWDAWRecordEditRoundtripTests` and run
+`ctest --test-dir build-v14 -C Release -R '^IDWDAWRecordEditRoundtrip$' --output-on-failure`.
+The Windows/macOS foundation workflow builds and runs this test.
+
+This exercises production engines with synthetic callback samples; it does not
+open a physical microphone or drive the Workstation UI. It records two seconds
+of stereo audio from input channels 1/2 while excluding a distinct channel 0,
+then splits, trims, moves, adjusts gain/pan/fades, undoes/redoes, saves, reopens
+into a fresh session, reads a recovery checkpoint, and exports stereo WAVs at
+48 kHz and 44.1 kHz. Assertions cover frame counts, channel routing, persisted
+metadata, timeline silence/gaps, source offsets, gain/pan, fade endpoints,
+resampling, source-file preservation, and refusal to overwrite an existing WAV.
+
+An optional single argument names a **new** evidence directory. This retains the
+synthetic source, `Workflow.idwproj`, recovery copy, and both exported WAVs for
+inspection. Without an argument the test cleans up its own temporary directory.
+The generated recording is synthetic test audio, not microphone evidence.
+
+## Physical Windows acceptance (pending)
+
+Use a separate current CI application and a new disposable project. Keep the
+installed beta and important recordings unchanged. Use headphones and leave dry
+monitoring off initially.
+
+1. Open **AUDIO DEVICES**. Select the PreSonus AudioBox input/output and the
+   microphone's physical input. Select an empty audio track, choose its input,
+   enable **ARM INPUT**, then run **PREFLIGHT**. Record the device, rate, buffer
+   size, input, and result. A configuration PASS does not prove microphone audio.
+2. Press **RECORD VOCAL**, speak a distinctive phrase for 5–10 seconds, then
+   **STOP**. Confirm the take's waveform/duration and play it back through
+   headphones. Reject silence, clipping, unexpected channels, or dropouts.
+3. Stop playback. Select the clip and perform a split/trim/move edit. Check undo
+   and redo, then play back the edit and verify the expected gap/source segment.
+4. **SAVE PROJECT** to a new `.idwproj`. Reopen it through **OPEN / RECOVER**;
+   confirm tempo, routing, mixer settings, clip edits, and audible playback.
+   Reopening must not automatically arm recording.
+5. **BOUNCE WAV** to a new filename. Open the exported WAV independently and
+   verify stereo format, duration, edited timing, signal level, and audibility.
+6. Retain the project, original take, export, and observations. Mark each step
+   PASS/FAIL with evidence; do not infer hardware success from engine tests.
+
+## Initial run: 2026-11-01
+
+- CI build tested: PR #209, commit `123e72d5114bfab2b1de35f7bfcf21058fa4ca0d`.
+- Windows artifact ZIP SHA-256:
+  `333c76e501841e9e5f9057415eeaf9416fb4ab48fe914a00a325b75593c315db`.
+- Executable SHA-256:
+  `30891dfc8f8788d0e6ae1981ce5d99ff8b919b8a03932656629b5401d1a9fbe7`.
+- Separate application launches and exposes its controls through accessibility.
+  Its initial device reports LG TV (Intel Display Audio), with Audio 1 disarmed.
+- Screen capture failed with `FrameArrived timed out` and then
+  `window capture timed out`; clicking failed with
+  `coordinate input geometry is unavailable`. Keyboard attempts produced no
+  verified state change. This is an automation limitation, not a proven DAW bug.
+- User selected PreSonus AudioBox and reported a preflight PASS after manual
+  routing/arming. Live microphone capture/playback and edit/reopen/export
+  verification remain pending; preflight alone is not audio evidence.
+- The production-engine synthetic roundtrip passes locally, retaining inspectable
+  audio/project evidence. Installed beta files were not replaced.
+- Existing recording-interruption, project-persistence, and stereo-bounce
+  regression executables also pass locally. These checks do not establish
+  physical AudioBox latency, monitoring quality, or full UI acceptance.

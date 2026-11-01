@@ -19,6 +19,9 @@ The video meeting runs in the default browser through the third-party Jitsi Meet
 
 Configure with `-DIDW_BUILD_DAW=ON` and compile `IDWDAW`. The V14 DAW workflow runs Windows/macOS build and regression tests on branch `v14-daw-foundation`.
 
+See [record/edit/save/reopen/export validation](WORKFLOW_VALIDATION.md) for the
+automated engine roundtrip and the separate physical microphone acceptance steps.
+
 ## Remaining DAW priorities
 
 - Test hardware microphone/monitor timing and track-recording latency.
