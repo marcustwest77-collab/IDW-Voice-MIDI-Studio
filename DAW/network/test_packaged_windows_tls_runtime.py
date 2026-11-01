@@ -18,6 +18,7 @@ import unittest
 from loopback_transport import send_frame, receive_frame
 from native_tls_client import connect_native_tls_client
 from native_tls_command_client import open_native_command_client, NativeQueueReceipt
+from native_command_review_wire import decode_command_proposal
 from test_native_local_bridge import NativeFixture, issue_certificate
 
 WIRE = b"1|45|1|packaged_runtime|arm|1"
@@ -63,7 +64,7 @@ class NativeManagedHostSmokeTests(unittest.TestCase):
 
 @unittest.skipUnless(os.name == "nt" and os.environ.get("IDW_PACKAGED_TLS_TESTS") == "1",
                      "explicit Windows packaging CI required")
-class PackagedManagedTLSIntegrationTests(unittest.TestCase):
+class PackagedTLSFixtureSupport:
     @classmethod
     def setUpClass(cls):
         cls.folder = tempfile.TemporaryDirectory(prefix="idw-packaged-test-")
@@ -73,8 +74,10 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         cls.client_cert, cls.client_key = issue_certificate(root, "guest")
         cls.pin = hashlib.sha256(ssl.PEM_cert_to_DER_cert(cls.client_cert.read_text())).hexdigest()
         cls.ready = root / "ready.txt"
+        cls.review_endpoint=root/"review-endpoint.txt"
         policy = dict(cert=str(cls.cert), key=str(cls.key), client_ca=str(cls.client_cert),
-                      client_pin=cls.pin, ready=str(cls.ready))
+                      client_pin=cls.pin, ready=str(cls.ready),native_review=getattr(cls,"native_review",False),
+                      review_endpoint=str(cls.review_endpoint))
         entry = root / "fixture_entry.py"
         entry.write_text("from packaged_tls_child_fixture import run_fixture\n"
                          "if __name__ == '__main__':\n    run_fixture(" + repr(policy) + ")\n", encoding="utf-8")
@@ -98,6 +101,7 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
 
     def host(self, *, digest=None, ready_profile=False):
         self.ready.unlink(missing_ok=True)
+        self.review_endpoint.unlink(missing_ok=True)
         host = ManagedHostFixture(self.executable, digest or self.digest, self.pin, ready_profile=ready_profile)
         self.addCleanup(host.close)
         return host
@@ -143,6 +147,7 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
         self.assertEqual(receive_frame(client), WIRE)
         self.assertEqual(host.pending(), 1)
 
+class PackagedManagedTLSIntegrationTests(PackagedTLSFixtureSupport,unittest.TestCase):
     def test_packaged_child_actual_manager_tls_native_review_and_eof(self):
         host = self.host();client = self.connect(host);self.command(host, client)
         client.shutdown(socket.SHUT_WR)
@@ -211,6 +216,59 @@ class PackagedManagedTLSIntegrationTests(unittest.TestCase):
                 self.assertEqual(host.process.wait(timeout=5), 4)
                 self.assertNotIn(b"ACTIVE", host.process.stdout.read())
                 with self.assertRaises(OSError): receive_frame(client)
+
+
+class PackagedNativeReviewTests(PackagedTLSFixtureSupport,unittest.TestCase):
+    native_review=True
+
+    def control(self,host,command):
+        host.process.stdin.write(command+b"\n");host.process.stdin.flush()
+        return host._read(line_limit=1024)
+
+    def propose(self):
+        host=self.host(ready_profile=True);client=self.connect(host)
+        endpoint=self.control(host,b"REVIEW_START")
+        self.assertTrue(endpoint.startswith(b"REVIEW_PIPE "))
+        # TEST-only discovery metadata. Both ends still verify held OS processes.
+        temporary=self.review_endpoint.with_suffix(".tmp")
+        temporary.write_bytes(endpoint[len(b"REVIEW_PIPE "):].rstrip(b"\n"))
+        temporary.replace(self.review_endpoint)
+        send_frame(client,WIRE)
+        prompt=self.control(host,b"REVIEW_WAIT")
+        self.assertTrue(prompt.startswith(b"COMMAND_REVIEW "),prompt)
+        encoded=prompt[len(b"COMMAND_REVIEW "):].strip()
+        decoded=decode_command_proposal(bytes.fromhex(encoded.decode("ascii")))
+        self.assertEqual(decoded.payload,WIRE)
+        self.assertEqual(host.pending(),0)
+        return host,client,encoded
+
+    def test_exact_native_review_precedes_native_queue_receipt(self):
+        host,client,prompt=self.propose()
+        altered=prompt[:-2]+(b"30" if prompt[-2:]!=b"30" else b"31")
+        self.assertEqual(self.control(host,b"REVIEW_ALLOW|"+altered),b"REVIEW_REJECTED\n")
+        self.assertEqual(host.pending(),0)
+        self.assertEqual(self.control(host,b"REVIEW_ALLOW|"+prompt),b"REVIEW_RESOLVED\n")
+        self.assertEqual(receive_frame(client),WIRE)
+        self.assertEqual(host.pending(),1)
+
+    def test_denial_never_enters_native_queue(self):
+        host,client,prompt=self.propose()
+        self.assertEqual(self.control(host,b"REVIEW_DENY|"+prompt),b"REVIEW_RESOLVED\n")
+        with self.assertRaises(OSError): receive_frame(client)
+        self.assertEqual(host.pending(),0)
+
+    def test_manager_stop_cancels_pending_command_review(self):
+        host,client,prompt=self.propose()
+        self.assertEqual(host.pending("STOP"),0)
+        self.assertEqual(self.control(host,b"REVIEW_ALLOW|"+prompt),b"REVIEW_REJECTED\n")
+        with self.assertRaises(OSError): receive_frame(client)
+
+    def test_review_stop_cancels_without_queueing(self):
+        host,client,prompt=self.propose()
+        self.assertEqual(self.control(host,b"REVIEW_STOP"),b"REVIEW_STOPPED\n")
+        self.assertEqual(self.control(host,b"REVIEW_ALLOW|"+prompt),b"REVIEW_REJECTED\n")
+        with self.assertRaises(OSError): receive_frame(client)
+        self.assertEqual(host.pending(),0)
 
 
 if __name__ == "__main__": unittest.main()

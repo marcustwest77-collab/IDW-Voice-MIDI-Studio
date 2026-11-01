@@ -3,7 +3,8 @@
 #include "RemoteWindowsCommandReviewChannel.h"
 
 namespace idw::daw::remote {
-// One trusted controller/UI thread owns all methods. Worker never touches JUCE.
+// Trusted controller serializes all methods (UI thread or an external mutex).
+// Worker never touches JUCE. Concurrent controller calls are not supported.
 // No process launch, numeric-PID trust, TLS verification or default activation.
 class WindowsCommandReviewOperation {
 public:

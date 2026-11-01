@@ -140,11 +140,11 @@ class NativeFixture:
             self.close()
             raise
 
-    def _read(self, count=None):
+    def _read(self, count=None, *, line_limit=128):
         result = queue.Queue()
         def read():
             if count is None:
-                data = self.process.stdout.readline(128)
+                data = self.process.stdout.readline(line_limit)
             else:
                 data = b""
                 while len(data) < count:

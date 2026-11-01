@@ -12,6 +12,7 @@
 #include <bcrypt.h>
 #endif
 #include "RemoteWindowsBridgeSession.h"
+#include "RemoteWindowsCommandReviewOperation.h"
 #include "RemoteWindowsBootstrapChannel.h"
 #include "RemoteLocalBootstrapWire.h"
 #include <atomic>
@@ -126,6 +127,10 @@ struct WindowsBridgeSession::Impl {
         }
         WindowsBootstrapChannel channel;
         std::atomic<bool> canceled{false};
+        std::atomic<bool> reviewReady{false};
+        LocalTLSOffer reviewBinding; // Immutable once reviewReady is published.
+        mutable std::mutex reviewMutex;
+        WindowsCommandReviewOperation review;
     };
     explicit Impl(TrustedTransportEventQueue& queue) : owner(queue) {}
     mutable std::mutex mutex;
@@ -136,6 +141,14 @@ struct WindowsBridgeSession::Impl {
     std::thread monitor;
     LocalTransportBinding binding;
     std::uint64_t highestOfferEpoch=0;
+    static void stopReview(const std::shared_ptr<Operation>& op) {
+        if(!op) return;
+        std::lock_guard<std::mutex> lock(op->reviewMutex);op->review.stop();
+    }
+    bool liveReviewContext(const std::shared_ptr<Operation>& op) const {
+        return op && std::atomic_load(&operation)==op && !stopping.load() && !op->canceled.load() &&
+            op->reviewReady.load(std::memory_order_acquire) && owner.running();
+    }
 #if defined(_WIN32)
     Handle process, job;
     std::uint32_t pid = 0;
@@ -180,6 +193,7 @@ struct WindowsBridgeSession::Impl {
                 const auto status=WaitForSingleObject(process.value,10);
                 if(status!=WAIT_TIMEOUT || !owner.running()) {
                     owner.onTransportLost(current);op->canceled.store(true);
+                    op->reviewReady.store(false);stopReview(op);
                     TerminateJobObject(job.value,0);break;
                 }
             }
@@ -189,8 +203,9 @@ struct WindowsBridgeSession::Impl {
     void cleanup() {
         stopping.store(true);
         const auto op = std::atomic_load(&operation);
-        if (op) { op->canceled.store(true); op->channel.cancel(); }
+        if (op) { op->canceled.store(true);op->reviewReady.store(false);op->channel.cancel(); }
         owner.stop();
+        stopReview(op);
         if (monitor.joinable()) monitor.join();
 #if defined(_WIN32)
         job.reset(); // Kill-on-close also stops descendants of the owned bridge.
@@ -321,6 +336,7 @@ bool WindowsBridgeSession::startWithOfferImpl(const std::wstring& executable,con
             p.cleanup();return false;
         }
         p.watch(p.binding,op);
+        op->reviewBinding=offer;op->reviewReady.store(true,std::memory_order_release);
         return true;
     } catch(...) {p.cleanup();return false;}
 #else
@@ -342,7 +358,11 @@ void WindowsBridgeSession::stop() {
     p.stopSequence.fetch_add(1);
     p.stopping.store(true);
     const auto op = std::atomic_load(&p.operation);
-    if (op) { op->canceled.store(true); op->channel.cancel(); }
+    if (op) {
+        op->canceled.store(true);op->reviewReady.store(false);op->channel.cancel();
+        if(const auto current=std::atomic_load(&op->binding)) p.owner.onTransportLost(*current);
+        Impl::stopReview(op);
+    }
     std::lock_guard<std::mutex> lock(p.mutex);
     p.cleanup();
 }
@@ -361,12 +381,52 @@ bool WindowsBridgeSession::onTransportLost(const LocalTransportBinding& transpor
     // Revoke without waiting for the process/pipe startup mutex. The snapshot's
     // channel is generation-specific, so a late callback cannot cancel a new one.
     op->canceled.store(true);
+    op->reviewReady.store(false);
     op->channel.cancel();
     p.owner.onTransportLost(transport);
+    Impl::stopReview(op);
     std::lock_guard<std::mutex> lock(p.mutex);
     if (std::atomic_load(&p.operation) == op) p.cleanup();
     return true;
 }
+bool WindowsBridgeSession::beginCommandReview(const std::string& peerId,unsigned timeoutMs,OfferDeadline deadline) {
+    auto& p=*impl_;const auto op=std::atomic_load(&p.operation);
+    if(!p.liveReviewContext(op)) return false; // Never wait behind incomplete bootstrap startup.
+    std::lock_guard<std::mutex> lock(p.mutex);
+#if defined(_WIN32)
+    if(!p.liveReviewContext(op) || !alive(p.process.value)) return false;
+    std::lock_guard<std::mutex> reviewLock(op->reviewMutex);
+    if(!p.liveReviewContext(op)) return false;
+    return op->review.start(p.process.value,op->reviewBinding,peerId,timeoutMs,deadline);
+#else
+    (void)peerId;(void)timeoutMs;(void)deadline;return false;
+#endif
+}
+std::wstring WindowsBridgeSession::commandReviewEndpoint() const {
+    const auto op=std::atomic_load(&impl_->operation);
+    if(!impl_->liveReviewContext(op)) return {};
+    std::lock_guard<std::mutex> lock(op->reviewMutex);
+    return impl_->liveReviewContext(op)?op->review.endpoint():std::wstring{};
+}
+std::optional<LocalCommandPrompt> WindowsBridgeSession::pendingCommandReview() const {
+    const auto op=std::atomic_load(&impl_->operation);
+    if(!impl_->liveReviewContext(op)) return std::nullopt;
+    std::lock_guard<std::mutex> lock(op->reviewMutex);
+    return impl_->liveReviewContext(op)?op->review.pending():std::nullopt;
+}
+bool WindowsBridgeSession::resolveCommandReview(const LocalCommandPrompt& prompt,bool allow) {
+    const auto op=std::atomic_load(&impl_->operation);
+    if(!impl_->liveReviewContext(op)) return false;
+    std::lock_guard<std::mutex> lock(op->reviewMutex);
+    return impl_->liveReviewContext(op) && op->review.resolve(prompt,allow);
+}
+std::optional<bool> WindowsBridgeSession::takeCommandReviewResult() {
+    const auto op=std::atomic_load(&impl_->operation);
+    if(!impl_->liveReviewContext(op)) return std::nullopt;
+    std::lock_guard<std::mutex> lock(op->reviewMutex);
+    return impl_->liveReviewContext(op)?op->review.takeResult():std::nullopt;
+}
+void WindowsBridgeSession::stopCommandReview(){Impl::stopReview(std::atomic_load(&impl_->operation));}
 bool WindowsBridgeSession::running() const {
     std::lock_guard<std::mutex> lock(impl_->mutex);
 #if defined(_WIN32)

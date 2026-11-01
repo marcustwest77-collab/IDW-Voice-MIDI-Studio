@@ -125,6 +125,12 @@ int main(int argc, char** argv) {
 #endif
     TrustedTransportEventQueue queue;
     WindowsBridgeSession session(queue);
+    assert(!session.beginCommandReview("guest"));
+    assert(session.commandReviewEndpoint().empty());
+    assert(!session.pendingCommandReview());
+    assert(!session.takeCommandReviewResult());
+    assert(!session.resolveCommandReview(LocalCommandPrompt{}, true));
+    session.stopCommandReview();
     LocalSocketReceiver::Options options;
     options.sessionTimeoutMs = 15000;
     LocalTransportBinding transport{90, std::string(64, 'a'), std::string(64, 'b'), true};
@@ -150,6 +156,9 @@ int main(int argc, char** argv) {
     assert(!session.start(executable, approved, options, transport, denied));
     assert(queue.drain().empty() && !session.running() && session.processId() == 0);
     assert(session.start(executable, approved, options, transport, consent));
+    // Legacy bootstrap has no verified full TLS offer for command review.
+    assert(!session.beginCommandReview("guest"));
+    assert(session.commandReviewEndpoint().empty());
     Handle child{OpenProcess(SYNCHRONIZE, FALSE, session.processId())};
     assert(child.value && session.running());
     assert(!session.start(executable, approved, options, transport, consent));

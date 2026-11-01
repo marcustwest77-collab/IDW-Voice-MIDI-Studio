@@ -6,6 +6,7 @@
 #include <chrono>
 #include "RemoteTLSOfferWire.h"
 #include "RemoteBridgeReadyWire.h"
+#include "RemoteLocalCommandConsent.h"
 
 namespace idw::daw::remote {
 // Diagnostic hash calculation only. Its result is NOT automatic approval of an
@@ -51,6 +52,16 @@ public:
                              std::uint64_t,const std::string&,const ReadyCallback&,const TimedOfferConsent&,
                              unsigned timeoutMs=30000,const std::atomic<bool>* launchCanceled=nullptr);
     bool onTransportLost(const LocalTransportBinding&);
+    // Explicit trusted controller entry, only after verified offer startup has
+    // completed. Uses the manager's held child and original offer; no PID/handle
+    // or replacement TLS binding is accepted from the caller. Peer ID is local policy.
+    bool beginCommandReview(const std::string& expectedPeerId,unsigned timeoutMs=2000,
+                            OfferDeadline ownerDeadline=OfferDeadline::max());
+    std::wstring commandReviewEndpoint() const;
+    std::optional<LocalCommandPrompt> pendingCommandReview() const;
+    bool resolveCommandReview(const LocalCommandPrompt&,bool allow);
+    std::optional<bool> takeCommandReviewResult(); // Exchange diagnostic only.
+    void stopCommandReview(); // Stop only this session's review attempt; no peer termination.
     void stop();
     bool running() const;
     std::uint32_t processId() const; // Diagnostic only; never used as authentication.
