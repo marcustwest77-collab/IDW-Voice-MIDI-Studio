@@ -2,12 +2,13 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "SessionModel.h"
 #include "ClipEnvelope.h"
+#include "MidiSineSynth.h"
 #include <algorithm>
 #include <cmath>
 #include <atomic>
 namespace idw::daw {
 // Offline stereo bounce. Reads source files into small blocks and sums against
-// the shared beat clock. Intended for PCM WAV/AIFF project clips, not MIDI yet.
+// the shared beat clock, including the built-in MIDI instruments.
 // Call only from a non-audio thread. Returns false and a readable error.
 inline bool renderSessionWav(const Session& session,const juce::File& destination,
                             juce::String& error,int sampleRate=44100,float masterGain=1.0f,float ceilingDb=-1.0f,float lowDb=0.0f,float highDb=0.0f,
@@ -20,6 +21,22 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
         if(!std::isfinite(t.gain) || !std::isfinite(t.pan)){
             error="Invalid track mix.";return false;
         }
+        if(t.type==TrackType::midi){
+            if(!std::isfinite(t.synthAttackMs) || !std::isfinite(t.synthReleaseMs) ||
+               t.synthAttackMs<0 || t.synthAttackMs>2000 ||
+               t.synthReleaseMs<0 || t.synthReleaseMs>2000){
+                error="Invalid MIDI instrument envelope.";return false;
+            }
+            for(const auto& n:t.notes){
+                if(n.pitch<0 || n.pitch>127 || n.velocity<1 || n.velocity>127 ||
+                   !std::isfinite(n.startBeat) || !std::isfinite(n.lengthBeats) ||
+                   n.startBeat<0 || n.lengthBeats<=0 ||
+                   !std::isfinite(n.startBeat+n.lengthBeats)){
+                    error="Invalid MIDI note.";return false;
+                }
+                lastBeat=std::max(lastBeat,n.startBeat+n.lengthBeats);
+            }
+        }
         for(const auto& c:t.clips){
             if(!ClipEnvelope(c,session.bpm,sampleRate).valid ||
                !std::isfinite(c.sourceOffsetSeconds) || c.sourceOffsetSeconds<0){
@@ -28,7 +45,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             lastBeat=std::max(lastBeat,c.startBeat+c.lengthBeats);
         }
     }
-    if(lastBeat<=0){error="Session has no clips.";return false;}
+    if(lastBeat<=0){error="Session has no audio clips or MIDI notes.";return false;}
     const double requestedFrames=std::ceil(lastBeat*60.0/session.bpm*sampleRate);
     if(!std::isfinite(requestedFrames) || requestedFrames<=0 || requestedFrames>(double)sampleRate*60*60*4){
         error="Export duration must be under four hours.";return false;
@@ -172,6 +189,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 mix.addSample(1,offset+i,r*clip.right*envelopeGain);
             }
         }
+        renderMidiSine(session,mix.getWritePointer(0),mix.getWritePointer(1),count,pos,sampleRate);
         for(int ch=0;ch<2;++ch){
             auto* p=mix.getWritePointer(ch);
             float state=filterState[ch];
