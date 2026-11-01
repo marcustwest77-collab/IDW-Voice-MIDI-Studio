@@ -25,6 +25,13 @@ struct Clip {
     }
 };
 struct MidiNote { int pitch=60; double startBeat=0.0,lengthBeats=1.0; int velocity=100; };
+struct MasterMix {double gain=1.0,ceilingDb=-1.0,lowDb=0.0,highDb=0.0;};
+inline bool validMasterMix(const MasterMix& m){
+    return std::isfinite(m.gain) && m.gain>=0 && m.gain<=1.5 &&
+        std::isfinite(m.ceilingDb) && m.ceilingDb>=-12 && m.ceilingDb<=-0.1 &&
+        std::isfinite(m.lowDb) && m.lowDb>=-12 && m.lowDb<=12 &&
+        std::isfinite(m.highDb) && m.highDb>=-12 && m.highDb<=12;
+}
 struct Track {
     std::string name;
     TrackType type;
@@ -42,6 +49,7 @@ class Session {
 public:
     double bpm=120.0;
     int numerator=4, denominator=4;
+    MasterMix masterMix;
     std::vector<Track> tracks;
     bool addTrack(TrackType type) {
         if (tracks.size() >= 128) return false;

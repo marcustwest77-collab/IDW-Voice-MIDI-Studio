@@ -208,4 +208,15 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
     }
     writer.reset();return true;
 }
+// Project export uses the same recalled master settings as live playback.
+// The lower-level renderer keeps explicit processing arguments for callers
+// that deliberately render a reference mix with different master settings.
+inline bool renderProjectWav(const Session& session,const juce::File& destination,
+                             juce::String& error,int sampleRate=44100,
+                             std::atomic<float>* progress=nullptr,std::atomic<bool>* cancel=nullptr){
+    if(!validMasterMix(session.masterMix)){error="Invalid project master mix.";return false;}
+    const auto& m=session.masterMix;
+    return renderSessionWav(session,destination,error,sampleRate,(float)m.gain,
+                           (float)m.ceilingDb,(float)m.lowDb,(float)m.highDb,progress,cancel);
+}
 }

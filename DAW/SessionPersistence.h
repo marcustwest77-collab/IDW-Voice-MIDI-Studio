@@ -12,6 +12,12 @@ inline juce::var sessionToJson(const Session& s) {
     root->setProperty("bpm",s.bpm);
     root->setProperty("numerator",s.numerator);
     root->setProperty("denominator",s.denominator);
+    auto master=std::make_unique<juce::DynamicObject>();
+    master->setProperty("gain",s.masterMix.gain);
+    master->setProperty("ceilingDb",s.masterMix.ceilingDb);
+    master->setProperty("lowDb",s.masterMix.lowDb);
+    master->setProperty("highDb",s.masterMix.highDb);
+    root->setProperty("masterMix",juce::var(master.release()));
     juce::Array<juce::var> tracks;
     for(const auto& t:s.tracks){
         auto track=std::make_unique<juce::DynamicObject>();
@@ -76,6 +82,20 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
     const auto denominator=persistence_detail::boundedInteger(root->getProperty("denominator"),1,32);
     if(!numerator || !denominator)return false;
     next.numerator=*numerator;next.denominator=*denominator;
+    // Legacy v1 projects use the original master defaults. A present block must
+    // be complete and numeric; reject coercions/range loss before committing.
+    if(root->hasProperty("masterMix")){
+        auto* master=root->getProperty("masterMix").getDynamicObject();
+        if(!master)return false;
+        const auto number=[&](const char* name,double& result){
+            const auto v=master->getProperty(name);
+            if(!v.isInt() && !v.isInt64() && !v.isDouble())return false;
+            result=(double)v;return std::isfinite(result);
+        };
+        auto& m=next.masterMix;
+        if(!number("gain",m.gain) || !number("ceilingDb",m.ceilingDb) ||
+           !number("lowDb",m.lowDb) || !number("highDb",m.highDb) || !validMasterMix(m))return false;
+    }
     const auto tracks=root->getProperty("tracks");
     if(!tracks.isArray())return false;
     for(const auto& t:*tracks.getArray()){
