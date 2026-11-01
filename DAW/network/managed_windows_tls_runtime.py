@@ -20,7 +20,7 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
                                    host_consent, host_approval_ledger, on_listening,
                                    cancel=None, accept_timeout=5.0, handshake_timeout=2.0,
                                    session_timeout=30.0, command_timeout=2.0, max_commands=16,
-                                   native_provision_timeout=30.0):
+                                   native_provision_timeout=30.0, host_command_review=None):
     """Hold the verified launch parent before binding, and through all teardown.
 
     on_listening receives a non-secret localhost port and must be bounded. It
@@ -33,9 +33,13 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
     Native offer/consent provisioning may wait up to 30 seconds after verified
     TLS, but the existing absolute TLS session deadline can only shorten it.
     Handshake, accept, command and revocation deadlines are unchanged.
+    Optional host_command_review is a bounded local callback, not a peer decision
+    endpoint. NativeCommandReview.request supplies a polling local mailbox; no
+    production approval IPC or automatic approvals are installed here.
     """
     if (not isinstance(launch, launch_api.ManagedBridgeLaunch) or not callable(on_listening) or
             not callable(host_consent) or not isinstance(host_approval_ledger, NativeCommandApprovalLedger) or
+            (host_command_review is not None and not callable(host_command_review)) or
             not isinstance(expected_peer_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", expected_peer_id) or
             not isinstance(approved_client_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", approved_client_sha256) or
             type(max_commands) is not int or not 1 <= max_commands <= 32 or
@@ -78,11 +82,12 @@ def serve_managed_windows_tls_once(launch, context, *, expected_peer_id, approve
                     options = {"ready_channel": ready_channel} if ready_channel is not None else {}
                     return receive_windows_native_lease(launch.pipe_name, parent, identity,
                         send_offer=True, timeout=native_provision_timeout, cancel=cancel, deadline=deadline, **options)
+                review_options = {"host_command_review":host_command_review} if host_command_review is not None else {}
                 return receiver.serve_once(expected_peer_id=expected_peer_id,
                     approved_client_sha256=approved_client_sha256, epoch=launch.epoch,
                     host_consent=host_consent, provide_native_lease=provide,
                     host_approval_ledger=host_approval_ledger, session_timeout=session_timeout,
-                    command_timeout=command_timeout, max_commands=max_commands)
+                    command_timeout=command_timeout, max_commands=max_commands, **review_options)
             finally:
                 try:
                     receiver.close()

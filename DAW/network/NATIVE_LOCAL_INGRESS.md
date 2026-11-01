@@ -676,6 +676,41 @@ substituted receipts, no retry after uncertain delivery, replay/capacity checks,
 deadline preservation and cleanup. The TEST child still preapproves its fixed
 test command; production host approval transport remains unfinished.
 
+### Optional local command-review mailbox
+
+`NativeCommandReview(ledger)` provides an in-process mailbox for a future trusted
+local controller. Pass its `request` method as `host_command_review` to the managed
+runtime or TLS session owner. The transport publishes a validated, immutable
+proposal containing the actual held TLS identity and exact command bytes, then
+waits off the UI/audio thread within the original command deadline. Publication
+does not approve or queue a command. At most one proposal waits at a time.
+
+The local owner polls `pending()` and explicitly calls `resolve(snapshot, bool)`.
+Both exact content and the local request generation/mailbox lifetime must match;
+delayed decisions cannot approve a replacement request or replacement mailbox.
+An approved decision writes only that exact connection-bound single-use ledger
+entry. The session still rechecks cancellation, its absolute deadline, TLS pin
+and host consent, then independently consumes the ledger entry before native
+delivery. Returning True from a different callback without a ledger approval
+cannot queue a command. Native pending review still needs its own host decision.
+
+Denial, expiry, cancellation, mailbox close or ledger-session revocation retire a
+pending proposal without approving it. `close()` closes the mailbox, not the TLS
+session: the owner must also cancel and join its session worker for revocation.
+Session teardown remains responsible for clearing ledger entries and revoking
+native authority. The optional callback defaults to absent, preserving existing
+explicit-ledger integrations; it has no peer-facing resolver or automatic grant.
+
+Real mTLS/native fixture tests verify zero native pending review before the local
+decision, rejection of a substituted snapshot, exact queue delivery after an
+explicit decision and EOF cleanup. Denial, timeout, owner cancellation, consent
+revocation during review and a callback that returns True without an approval
+all fail before queue delivery. Unit tests cover stale/replacement snapshots,
+concurrent proposals, expiry and single-use approval. This is trusted in-process
+review plumbing only; production cross-process approval IPC and Workstation UI
+wiring remain unfinished. The packaged compatibility fixture retains its fixed
+automatic TEST approval, and no new DAW execution or two-computer claim is made.
+
 The managed JUCE consent path now has an explicit **maximum 30-second shared
 budget** through `WindowsBridgeSession::startWithTimedOffer`. The private channel
 returns its actual absolute deadline; that same value reaches the controller and
