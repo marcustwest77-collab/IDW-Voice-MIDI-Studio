@@ -226,3 +226,21 @@ The project persistence, record/edit roundtrip, extended recording and multitrac
 regressions also pass locally. All fixtures are disposable; user projects and
 source recordings are untouched. This is not a forced power-loss or full UI-crash
 recovery qualification.
+
+## Strict bounded project integers
+
+Project/recovery parsing now requires integer-typed values and checks their full
+64-bit bounds before narrowing. This covers the session version, meter numerator
+and denominator, saved audio input assignment, synth preset, MIDI pitch/velocity,
+and fade-curve selectors. Booleans, strings, decimal values, out-of-range values
+and large wraparound aliases are rejected. Valid 32-bit/64-bit integer bounds and
+legacy omitted optional fields remain supported. A failed parse leaves the live
+session and recovery origin unchanged.
+
+`IDWDAWProjectIntegerTests` reproduces the previous coercion defect before the
+fix, then tests 104 malformed-field cases through in-memory, on-disk project and
+recovery parsing. It also checks valid bounds in memory and serialized JSON and
+the legacy optional-field defaults. The test uses disposable metadata fixtures;
+it does not open microphones or change user data. The user-provided Session7 and
+Session9 projects were additionally loaded read-only through the corrected parser
+to verify compatibility.

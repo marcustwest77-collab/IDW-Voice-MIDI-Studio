@@ -3,6 +3,7 @@
 #include "SessionModel.h"
 #include <algorithm>
 #include <cstring>
+#include <optional>
 namespace idw::daw {
 inline juce::var sessionToJson(const Session& s) {
     auto root=std::make_unique<juce::DynamicObject>();
@@ -52,10 +53,18 @@ inline juce::var sessionToJson(const Session& s) {
     root->setProperty("tracks",juce::var(tracks));
     return juce::var(root.release());
 }
+namespace persistence_detail {
+inline std::optional<int> boundedInteger(const juce::var& value,int minimum,int maximum){
+    if(!value.isInt() && !value.isInt64())return std::nullopt;
+    const auto wide=static_cast<juce::int64>(value);
+    if(wide<minimum || wide>maximum)return std::nullopt;
+    return static_cast<int>(wide); // Bounds are checked before narrowing.
+}
+}
 inline bool sessionFromJson(const juce::var& data,Session& output){
     auto* root=data.getDynamicObject();
     if(!root || root->getProperty("format").toString()!="idw-daw-session" ||
-       (int)root->getProperty("version")!=1)return false;
+       !persistence_detail::boundedInteger(root->getProperty("version"),1,1))return false;
     Session next;
     // Loading must preserve saved timing exactly, not silently clamp/default it.
     const auto savedTempo=root->getProperty("bpm");
@@ -63,9 +72,10 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
     const double bpm=(double)savedTempo;
     if(!std::isfinite(bpm) || bpm<20.0 || bpm>300.0)return false;
     next.bpm=bpm;
-    next.numerator=(int)root->getProperty("numerator");
-    next.denominator=(int)root->getProperty("denominator");
-    if(next.numerator<1 || next.numerator>32 || next.denominator<1 || next.denominator>32)return false;
+    const auto numerator=persistence_detail::boundedInteger(root->getProperty("numerator"),1,32);
+    const auto denominator=persistence_detail::boundedInteger(root->getProperty("denominator"),1,32);
+    if(!numerator || !denominator)return false;
+    next.numerator=*numerator;next.denominator=*denominator;
     const auto tracks=root->getProperty("tracks");
     if(!tracks.isArray())return false;
     for(const auto& t:*tracks.getArray()){
@@ -80,13 +90,16 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
         target.solo=(bool)obj->getProperty("solo");
         const auto input=obj->getProperty("inputChannel");
         if(!input.isVoid()){
-            if(type!="audio" || (!input.isInt() && !input.isInt64()) ||
-               (int)input<0 || (int)input>7)return false;
-            target.inputChannel=(int)input;
+            const auto channel=persistence_detail::boundedInteger(input,0,7);
+            if(type!="audio" || !channel)return false;
+            target.inputChannel=*channel;
         }
         if(!next.setTrackMix(next.tracks.size()-1,(float)(double)obj->getProperty("gain"),(float)(double)obj->getProperty("pan")))return false;
         const auto preset=obj->getProperty("synthPreset");
-        if(!preset.isVoid() && (!preset.isInt() || !next.setTrackSynthPreset(next.tracks.size()-1,(int)preset)))return false;
+        if(!preset.isVoid()){
+            const auto index=persistence_detail::boundedInteger(preset,0,4);
+            if(!index || !next.setTrackSynthPreset(next.tracks.size()-1,*index))return false;
+        }
         const auto attack=obj->getProperty("synthAttackMs");
         const auto release=obj->getProperty("synthReleaseMs");
         if(!attack.isVoid() || !release.isVoid()){
@@ -116,9 +129,9 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
             const auto readCurve=[&](const char* name,int& value){
                 const auto v=co->getProperty(name);
                 if(v.isVoid())return true;
-                if(!v.isInt() && !v.isInt64())return false;
-                if((double)v<0 || (double)v>1)return false;
-                value=(int)v;return true;
+                const auto curve=persistence_detail::boundedInteger(v,0,1);
+                if(!curve)return false;
+                value=*curve;return true;
             };
             if(!readDuration("fadeInBeats",fadeIn) || !readDuration("fadeOutBeats",fadeOut) ||
                !readCurve("fadeInCurve",inCurve) || !readCurve("fadeOutCurve",outCurve))return false;
@@ -137,13 +150,14 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
                 if(!no)return false;
                 const auto pitch=no->getProperty("pitch");
                 const auto velocity=no->getProperty("velocity");
-                if((!pitch.isInt()&&!pitch.isInt64()) ||
-                   (!velocity.isInt()&&!velocity.isInt64()))return false;
+                const auto savedPitch=persistence_detail::boundedInteger(pitch,0,127);
+                const auto savedVelocity=persistence_detail::boundedInteger(velocity,1,127);
+                if(!savedPitch || !savedVelocity)return false;
                 if(!next.addMidiNote(next.tracks.size()-1,{
-                    (int)pitch,
+                    *savedPitch,
                     (double)no->getProperty("startBeat"),
                     (double)no->getProperty("lengthBeats"),
-                    (int)velocity}))return false;
+                    *savedVelocity}))return false;
             }
         }
     }
