@@ -12,6 +12,7 @@
 #include <sddl.h>
 #endif
 #include "RemoteWindowsBootstrapChannel.h"
+#include "RemoteWindowsCommandReviewChannel.h"
 #include "RemoteLocalBootstrapWire.h"
 #include <atomic>
 #include <chrono>
@@ -262,6 +263,81 @@ bool WindowsBootstrapChannel::deliverTo(void* expectedClientProcess,
     return false;
 #endif
 }
+struct WindowsCommandReviewChannel::Impl {
+    mutable std::mutex mutex;
+    std::atomic<bool> canceled{false};
+    std::wstring name;
+#if defined(_WIN32)
+    Handle pipe;
+#endif
+};
+WindowsCommandReviewChannel::WindowsCommandReviewChannel():impl_(std::make_unique<Impl>()){}
+WindowsCommandReviewChannel::~WindowsCommandReviewChannel(){close();}
+bool WindowsCommandReviewChannel::create() {
+    auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
+#if defined(_WIN32)
+    if(p.pipe.value!=INVALID_HANDLE_VALUE) return false;
+    std::string nonce;LocalMemory descriptor;
+    if(!generateLocalSessionSecret(nonce) || !privateDescriptor(descriptor)) return false;
+    const auto path=std::wstring(L"\\\\.\\pipe\\IDW-LocalCommandReview-")+std::wstring(nonce.begin(),nonce.end());
+    SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES),descriptor.value,FALSE};
+    p.pipe.reset(CreateNamedPipeW(path.c_str(),PIPE_ACCESS_DUPLEX|FILE_FLAG_OVERLAPPED|FILE_FLAG_FIRST_PIPE_INSTANCE,
+        PIPE_TYPE_BYTE|PIPE_READMODE_BYTE|PIPE_WAIT|PIPE_REJECT_REMOTE_CLIENTS,1,1024,1024,0,&security));
+    if(p.pipe.value==INVALID_HANDLE_VALUE) return false;
+    p.name=path;p.canceled.store(false);return true;
+#else
+    return false;
+#endif
+}
+std::wstring WindowsCommandReviewChannel::name() const {
+    std::lock_guard<std::mutex> lock(impl_->mutex);return impl_->name;
+}
+void WindowsCommandReviewChannel::cancel(){impl_->canceled.store(true);}
+void WindowsCommandReviewChannel::close(){
+    cancel();std::lock_guard<std::mutex> lock(impl_->mutex);
+#if defined(_WIN32)
+    impl_->pipe.reset();
+#endif
+    impl_->name.clear();
+}
+bool WindowsCommandReviewChannel::reviewFrom(void* heldClientProcess,const LocalTLSOffer& expected,
+        const std::string& expectedPeerId,const Reviewer& reviewer,unsigned timeoutMs,Deadline ownerDeadline) {
+    auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
+#if defined(_WIN32)
+    struct Cleanup {Impl& p;~Cleanup(){p.pipe.reset();p.name.clear();}} cleanup{p};
+    const auto source=static_cast<HANDLE>(heldClientProcess);LocalTLSOfferBytes checked{};Handle peer;
+    if(p.pipe.value==INVALID_HANDLE_VALUE || p.canceled.load() || !reviewer || !validId(expectedPeerId) ||
+        !encodeTLSOffer(expected,checked) || timeoutMs<20 || timeoutMs>5000 || !alive(source) ||
+        GetProcessId(source)==0 || GetProcessId(source)==GetCurrentProcessId() ||
+        !DuplicateHandle(GetCurrentProcess(),source,GetCurrentProcess(),&peer.value,0,FALSE,DUPLICATE_SAME_ACCESS)) return false;
+    const auto deadline=std::min(ownerDeadline,Clock::now()+std::chrono::milliseconds(timeoutMs));
+    if(Clock::now()>=deadline) return false;
+    if(!connectClient(p.pipe.value,deadline,peer.value,p.canceled)) return false;
+    ULONG pid=0;
+    if(!GetNamedPipeClientProcessId(p.pipe.value,&pid) || pid!=GetProcessId(peer.value) || !alive(peer.value)) return false;
+    unsigned char header[2]{};
+    if(!transfer(p.pipe.value,false,header,2,deadline,peer.value,p.canceled)) return false;
+    const auto size=(static_cast<std::size_t>(header[0])<<8)|header[1];
+    if(size<192 || size>maxCommandReviewBytes) return false;
+    CommandReviewBytes bytes(size);LocalCommandProposal proposal;
+    if(!transfer(p.pipe.value,false,bytes.data(),bytes.size(),deadline,peer.value,p.canceled) ||
+        !decodeCommandProposal(bytes,proposal) || proposal.peerId!=expectedPeerId ||
+        proposal.offer.epoch!=expected.epoch || proposal.offer.peerSha256!=expected.peerSha256 ||
+        proposal.offer.connectionId!=expected.connectionId || proposal.offer.tlsVersion!=expected.tlsVersion) return false;
+    bool allow=false;
+    try {
+        if(p.canceled.load() || !alive(peer.value) || Clock::now()>=deadline ||
+            !reviewer(proposal,allow,p.canceled,deadline)) return false;
+    } catch(...) {return false;}
+    if(p.canceled.load() || !alive(peer.value) || Clock::now()>=deadline || !encodeCommandDecision(proposal,allow,bytes)) return false;
+    header[0]=static_cast<unsigned char>(bytes.size()>>8);header[1]=static_cast<unsigned char>(bytes.size());
+    return transfer(p.pipe.value,true,header,2,deadline,peer.value,p.canceled) &&
+        transfer(p.pipe.value,true,bytes.data(),bytes.size(),deadline,peer.value,p.canceled);
+#else
+    (void)heldClientProcess;(void)expected;(void)expectedPeerId;(void)reviewer;(void)timeoutMs;(void)ownerDeadline;return false;
+#endif
+}
+
 bool receiveWindowsBootstrap(const std::wstring& name, void* expectedServerProcess,
         const LocalSessionOwner::Provisioner& consume, unsigned timeoutMs, const LocalTLSOffer* offer,
         const LocalBridgeReady* ready) {
