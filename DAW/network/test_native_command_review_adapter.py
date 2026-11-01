@@ -113,7 +113,8 @@ class ReviewAdapterTLSIntegrationTests(unittest.TestCase):
         def factory(ledger):
             class Reviewer:
                 def request(owner,identity,payload,*,cancel,deadline):
-                    host=subprocess.Popen([os.environ["IDW_COMMAND_REVIEW_PIPE_FIXTURE"],"--test-bound-host",str(os.getpid()),mode],
+                    fixture=os.environ.get("IDW_COMMAND_REVIEW_OPERATION_FIXTURE") or os.environ["IDW_COMMAND_REVIEW_PIPE_FIXTURE"]
+                    host=subprocess.Popen([fixture,"--test-bound-host",str(os.getpid()),mode],
                         stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0,
                         close_fds=True,creationflags=subprocess.CREATE_NO_WINDOW)
                     hosts.append(host)

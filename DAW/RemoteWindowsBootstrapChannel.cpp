@@ -13,12 +13,14 @@
 #endif
 #include "RemoteWindowsBootstrapChannel.h"
 #include "RemoteWindowsCommandReviewChannel.h"
+#include "RemoteWindowsCommandReviewOperation.h"
 #include "RemoteLocalBootstrapWire.h"
 #include <atomic>
 #include <chrono>
 #include <mutex>
 #include <vector>
 #include <algorithm>
+#include <thread>
 
 namespace idw::daw::remote {
 #if defined(_WIN32)
@@ -336,6 +338,86 @@ bool WindowsCommandReviewChannel::reviewFrom(void* heldClientProcess,const Local
 #else
     (void)heldClientProcess;(void)expected;(void)expectedPeerId;(void)reviewer;(void)timeoutMs;(void)ownerDeadline;return false;
 #endif
+}
+
+struct WindowsCommandReviewOperation::Impl {
+    struct Work {
+        WindowsCommandReviewChannel channel;
+        LocalCommandConsent consent;
+        std::wstring endpoint;
+        std::atomic<bool> canceled{false},done{false};
+        bool result=false,reported=false;
+        Deadline deadline{};
+#if defined(_WIN32)
+        Handle peer;
+#endif
+    };
+    std::shared_ptr<Work> work;
+    std::thread worker;
+    bool active() const {
+#if defined(_WIN32)
+        return work && !work->canceled.load() && !work->done.load(std::memory_order_acquire) &&
+            Clock::now()<work->deadline && alive(work->peer.value);
+#else
+        return false;
+#endif
+    }
+};
+WindowsCommandReviewOperation::WindowsCommandReviewOperation():impl_(std::make_unique<Impl>()){}
+WindowsCommandReviewOperation::~WindowsCommandReviewOperation(){stop();}
+bool WindowsCommandReviewOperation::start(void* heldPeer,const LocalTLSOffer& expected,const std::string& peerId,
+        unsigned timeoutMs,Deadline ownerDeadline) {
+    auto& p=*impl_;
+#if defined(_WIN32)
+    const auto begun=Clock::now();
+    LocalTLSOfferBytes checked{};const auto source=static_cast<HANDLE>(heldPeer);
+    if(p.work || timeoutMs<20 || timeoutMs>5000 || !encodeTLSOffer(expected,checked) || !validId(peerId) ||
+        !alive(source) || GetProcessId(source)==0 || GetProcessId(source)==GetCurrentProcessId()) return false;
+    const auto deadline=std::min(ownerDeadline,begun+std::chrono::milliseconds(timeoutMs));
+    if(Clock::now()>=deadline) return false;
+    try {
+        auto work=std::make_shared<Impl::Work>();work->deadline=deadline;
+        if(!DuplicateHandle(GetCurrentProcess(),source,GetCurrentProcess(),&work->peer.value,0,FALSE,DUPLICATE_SAME_ACCESS) ||
+            !alive(work->peer.value) || !work->channel.create()) return false;
+        work->endpoint=work->channel.name(); // Never call channel.name() while its worker owns the I/O lock.
+        if(Clock::now()>=deadline) return false;
+        p.work=work;
+        try {
+            p.worker=std::thread([work,expected,peerId,timeoutMs] {
+                try {
+                    if(!work->canceled.load()) work->result=work->channel.reviewFrom(work->peer.value,expected,peerId,
+                        [work](const LocalCommandProposal& proposal,bool& allow,const std::atomic<bool>& canceled,Deadline until) {
+                            return !work->canceled.load() && work->consent.request(proposal,allow,canceled,until);
+                        },timeoutMs,work->deadline);
+                } catch(...) {work->result=false;}
+                work->done.store(true,std::memory_order_release);
+            });
+        } catch(...) {stop();return false;}
+        return true;
+    } catch(...) {return false;}
+#else
+    (void)p;(void)heldPeer;(void)expected;(void)peerId;(void)timeoutMs;(void)ownerDeadline;return false;
+#endif
+}
+bool WindowsCommandReviewOperation::busy() const{return bool(impl_->work);}
+std::wstring WindowsCommandReviewOperation::endpoint() const{return impl_->active()?impl_->work->endpoint:std::wstring{};}
+std::optional<LocalCommandPrompt> WindowsCommandReviewOperation::pending() const {
+    return impl_->active()?impl_->work->consent.pending():std::nullopt;
+}
+bool WindowsCommandReviewOperation::resolve(const LocalCommandPrompt& prompt,bool allow) {
+    return impl_->active() && impl_->work->consent.resolve(prompt,allow);
+}
+std::optional<bool> WindowsCommandReviewOperation::takeResult() {
+    auto work=impl_->work;
+    if(!work || !work->done.load(std::memory_order_acquire) || work->reported) return std::nullopt;
+    work->reported=true;return work->result;
+}
+void WindowsCommandReviewOperation::stop() {
+    auto& p=*impl_;
+    if(p.work){p.work->canceled.store(true);p.work->consent.close();p.work->channel.cancel();}
+    if(p.worker.joinable()) p.worker.join();
+    if(p.work) p.work->channel.close();
+    p.work.reset();
 }
 
 bool receiveWindowsBootstrap(const std::wstring& name, void* expectedServerProcess,
