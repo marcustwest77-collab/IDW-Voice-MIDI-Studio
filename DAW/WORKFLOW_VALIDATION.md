@@ -297,3 +297,31 @@ matched the SHA-256 manifest. The ZIP is 61,458,533 bytes with SHA-256
 `2fe720230a0e65fbabcb80063b907362735e0e8a77605f728bb980d0db5f556a`.
 No audio was uploaded; originals and installed beta remain unchanged. Physical
 listening of the moved/resaved real package is still a separate user check.
+
+## Built-in MIDI instruments in WAV export
+
+WAV export now mixes the five built-in MIDI instruments with audio clips before
+the existing master EQ, gain and ceiling. MIDI-only sessions export successfully,
+and notes extending past the final audio clip retain their complete timeline.
+Track gain, pan, mute and solo apply across both track types. Export duration
+includes muted material, matching the existing audio timeline behavior. Invalid
+note/envelope data is rejected before output creation. External MIDI devices and
+VST instruments are outside this built-in synth export path.
+
+The shared synth now normalizes simultaneous voices per sample rather than per
+callback, fixing volume differences when note boundaries meet different device
+buffer sizes. Rendering uses a fixed 1024-frame stack buffer without heap
+allocation. MidiBounceTests compares every sample across 1, 17, 64, 127, 256,
+1024 and 2048-frame calls, all five presets at 44.1/48 kHz, saved/reopened
+settings, MIDI-only and mixed WAVs, longer MIDI tails, mute/solo, master gain,
+invalid inputs, cancellation and overwrite refusal. Independent sine and
+simultaneous-voice oracles check pitch, amplitude, envelope, velocity and pan.
+The target is registered in CTest and the Windows/macOS foundation workflow.
+
+Local strict compilation and this regression pass, as do the existing bounce,
+clip transport parity and MIDI benchmark executables. The local 128-note
+benchmark averaged 0.808 ms per 256-frame buffer (5.333 ms budget). One of 256
+timed 512-frame blocks took 34.957 ms, exceeding its 10.667 ms budget; no hardware
+stability claim follows from this benchmark. Full application builds await CI.
+The installed beta and working PR #211 test application remain unchanged; this
+feature has not yet received a physical listening check.
