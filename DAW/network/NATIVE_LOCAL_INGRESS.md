@@ -616,6 +616,36 @@ activation remain unfinished. This is local packaged fixture and headless JUCE
 integration only, not a running Workstation TLS demonstration, DAW action
 execution or two-computer collaboration.
 
+### Explicit pinned localhost client
+
+`native_tls_client.connect_native_tls_client` supplies a context-managed client
+connection for a future trusted frontend. It accepts only a port; IPv4 loopback
+and the TLS hostname `localhost` are fixed. The owner separately supplies an
+explicit server CA PEM snapshot, a lowercase server leaf certificate SHA-256 pin
+and absolute client certificate/private-key paths. Readiness metadata supplies
+none of that trust. A fresh context requires hostname/CA verification and TLS 1.2
+or newer, does not load system/environment roots, disables tickets and rejects
+encrypted-key password prompts. The owner must still establish credential-file
+provenance and protect the files while loading.
+
+A single absolute network deadline covers TCP connection and TLS handshake;
+time already spent connecting cannot renew the handshake budget. The socket is
+yielded only after the server leaf pin matches, and closes on handshake/pin
+failure, normal context exit or a caller exception. After yielding, the socket
+timeout is per operation; the caller still owns session lifetime. TLS 1.3 can
+deliver rejection of the client's certificate on first I/O, so yielding verifies
+the server and does not prove that it accepted the client. No retries, alternate
+addresses, command frames, native consent or automatic command approvals occur.
+
+Real TLS tests cover explicit trust, hostname/CA/pin rejection, client rejection,
+stalled handshakes, shared deadlines and cleanup. The actual frozen-helper tests
+now use this client for authenticated connections through the native manager,
+including private readiness, exact native consent, pending review and disconnect
+revocation. The credential-free negative test deliberately bypasses this client
+to verify mandatory client authentication. This client is not yet connected to
+a normal Workstation action and does not demonstrate a running Workstation TLS
+session, DAW execution or two-computer collaboration.
+
 The managed JUCE consent path now has an explicit **maximum 30-second shared
 budget** through `WindowsBridgeSession::startWithTimedOffer`. The private channel
 returns its actual absolute deadline; that same value reaches the controller and
