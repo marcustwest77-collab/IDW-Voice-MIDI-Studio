@@ -64,6 +64,7 @@ jobs:
           g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror DAW/tests/RemoteWindowsWorkerFixture.cpp -o remote-test-bin/windows-worker -pthread -lws2_32 -lbcrypt
           IDW_WINDOWS_WORKER_FIXTURE=remote-test-bin/windows-worker IDW_NATIVE_RECEIVER_FIXTURE=remote-test-bin/native-receiver python DAW/network/test_windows_worker_owner.py
           python DAW/network/test_local_test_client_ui.py
+          IDW_WINDOWS_WORKER_FIXTURE=remote-test-bin/windows-worker IDW_NATIVE_RECEIVER_FIXTURE=remote-test-bin/native-receiver python DAW/network/test_local_client_windows_integration.py
 
       - name: Test loopback-only Python TCP transport
         shell: bash
