@@ -1,4 +1,7 @@
 """Manual test UI. Credentials stay in memory; network calls run off the UI thread."""
+from pathlib import Path
+import secrets
+from create_local_test_bundle import create_bundle
 import queue
 import threading
 import tkinter as tk
@@ -14,8 +17,10 @@ class LocalTestClient:
         self.pending = False
         self.closed = False
         self.results = queue.Queue()
+        self.generation_results = queue.Queue()
+        self.generating = False
         root.title("IDW Remote Studio - Local Test Client")
-        root.minsize(680, 600)
+        root.minsize(720, 680)
         frame = ttk.Frame(root, padding=22)
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(1, weight=1)
@@ -66,8 +71,66 @@ class LocalTestClient:
         self.status = tk.StringVar(value="Start the local test in the DAW, then copy its session epoch here.")
         ttk.Label(frame, textvariable=self.status, wraplength=580).grid(
             row=12, column=0, columnspan=3, sticky="w")
+        generate = ttk.Button(frame, text="CREATE TEST CERTIFICATES…", command=self.generate_certificates)
+        generate.grid(row=13, column=0, columnspan=3, sticky="ew", pady=(16, 0))
+        self.controls.append((generate, "normal"))
         self.poll_id = root.after(100, self.poll)
         root.protocol("WM_DELETE_WINDOW", self.close)
+
+    def set_busy(self, busy):
+        self.pending = busy
+        for control, state in self.controls:
+            control.configure(state="disabled" if busy else state)
+        self.send_button.configure(state="disabled" if busy else "normal")
+
+    def generate_certificates(self):
+        if self.pending:
+            return
+        executable = filedialog.askopenfilename(title="Select your trusted OpenSSL executable", parent=self.root)
+        if not executable:
+            return
+        parent = filedialog.askdirectory(title="Choose a private folder for disposable test credentials", parent=self.root)
+        if not parent:
+            return
+        destination = Path(parent) / ("IDW-Local-Test-" + secrets.token_hex(4))
+        if not messagebox.askyesno("Create local test certificates",
+                "Run this OpenSSL executable?\n" + executable + "\n\nCreate seven-day test credentials in:\n" + str(destination) +
+                "\n\nKeys are unencrypted. Keep this folder private. Nothing is installed in Windows certificate stores.", parent=self.root):
+            return
+        self.generating = True
+        self.set_busy(True)
+        self.status.set("Creating local test certificates… Please keep this window open until creation finishes.")
+
+        def work():
+            try:
+                path = create_bundle(destination, executable)
+                setup = load_setup(path)
+                self.generation_results.put((True, (path, setup)))
+            except Exception:
+                self.generation_results.put((False, None))
+        threading.Thread(target=work, daemon=True).start()
+
+    def finish_generation(self):
+        try:
+            success, result = self.generation_results.get_nowait()
+        except queue.Empty:
+            return
+        self.generating = False
+        self.set_busy(False)
+        if not success:
+            self.status.set("Certificate creation failed. Check the selected OpenSSL executable and folder permissions. The previous client setup is unchanged.")
+            return
+        path, setup = result
+        self.setup = setup
+        self.requests.configure(values=setup["approved_requests"])
+        self.request_id.set(setup["approved_requests"][0])
+        self.summary.set(f"{setup['peer']} | localhost:{setup['tls_port']}")
+        self.client_cert = str(path.parent / "guest.crt")
+        self.client_key = str(path.parent / "guest.key")
+        self.cert_label.set("Generated client certificate selected")
+        self.key_label.set("Generated client key selected (kept in test folder)")
+        self.status.set("Certificates created and loaded. Load this setup in the DAW: " + str(path) +
+                        ". No connection was made. Copy the DAW epoch before sending.")
 
     def create_setup(self):
         if self.pending:
@@ -160,10 +223,7 @@ class LocalTestClient:
             return
         # Snapshot everything on the UI thread; worker never reads Tk variables.
         setup, cert, key = dict(self.setup), self.client_cert, self.client_key
-        self.pending = True
-        for control, _ in self.controls:
-            control.configure(state="disabled")
-        self.send_button.configure(state="disabled")
+        self.set_busy(True)
         self.status.set("Sending one authenticated request…")
 
         def work():
@@ -177,13 +237,11 @@ class LocalTestClient:
     def poll(self):
         if self.closed:
             return
+        self.finish_generation()
         try:
             success, status = self.results.get_nowait()
             self.status.set(status)
-            self.pending = False
-            for control, state in self.controls:
-                control.configure(state=state)
-            self.send_button.configure(state="normal")
+            self.set_busy(False)
             if success:
                 self.sequence.set(str(int(self.sequence.get()) + 1))
         except queue.Empty:
@@ -192,6 +250,9 @@ class LocalTestClient:
 
     def close(self):
         if self.closed:
+            return
+        if self.generating:
+            self.status.set("Certificate creation is still running. Please wait for it to finish before closing.")
             return
         self.closed = True
         self.root.after_cancel(self.poll_id)

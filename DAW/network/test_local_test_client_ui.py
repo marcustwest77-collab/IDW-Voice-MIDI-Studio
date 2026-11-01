@@ -1,5 +1,7 @@
 """Tk widget/state checks; Windows CI creates a hidden window, not a live session."""
 import tempfile
+import threading
+from contextlib import ExitStack
 from pathlib import Path
 import time
 import tkinter as tk
@@ -50,6 +52,68 @@ class ClientUITests(unittest.TestCase):
         self.assertIn("not accepted",self.client.status.get())
         self.assertNotIn("private detail",self.client.status.get())
         self.assertEqual(self.client.sequence.get(),"1")
+
+    def generation_dialogs(self, stack, confirm=True):
+        stack.enter_context(patch("local_test_client_ui.filedialog.askopenfilename", return_value="openssl.exe"))
+        stack.enter_context(patch("local_test_client_ui.filedialog.askdirectory", return_value=self.folder.name))
+        stack.enter_context(patch("local_test_client_ui.messagebox.askyesno", return_value=confirm))
+
+    def test_generate_loads_credentials_without_sending_or_sequence_change(self):
+        release = threading.Event()
+        started = threading.Event()
+        path = Path(self.folder.name) / "new" / "local-test-setup.json"
+        def generate(*args):
+            started.set()
+            if not release.wait(2):
+                raise RuntimeError("test generation timed out")
+            return path
+        setup = dict(self.client.setup)
+        with ExitStack() as stack:
+            self.generation_dialogs(stack)
+            create = stack.enter_context(patch("local_test_client_ui.create_bundle", side_effect=generate))
+            stack.enter_context(patch("local_test_client_ui.load_setup", return_value=setup))
+            send = stack.enter_context(patch("local_test_client_ui.send_local_request"))
+            self.client.generate_certificates()
+            self.assertTrue(started.wait(1))
+            try:
+                self.assertTrue(self.client.pending)
+                self.assertEqual(str(self.client.send_button["state"]), "disabled")
+                self.client.generate_certificates()
+                self.client.send()
+                self.client.close()
+                self.assertFalse(self.client.closed)
+                create.assert_called_once()
+                send.assert_not_called()
+            finally:
+                release.set()
+            self.wait_result()
+        self.assertFalse(self.client.generating)
+        self.assertEqual(self.client.client_key, str(path.parent / "guest.key"))
+        self.assertEqual(self.client.sequence.get(), "1")
+        self.assertIn(str(path), self.client.status.get())
+        self.assertEqual(str(self.client.requests["state"]), "readonly")
+
+    def test_generate_failure_preserves_setup(self):
+        original = self.client.setup
+        key = self.client.client_key
+        with ExitStack() as stack:
+            self.generation_dialogs(stack)
+            stack.enter_context(patch("local_test_client_ui.create_bundle", side_effect=OSError("private detail")))
+            self.client.generate_certificates()
+            self.wait_result()
+        self.assertIs(self.client.setup, original)
+        self.assertEqual(self.client.client_key, key)
+        self.assertIn("failed", self.client.status.get())
+        self.assertNotIn("private detail", self.client.status.get())
+        self.assertFalse(self.client.generating)
+
+    def test_generate_cancel_does_not_create_files(self):
+        with ExitStack() as stack:
+            self.generation_dialogs(stack, confirm=False)
+            create = stack.enter_context(patch("local_test_client_ui.create_bundle"))
+            self.client.generate_certificates()
+            create.assert_not_called()
+        self.assertFalse(self.client.pending)
 
     def test_create_setup_loads_result_without_network(self):
         setup = dict(self.client.setup)

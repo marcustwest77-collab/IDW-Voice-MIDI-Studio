@@ -65,7 +65,22 @@ No session token is loaded or sent by this client.
 
 ## Create disposable certificates for this local test
 
-If you do not already have test certificates, the package includes
+To create certificates from the client window, choose CREATE TEST CERTIFICATES.
+Select your trusted OpenSSL executable and a private parent folder. Review the
+executable and new folder shown in the confirmation dialog. The client creates
+a uniquely named folder, runs generation in the background, and loads the setup,
+client certificate and key when it succeeds. The status shows the JSON path to
+load in the DAW. This uses collaborator `guest`, port `49200` and request
+`local_request_1`; CREATE SETUP remains available for custom values.
+
+Creation temporarily disables the other controls and defers closing the window
+until the bounded generation work finishes. Cancellation before confirmation
+creates nothing. Failure preserves the previously loaded setup. Creation never
+sends a track request or increments its sequence; use START LOCAL TEST in the
+DAW and copy its epoch before sending. The generated private keys remain in the
+chosen folder until you delete them after testing.
+
+For command-line use, the package includes
 `remote-worker/create_local_test_bundle.py`. It requires a trusted OpenSSL
 executable supporting `req -addext`; it does not download or install OpenSSL.
 Run this from PowerShell in the extracted Windows package, substituting the
