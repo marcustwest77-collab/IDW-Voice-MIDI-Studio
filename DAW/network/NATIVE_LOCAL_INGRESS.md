@@ -1043,6 +1043,30 @@ tests inject a monitor failure while serving and verify cancellation, disposal,
 parent-scope release and preservation of a concurrent teardown error. This does
 not add executable packaging, host UI activation or a two-computer demonstration.
 
+## Windows session-owned command review
+
+`WindowsBridgeSession` can now start a command review only after its verified
+TLS-offer startup succeeds. It supplies the internally held child process and
+original immutable offer to `WindowsCommandReviewOperation`; callers supply
+trusted peer policy, never a replacement process handle or TLS binding. Legacy
+bootstrap startup cannot open this review. Queries fail closed during startup,
+after expiry or transport loss, and after stop. Each session generation owns its
+review mutex and worker, so late old-session cancellation cannot stop a replacement
+session's review. Manager stop and child/session loss revoke native ingress and
+cancel/join the review operation.
+
+Windows frozen-child tests now exercise the same native parent launching the TLS
+child, receiving a process-verified command proposal, accepting an exact local
+decision, and staging the command in the native pending-review queue. This TEST
+profile has no Python command preapproval. A baked owner-selected temporary file
+supplies nonsecret endpoint discovery metadata only; held-process verification on
+both pipe ends and exact TLS-offer matching remain mandatory. Substitution,
+denial, review cancellation, and manager stop cannot enqueue the command.
+
+Production protected endpoint provisioning, whole-bundle trust, and Workstation
+UI activation remain unfinished. These tests stage native review requests;
+they do not demonstrate DAW action execution or two-computer collaboration.
+
 ## Final host dispatch boundary
 
 The JUCE host decision handler drains queued transport facts before reading its

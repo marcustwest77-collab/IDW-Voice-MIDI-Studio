@@ -16,6 +16,7 @@
 #include "../RemoteManagedOfferController.h"
 #include "../RemoteTransportSessionLifecycle.h"
 #include "../RemoteValidatedCommandReviewReceiver.h"
+#include "../RemoteCommandReviewWire.h"
 #include <iostream>
 #include <thread>
 using namespace idw::daw::remote;
@@ -34,7 +35,7 @@ int main() {
         line.clear();char c=0;
         while(std::cin.get(c)) {
             if(c=='\n') return true;
-            if(line.size()>=256) return false;
+            if(line.size()>=1024) return false;
             line.push_back(c);
         }
         return false;
@@ -73,8 +74,39 @@ int main() {
     ValidatedCommandReviewReceiver review(coordinator);
     Request live;live.trackCount=4;live.trackIsAudio=true;
     std::string command;
+    std::optional<LocalCommandPrompt> commandPrompt;
+    std::string commandHex;
     while(readLine(command)) {
         if(command=="QUIT") break;
+        if(command=="REVIEW_START") {
+            commandPrompt.reset();commandHex.clear();
+            if(!session.beginCommandReview("guest",3000)) {std::cout << "REVIEW_UNAVAILABLE\n" << std::flush;continue;}
+            const auto endpoint=session.commandReviewEndpoint();std::string path;
+            for(const auto c:endpoint) path.push_back(static_cast<char>(c));
+            std::cout << "REVIEW_PIPE " << path << '\n' << std::flush;continue;
+        }
+        if(command=="REVIEW_WAIT") {
+            const auto until=std::chrono::steady_clock::now()+std::chrono::seconds(4);
+            while(!(commandPrompt=session.pendingCommandReview()) && session.running() &&
+                  std::chrono::steady_clock::now()<until) Sleep(1);
+            CommandReviewBytes bytes;
+            if(!commandPrompt || !encodeCommandProposal(commandPrompt->proposal,bytes)) {
+                std::cout << "REVIEW_UNAVAILABLE\n" << std::flush;continue;
+            }
+            constexpr char hex[]="0123456789abcdef";commandHex.clear();
+            for(const auto c:bytes){commandHex.push_back(hex[c>>4]);commandHex.push_back(hex[c&15]);}
+            std::cout << "COMMAND_REVIEW " << commandHex << '\n' << std::flush;continue;
+        }
+        if(command.rfind("REVIEW_ALLOW|",0)==0 || command.rfind("REVIEW_DENY|",0)==0) {
+            const bool allow=command.rfind("REVIEW_ALLOW|",0)==0;
+            const auto expected=std::string(allow?"REVIEW_ALLOW|":"REVIEW_DENY|")+commandHex;
+            const bool resolved=commandPrompt && command==expected && session.resolveCommandReview(*commandPrompt,allow);
+            std::cout << (resolved?"REVIEW_RESOLVED\n":"REVIEW_REJECTED\n") << std::flush;continue;
+        }
+        if(command=="REVIEW_STOP") {
+            session.stopCommandReview();commandPrompt.reset();commandHex.clear();
+            std::cout << "REVIEW_STOPPED\n" << std::flush;continue;
+        }
         if(command=="STOP") controller.stop();
         else if(command!="DRAIN") return 5;
         for(const auto& event:events.drain()) {
