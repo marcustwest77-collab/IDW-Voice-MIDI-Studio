@@ -646,6 +646,36 @@ to verify mandatory client authentication. This client is not yet connected to
 a normal Workstation action and does not demonstrate a running Workstation TLS
 session, DAW execution or two-computer collaboration.
 
+### Explicit client command exchange and queue receipts
+
+`native_tls_command_client.open_native_command_client` wraps the pinned connector
+for one trusted owner on one thread. Construction sends no command. Explicit
+`submit(bytes)` accepts only canonical select/arm requests for the configured
+epoch and tracks 0–127. Sequence numbers must increase, request IDs cannot repeat,
+and at most 32 requests can be submitted (default 16). Invalid local input is
+rejected before network I/O without retiring an otherwise usable connection.
+Neither this API nor a peer message writes host command approvals.
+
+One absolute command deadline covers sending, the receipt header and every
+fragment of its payload. A separate session deadline starts before connection
+establishment, caps each command and never renews between commands. Only an
+exact, bounded echo of the submitted payload produces an immutable
+`NativeQueueReceipt(epoch, sequence, request_id)`. It means server acknowledgment
+of native queue delivery for host review, not host approval or DAW execution.
+EOF, truncation, bad lengths, a substituted receipt, timeout or an uncertain send
+permanently close the client. Callers must not automatically reconnect/retry:
+the native queue may already have received an unacknowledged request. Context
+exit and caller exceptions also close the socket. No background lifetime owner,
+frontend activation or command execution is added here.
+
+The actual frozen-helper integration test now exercises this command client
+through private readiness and exact native consent, checks one native pending
+review after the matching receipt, rejects a duplicate submission and verifies
+that context exit revokes pending review. Focused tests cover fragmented and
+substituted receipts, no retry after uncertain delivery, replay/capacity checks,
+deadline preservation and cleanup. The TEST child still preapproves its fixed
+test command; production host approval transport remains unfinished.
+
 The managed JUCE consent path now has an explicit **maximum 30-second shared
 budget** through `WindowsBridgeSession::startWithTimedOffer`. The private channel
 returns its actual absolute deadline; that same value reaches the controller and
