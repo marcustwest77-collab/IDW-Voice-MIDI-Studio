@@ -125,3 +125,10 @@ another JSON clears the previous client certificate/key selections. Every newly
 loaded or created setup clears the session epoch and resets the sequence to 1;
 copy the current epoch from the DAW before sending. A cancelled or invalid file
 selection leaves the previous setup unchanged.
+
+Windows CI also exercises the real client Send button in a hidden Tk window,
+using generated certificates, the C++ Windows process owner, the TLS worker,
+and the native receiver. It checks select/arm delivery and wrong-fingerprint
+rejection. This verifies that delivery reaches the native pending queue; it
+does not exercise the DAW's visible review panel, approve an edit, or replace a
+manual desktop test with both windows.
