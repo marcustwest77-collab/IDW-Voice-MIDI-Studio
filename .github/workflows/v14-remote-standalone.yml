@@ -42,7 +42,7 @@ jobs:
               if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32 -lbcrypt); fi
               if [[ "${{ runner.os }}" == "macOS" ]]; then compile+=(-framework Security); fi
             fi
-            if [[ "$name" == "RemoteWindowsBootstrapChannelTests" || "$name" == "RemotePrivateReadinessTests" ]]; then
+            if [[ "$name" == "RemoteWindowsBootstrapChannelTests" || "$name" == "RemotePrivateReadinessTests" || "$name" == "RemoteWindowsCommandReviewTests" ]]; then
               compile+=(DAW/RemoteWindowsBootstrapChannel.cpp DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
               if [[ "${{ runner.os }}" == "Windows" ]]; then compile+=(-lws2_32 -lbcrypt -ladvapi32); fi
               if [[ "${{ runner.os }}" == "macOS" ]]; then compile+=(-framework Security); fi
@@ -156,6 +156,9 @@ jobs:
           review_fixture=remote-test-bin/RemoteCommandReviewWireTests
           if [[ "${{ runner.os }}" == "Windows" ]]; then review_fixture+=.exe; fi
           IDW_COMMAND_REVIEW_WIRE_FIXTURE="$review_fixture" python DAW/network/test_native_command_review_wire.py -v
+          review_pipe_fixture=remote-test-bin/RemoteWindowsCommandReviewTests
+          if [[ "${{ runner.os }}" == "Windows" ]]; then review_pipe_fixture+=.exe; fi
+          IDW_COMMAND_REVIEW_PIPE_FIXTURE="$review_pipe_fixture" python DAW/network/test_windows_native_command_review.py -v
           python DAW/network/test_native_provisioning_lifetime.py -v
           IDW_NATIVE_LOCAL_FIXTURE="$fixture" python DAW/network/test_native_tls_offer.py -v
           python DAW/network/test_windows_bridge_launch.py -v

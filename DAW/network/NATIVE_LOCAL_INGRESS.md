@@ -747,6 +747,47 @@ builds and runs the new C++ codec test; native-platform CI also runs cross-langu
 checks. This is a prerequisite for production private approval IPC, which remains
 unfinished, and supplies no additional DAW execution or two-computer evidence.
 
+### Standalone process-verified private review transaction
+
+`WindowsCommandReviewChannel` now provides an explicitly created, single-use
+native review endpoint. Its random `IDW-LocalCommandReview-<64 hex>` pipe uses a
+protected current-user DACL, a noninheritable first-instance handle and remote
+client rejection. The server duplicates the independently held expected client
+process, verifies the connected pipe client's PID against that live held process
+before reading a proposal, then checks the proposal's complete TLS offer and
+peer ID against trusted owner policy before invoking a local reviewer. This API
+does not launch a process, infer trust from a PID or grant native control.
+
+Requests and decisions use a two-byte big-endian length followed by the bounded
+codec record. The length is checked before allocation. One shared native
+deadline covers connection, proposal, the bounded host callback and decision;
+an optional trusted absolute owner deadline can only shorten it. Cancellation,
+peer exit, malformed/binding-mismatched proposals, expired callbacks and callback
+exceptions retire the endpoint. Every outcome closes it, and no second request
+or fallback is accepted. `cancel()` interrupts overlapped waits; `close()` waits
+for in-flight work before releasing handles. The owner must still run the
+transaction off UI/audio threads and join its worker. Callbacks must honor their
+deadline/cancellation and must not re-enter the channel.
+
+`receive_windows_command_decision` reuses the verified overlapped pipe primitive
+to check the actual native server against a held process duplicate before any
+proposal bytes are written. It preserves the original absolute command deadline
+and cancellation through write and bounded response, matches the entire expected
+proposal, and always closes its owned pipe/duplicate. Borrowed process handles
+remain the caller's responsibility. Allow/deny is returned as data only: it does
+not resolve a mailbox, write the ledger or deliver a native command. Unsupported
+platforms fail closed. There is no reconnect or insecure discovery fallback.
+
+Real Windows pipe tests cover explicit allow/deny, wrong held server with zero
+writes, wrong held client, every TLS-binding field/peer mismatch before reviewer
+entry, oversized/truncated records, native/client cancellation, original-deadline
+expiry and callback exceptions. The C++ TEST host supplies synthetic TLS evidence
+and a fixture reviewer; this does not demonstrate actual TLS or Workstation UI.
+Normal bridge launch, endpoint provisioning through protected bootstrap, live
+mailbox resolution and native-host review UI wiring remain unfinished. Existing
+packaged TLS compatibility behavior is unchanged; no production activation, DAW
+execution or two-computer collaboration is added by this standalone channel.
+
 ### Native receiver expiry independent of worker scheduling
 
 The native receiver fixes its absolute steady-clock session deadline before

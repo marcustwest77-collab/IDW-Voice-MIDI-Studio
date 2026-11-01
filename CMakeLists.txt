@@ -184,6 +184,18 @@ if(IDW_BUILD_DAW)
         endif()
         add_test(NAME IDWDAWPrivateReadiness COMMAND IDWDAWPrivateReadinessTests)
         set_tests_properties(IDWDAWPrivateReadiness PROPERTIES TIMEOUT 30)
+        add_executable(IDWDAWWindowsCommandReviewTests DAW/tests/RemoteWindowsCommandReviewTests.cpp
+            DAW/RemoteWindowsBootstrapChannel.cpp DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
+        target_compile_features(IDWDAWWindowsCommandReviewTests PRIVATE cxx_std_17)
+        target_link_libraries(IDWDAWWindowsCommandReviewTests PRIVATE Threads::Threads)
+        if(WIN32)
+            target_link_libraries(IDWDAWWindowsCommandReviewTests PRIVATE ws2_32 bcrypt advapi32)
+        endif()
+        if(APPLE)
+            target_link_libraries(IDWDAWWindowsCommandReviewTests PRIVATE "${IDW_SECURITY_FRAMEWORK}")
+        endif()
+        add_test(NAME IDWDAWWindowsCommandReview COMMAND IDWDAWWindowsCommandReviewTests)
+        set_tests_properties(IDWDAWWindowsCommandReview PROPERTIES TIMEOUT 30)
         add_executable(IDWDAWWindowsBridgeSessionTests DAW/tests/RemoteWindowsBridgeSessionTests.cpp
             DAW/RemoteWindowsBridgeSession.cpp DAW/RemoteWindowsBootstrapChannel.cpp
             DAW/RemoteLocalSocketReceiver.cpp DAW/RemoteLocalSessionSecret.cpp)
