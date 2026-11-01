@@ -215,9 +215,13 @@ int main() {
     expiring.frameTimeoutMs = 20;
     expiring.sessionTimeoutMs = 50;
     assert(server.start(expiring, secret, 48, true, true, true));
-    awaitStopped(server);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Do not poll/wait for worker cleanup to establish the expired public state.
+    assert(!server.running() && server.port()==0);
     server.stop();
-    queue.drain();
+    terminal=queue.drain();
+    assert(terminal.size()==1 && terminal.front().epoch==48 &&
+        terminal.front().kind==TrustedTransportEvent::Kind::authenticationLost);
     // A stale receiver's stop cannot revoke a newer externally owned session.
     assert(ingress.beginSession(wrong, 49, true, true, true));
     ingress.endSession(48); // An old transport cannot revoke a newer admission.

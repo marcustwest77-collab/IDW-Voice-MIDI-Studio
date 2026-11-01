@@ -22,6 +22,8 @@ public:
     // Revokes ingress, interrupts bounded polling, joins worker, closes listener.
     // Call stop before restarting after automatic expiry/connection exhaustion.
     void stop();
+    // Deadline is fixed before worker creation. Expired admissions report false/
+    // port zero even if worker scheduling/cleanup is delayed; stop still joins.
     bool running() const;
     std::uint16_t port() const;
 private:

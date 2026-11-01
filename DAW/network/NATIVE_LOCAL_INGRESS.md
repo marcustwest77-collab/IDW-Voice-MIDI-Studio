@@ -711,6 +711,23 @@ review plumbing only; production cross-process approval IPC and Workstation UI
 wiring remain unfinished. The packaged compatibility fixture retains its fixed
 automatic TEST approval, and no new DAW execution or two-computer claim is made.
 
+### Native receiver expiry independent of worker scheduling
+
+The native receiver fixes its absolute steady-clock session deadline before
+creating its worker and passes that exact deadline into the accept/frame loop.
+`running()` checks that deadline synchronously and `port()` returns zero for an
+expired or stopping admission, even if worker scheduling or cleanup is delayed.
+`LocalSessionOwner` therefore cannot report successful bootstrap provisioning
+after expiry simply because the worker has not yet cleared its active flag.
+Worker cleanup still revokes ingress and closes resources; `stop()` still joins
+before disposal/restart. An expired provisioning attempt still consumes its
+epoch and cannot be retried as the same session.
+
+This corrects the expiry regression observed in #199's macOS native job at
+`RemoteLocalSessionOwnerTests.cpp` during a 100 ms provisioner with a 40 ms
+session. Tests retain that rejection and now check zero port/inactive state
+inside the expired provisioner, same-epoch retry rejection and terminal cleanup.
+
 The managed JUCE consent path now has an explicit **maximum 30-second shared
 budget** through `WindowsBridgeSession::startWithTimedOffer`. The private channel
 returns its actual absolute deadline; that same value reaches the controller and
