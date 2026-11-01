@@ -13,6 +13,7 @@ class LocalTestClient:
     def __init__(self, root):
         self.root = root
         self.setup = None
+        self.setup_path = tk.StringVar(value="")
         self.client_cert = self.client_key = ""
         self.pending = False
         self.closed = False
@@ -25,13 +26,16 @@ class LocalTestClient:
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(1, weight=1)
         ttk.Label(frame, text="IDW Remote Studio", font=("Segoe UI", 20, "bold")).grid(
-            row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
         ttk.Label(frame, text="One local request. Review and approve it in the DAW.").grid(
             row=1, column=0, columnspan=2, sticky="w", pady=(0, 18))
         self.summary = tk.StringVar(value="Load the same test setup selected in the DAW.")
         self.cert_label = tk.StringVar(value="No client certificate selected")
         self.key_label = tk.StringVar(value="No client key selected")
         self.controls = []
+        self.copy_path_button = ttk.Button(frame, text="COPY SETUP PATH", command=self.copy_setup_path, state="disabled")
+        self.copy_path_button.grid(row=0, column=2, sticky="e")
+        self.controls.append((self.copy_path_button, "normal"))
         create = ttk.Button(frame, text="CREATE SETUP…", command=self.create_setup)
         create.grid(row=1, column=2, sticky="e", pady=(0, 18))
         self.controls.append((create, "normal"))
@@ -74,14 +78,41 @@ class LocalTestClient:
         generate = ttk.Button(frame, text="CREATE TEST CERTIFICATES…", command=self.generate_certificates)
         generate.grid(row=13, column=0, columnspan=3, sticky="ew", pady=(16, 0))
         self.controls.append((generate, "normal"))
+        path_entry = ttk.Entry(frame, textvariable=self.setup_path, state="readonly")
+        path_entry.grid(row=14, column=0, columnspan=3, sticky="ew", pady=(12, 0))
+        self.controls.append((path_entry, "readonly"))
         self.poll_id = root.after(100, self.poll)
         root.protocol("WM_DELETE_WINDOW", self.close)
 
     def set_busy(self, busy):
         self.pending = busy
         for control, state in self.controls:
-            control.configure(state="disabled" if busy else state)
+            disabled = busy or (control is self.copy_path_button and not self.setup_path.get())
+            control.configure(state="disabled" if disabled else state)
         self.send_button.configure(state="disabled" if busy else "normal")
+
+    def copy_setup_path(self):
+        if self.pending or not self.setup_path.get():
+            return
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(self.setup_path.get())
+            self.status.set("Setup path copied. In the DAW, choose LOAD TEST SETUP and paste it into the file picker.")
+        except tk.TclError:
+            self.status.set("Clipboard unavailable. Select and copy the setup path from the field below.")
+
+    def use_setup(self, setup, path, client_cert="", client_key=""):
+        self.setup = setup
+        self.setup_path.set(str(Path(path).resolve()))
+        self.requests.configure(values=setup["approved_requests"])
+        self.request_id.set(setup["approved_requests"][0])
+        self.summary.set(f"{setup['peer']} | localhost:{setup['tls_port']}")
+        self.client_cert, self.client_key = client_cert, client_key
+        self.cert_label.set("Client certificate selected" if client_cert else "No client certificate selected")
+        self.key_label.set("Client key selected (kept in its file)" if client_key else "No client key selected")
+        self.epoch.set("")
+        self.sequence.set("1")
+        self.copy_path_button.configure(state="normal")
 
     def generate_certificates(self):
         if self.pending:
@@ -121,14 +152,7 @@ class LocalTestClient:
             self.status.set("Certificate creation failed. Check the selected OpenSSL executable and folder permissions. The previous client setup is unchanged.")
             return
         path, setup = result
-        self.setup = setup
-        self.requests.configure(values=setup["approved_requests"])
-        self.request_id.set(setup["approved_requests"][0])
-        self.summary.set(f"{setup['peer']} | localhost:{setup['tls_port']}")
-        self.client_cert = str(path.parent / "guest.crt")
-        self.client_key = str(path.parent / "guest.key")
-        self.cert_label.set("Generated client certificate selected")
-        self.key_label.set("Generated client key selected (kept in test folder)")
+        self.use_setup(setup, path, str(path.parent / "guest.crt"), str(path.parent / "guest.key"))
         self.status.set("Certificates created and loaded. Load this setup in the DAW: " + str(path) +
                         ". No connection was made. Copy the DAW epoch before sending.")
 
@@ -164,13 +188,7 @@ class LocalTestClient:
         except (ValueError, OSError):
             messagebox.showerror("Setup not created", "Check IDs, certificate fingerprint format, matching keys, trust files and the destination folder.")
             return
-        self.setup = setup
-        self.requests.configure(values=setup["approved_requests"])
-        self.request_id.set(setup["approved_requests"][0])
-        self.summary.set(f"{setup['peer']} | localhost:{setup['tls_port']}")
-        self.client_cert, self.client_key = paths["client_cert"], paths["client_key"]
-        self.cert_label.set("Client certificate selected")
-        self.key_label.set("Client key selected (not saved)")
+        self.use_setup(setup, destination, paths["client_cert"], paths["client_key"])
         self.status.set("Setup saved and loaded. Load the same JSON in the DAW. No connection was made; live TLS verification is still required.")
 
     def choose_setup(self):
@@ -183,10 +201,8 @@ class LocalTestClient:
         except (OSError, ValueError, RecursionError):
             messagebox.showerror("Invalid setup", "Choose a valid local test setup with existing certificate paths.")
             return
-        self.setup = setup
-        self.requests.configure(values=setup["approved_requests"])
-        self.request_id.set(setup["approved_requests"][0])
-        self.summary.set(f"{setup['peer']} | localhost:{setup['tls_port']}")
+        self.use_setup(setup, path)
+        self.status.set("Setup loaded. Choose its client certificate and key, then copy the new DAW session epoch before sending.")
 
     def choose_credential(self, private_key):
         path = filedialog.askopenfilename(title="Choose client private key" if private_key else "Choose client certificate")

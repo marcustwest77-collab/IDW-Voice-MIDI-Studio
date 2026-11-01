@@ -117,3 +117,11 @@ package dependency check; it does not launch the DAW or replace the two-window
 Windows desktop acceptance test. Python (with tkinter) and OpenSSL remain
 external prerequisites; passing on a build runner does not install them on
 your computer.
+
+The client keeps the loaded setup path in a read-only field below the controls.
+COPY SETUP PATH copies just that filename/path, so you can paste it into the
+DAW's LOAD TEST SETUP file picker even after the status message changes. Loading
+another JSON clears the previous client certificate/key selections. Every newly
+loaded or created setup clears the session epoch and resets the sequence to 1;
+copy the current epoch from the DAW before sending. A cancelled or invalid file
+selection leaves the previous setup unchanged.

@@ -53,6 +53,46 @@ class ClientUITests(unittest.TestCase):
         self.assertNotIn("private detail",self.client.status.get())
         self.assertEqual(self.client.sequence.get(),"1")
 
+    def test_loading_setup_clears_old_credentials_and_session_values(self):
+        self.client.epoch.set("45")
+        self.client.sequence.set("8")
+        with patch("local_test_client_ui.filedialog.askopenfilename", return_value="new.json"), \
+             patch("local_test_client_ui.load_setup", return_value=dict(self.client.setup)):
+            self.client.choose_setup()
+        self.assertEqual(self.client.client_cert, "")
+        self.assertEqual(self.client.client_key, "")
+        self.assertEqual(self.client.epoch.get(), "")
+        self.assertEqual(self.client.sequence.get(), "1")
+        self.assertEqual(self.client.setup_path.get(), str(Path("new.json").resolve()))
+        with patch("local_test_client_ui.send_local_request") as send, \
+             patch("local_test_client_ui.messagebox.showerror"):
+            self.client.send()
+            send.assert_not_called()
+
+    def test_setup_path_persists_and_copy_uses_only_path(self):
+        path = Path(self.folder.name) / "setup.json"
+        self.client.use_setup(self.client.setup, path)
+        self.client.status.set("Later status")
+        with patch.object(self.root, "clipboard_clear") as clear, \
+             patch.object(self.root, "clipboard_append") as append:
+            self.client.copy_setup_path()
+            clear.assert_called_once()
+            append.assert_called_once_with(str(path.resolve()))
+        self.assertEqual(self.client.setup_path.get(), str(path.resolve()))
+        self.assertIn("copied", self.client.status.get())
+
+    def test_failed_setup_load_preserves_current_state(self):
+        original = self.client.setup
+        key = self.client.client_key
+        self.client.setup_path.set("previous.json")
+        with patch("local_test_client_ui.filedialog.askopenfilename", return_value="invalid.json"), \
+             patch("local_test_client_ui.load_setup", side_effect=ValueError("bad setup")), \
+             patch("local_test_client_ui.messagebox.showerror"):
+            self.client.choose_setup()
+        self.assertIs(self.client.setup, original)
+        self.assertEqual(self.client.client_key, key)
+        self.assertEqual(self.client.setup_path.get(), "previous.json")
+
     def generation_dialogs(self, stack, confirm=True):
         stack.enter_context(patch("local_test_client_ui.filedialog.askopenfilename", return_value="openssl.exe"))
         stack.enter_context(patch("local_test_client_ui.filedialog.askdirectory", return_value=self.folder.name))
