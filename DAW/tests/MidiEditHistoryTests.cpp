@@ -5,6 +5,7 @@
 using namespace idw::daw;
 static void require(bool ok,const char* why){if(!ok)throw std::runtime_error(why);}
 static juce::MouseEvent mouse(IDWPianoRoll& editor,int x,int y){
+    y+=PianoRollViewport::headerHeight;
     const auto now=juce::Time::getCurrentTime();
     return {juce::Desktop::getInstance().getMainMouseSource(),{(float)x,(float)y},
             juce::ModifierKeys::leftButtonModifier,1,0,0,0,0,&editor,&editor,
