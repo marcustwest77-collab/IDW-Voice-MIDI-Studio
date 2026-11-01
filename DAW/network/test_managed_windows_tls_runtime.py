@@ -28,6 +28,22 @@ WIRE = b"1|45|1|managed_runtime|arm|1"
 
 
 class RuntimeBoundaryTests(unittest.TestCase):
+    def test_explicit_command_review_forwarding_and_invalid_hook_rejection(self):
+        launch=ManagedBridgeLaunch("\\\\.\\pipe\\IDW-LocalBootstrap-"+"a"*64,123,45)
+        options=dict(expected_peer_id="guest",approved_client_sha256="a"*64,host_consent=lambda _:True,
+            host_approval_ledger=NativeCommandApprovalLedger(),on_listening=lambda _:None)
+        @contextmanager
+        def hold(_): yield 456
+        with patch("managed_windows_tls_runtime.launch_api.hold_launch_parent",side_effect=hold) as held, \
+                patch("managed_windows_tls_runtime.launch_api.launch_parent_is_alive",return_value=True), \
+                patch("managed_windows_tls_runtime.NativeTLSLoopbackReceiver") as receiver:
+            with self.assertRaises(ValueError):
+                serve_managed_windows_tls_once(launch,None,host_command_review=False,**options)
+            held.assert_not_called();receiver.assert_not_called()
+            hook=Mock();owned=receiver.return_value.__enter__.return_value;owned.serve_once.return_value=0
+            self.assertEqual(serve_managed_windows_tls_once(launch,None,host_command_review=hook,**options),0)
+            self.assertIs(owned.serve_once.call_args.kwargs['host_command_review'],hook)
+
     def test_ready_failure_has_no_discovery_fallback_and_cleanup_always_joins(self):
         for fail_prepare in (True, False):
             with self.subTest(fail_prepare=fail_prepare):

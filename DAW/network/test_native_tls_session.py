@@ -73,13 +73,14 @@ class SessionHarness:
     def __init__(self, cert, key, guest_cert, guest_key, *, pin=None, allowed=True, mismatch=None,
                  verify_mode=ssl.CERT_REQUIRED, owned_receiver=False, private_bootstrap=False,
                  socket_revocation=False, transactional_lease=False, revoke_failure=False,
-                 provision_hook=None, private_offer=False, **limits):
+                 provision_hook=None, private_offer=False, command_review_factory=None, **limits):
         self.cert, self.guest_cert, self.guest_key = cert, guest_cert, guest_key
         self.fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(guest_cert.read_text())).hexdigest()
         self.pin = pin if pin is not None else self.fingerprint
         self.allowed, self.mismatch = allowed, mismatch
         self.consent_hook = None
         self.ledger = NativeCommandApprovalLedger()
+        self.command_review = command_review_factory(self.ledger) if command_review_factory is not None else None
         self.cancel = threading.Event()
         self.native_ready = threading.Event()
         self.errors, self.results, self.identities = [], [], []
@@ -141,6 +142,8 @@ class SessionHarness:
                 epoch=45, host_consent=lambda identity: self.consent_hook(identity) if self.consent_hook else self.allowed,
                 provide_native_lease=provide,
                 host_approval_ledger=self.ledger, **options)
+            if self.command_review is not None:
+                session_options["host_command_review"]=self.command_review.request
             try:
                 if self.receiver is not None:
                     result = self.receiver.serve_once(**session_options)

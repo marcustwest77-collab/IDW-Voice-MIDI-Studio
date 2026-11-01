@@ -88,7 +88,8 @@ def native_socket_lease(bootstrap, identity, *, timeout=1.0):
 
 def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, epoch,
                            host_consent, provide_native_lease, host_approval_ledger,
-                           cancel=None, max_commands=16, session_timeout=30.0, command_timeout=2.0):
+                           cancel=None, max_commands=16, session_timeout=30.0, command_timeout=2.0,
+                           host_command_review=None):
     """Own this TLS socket until EOF/budget/error/cancellation, then revoke native.
 
     Only a real server-side SSLSocket with mandatory peer verification is accepted.
@@ -97,6 +98,9 @@ def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, 
     provide_native_lease must accept (identity, *, cancel, deadline), passing the
     session Event and absolute monotonic deadline through protected provisioning.
     The owner cannot preempt arbitrary blocking trusted callbacks.
+    Optional host_command_review(identity, payload, *, cancel, deadline) proposes
+    an already validated request to a trusted local owner. Returning True alone
+    never approves it: the exact ledger entry is still required and consumed.
     Returns the number of queue receipts, not host approvals or executed actions.
     """
     if not isinstance(secure, ssl.SSLSocket):
@@ -111,6 +115,7 @@ def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, 
                 type(epoch) is not int or not 1 <= epoch <= 2**64 - 1 or
                 not callable(host_consent) or not callable(provide_native_lease) or
                 not isinstance(host_approval_ledger, NativeCommandApprovalLedger) or
+                (host_command_review is not None and not callable(host_command_review)) or
                 type(max_commands) is not int or not 1 <= max_commands <= 32 or
                 any(type(value) not in (int, float) or not 0.05 <= value <= limit or not math.isfinite(value)
                     for value, limit in ((session_timeout, 60), (command_timeout, 5))) or
@@ -233,6 +238,13 @@ def run_native_tls_session(secure, *, expected_peer_id, approved_client_sha256, 
             if command["action"] not in ("arm", "select"):
                 raise PermissionError("TLS action not enabled")
             guard.inspect(session, payload, identity.peer_id, identity.connection_id)
+            if host_command_review is not None:
+                if host_command_review(identity,payload,cancel=cancel,deadline=until) is not True:
+                    raise PermissionError("local command review denied or expired")
+                check(until)
+                verify_peer()
+                if host_consent(identity) is not True:
+                    raise PermissionError("host consent revoked during command review")
             if not host_approval_ledger.consume(identity.peer_id, identity.epoch, identity.connection_id, payload):
                 raise PermissionError("exact connection-bound host approval unavailable")
             check(until)

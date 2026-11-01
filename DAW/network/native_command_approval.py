@@ -62,6 +62,11 @@ class NativeCommandApprovalLedger:
             self._approved[request_id] = payload
             return True
 
+    def is_active(self, peer, epoch, connection_id):
+        scope = self._scope(peer, epoch, connection_id)
+        with self._lock:
+            return self._session == scope
+
     def consume(self, peer, epoch, connection_id, payload):
         scope = self._scope(peer, epoch, connection_id)
         request_id = self._command(payload, epoch)
