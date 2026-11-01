@@ -325,3 +325,29 @@ timed 512-frame blocks took 34.957 ms, exceeding its 10.667 ms budget; no hardwa
 stability claim follows from this benchmark. Full application builds await CI.
 The installed beta and working PR #211 test application remain unchanged; this
 feature has not yet received a physical listening check.
+
+## Piano-roll undo and redo
+
+The piano roll now supports Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y for
+drawing, moving, resizing and deleting notes. Each completed drag forms one
+undo step; selecting without changing notes preserves redo. Newly drawn notes
+are selected immediately. Delete/Backspace requires editor focus and no keyboard
+modifiers. Editing and history restoration are blocked during playback,
+recording, calibration capture and export by the Workstation's edit guard.
+
+History retains at most 64 edits and restores only the affected MIDI note list.
+It preserves tempo, audio clips, mixer and instrument settings. Unexpected note
+changes, removed tracks and renamed targets fail without overwriting newer work;
+the Workstation reports a conflict. An external note change during a gesture
+also stops that gesture without capturing the external edit into undo. Loading
+a different project clears both MIDI history stacks and pending selection/drag
+state. Hiding the editor or changing its track finishes the current gesture.
+
+MidiEditHistoryTests drives the production component's draw/move/resize mouse
+handlers and the deletion/history operations used by keyboard shortcuts, without
+opening a window. It checks gesture grouping, no-op redo preservation, deletion,
+busy/unfocused guards, conflict preservation (including an external edit during
+a drag), project reset, the history cap, and saved/reopened edited notes.
+Strict local MSVC /W4 /WX compilation and the regression pass. The target is
+registered in CTest and Windows/macOS foundation CI. Interactive shortcut
+delivery still needs a physical UI check; no installed application was replaced.

@@ -613,11 +613,14 @@ public:
         addAndMakeVisible(pianoButton);
         addChildComponent(pianoRoll);
         pianoRoll.session=&session;
+        pianoRoll.canEdit=[this]{return clipEditAvailable() && !loopbackCapture.isActive();};
+        pianoRoll.onHistoryConflict=[this]{commandStatus.setText(
+            "MIDI undo/redo unavailable: affected notes changed; newer work was preserved",juce::dontSendNotification);};
         pianoButton.onClick=[this]{
             if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
             if(selectedTrack>=session.tracks.size() ||
                session.tracks[selectedTrack].type!=idw::daw::TrackType::midi)return;
-            pianoRoll.trackIndex=selectedTrack;
+            pianoRoll.setTrackIndex(selectedTrack);
             pianoRoll.setVisible(!pianoRoll.isVisible());
             if(pianoRoll.isVisible()){
                 aiPanel.setVisible(false);connectPanel.setVisible(false);
@@ -2537,6 +2540,7 @@ private:
         recovery.begin(session,fromRecovery);
         // Undo snapshots refer to the prior project; never restore them into a new one.
         clipHistory.clear();dragHistorySnapshot.reset();
+        pianoRoll.resetEditor();
         draggingClip=false;selectedClipValid=false;
         sources=std::move(staged);
         waveformThumbnails.clear();
