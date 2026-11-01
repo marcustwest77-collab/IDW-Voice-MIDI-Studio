@@ -1,16 +1,37 @@
 #pragma once
-#include <JuceHeader.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 #include "SessionModel.h"
+#include "MidiEditHistory.h"
 #include <functional>
+#include <optional>
 
-// First graphical MIDI editor: notes can be drawn with a click and selected.
-// MIDI playback/virtual instruments are not yet connected.
+// Graphical editor for notes played by the built-in instruments.
 class IDWPianoRoll final : public juce::Component {
 public:
     idw::daw::Session* session=nullptr;
     size_t trackIndex=0;
     std::function<void()> onChanged;
+    std::function<bool()> canEdit;
+    std::function<void()> onHistoryConflict;
     IDWPianoRoll(){setWantsKeyboardFocus(true);}
+    void resetEditor(){history.clear();gestureBefore.reset();gestureExpected.clear();dragging=false;selectedValid=false;repaint();}
+    void setTrackIndex(size_t index){finishGesture();trackIndex=index;selectedValid=false;repaint();}
+    void visibilityChanged() override {if(!isVisible())finishGesture();}
+    bool restoreHistory(bool undo){
+        if(dragging || !editingAllowed())return false;
+        const auto result=undo?history.undo(*session):history.redo(*session);
+        if(result==idw::daw::MidiEditHistory::Result::conflict){if(onHistoryConflict)onHistoryConflict();}
+        if(result!=idw::daw::MidiEditHistory::Result::applied)return false;
+        selectedValid=false;if(onChanged)onChanged();repaint();return true;
+    }
+    bool deleteSelection(){
+        if(dragging || !editingAllowed() || !selectedValid)return false;
+        const auto before=session->tracks[trackIndex].notes;
+        const bool removed=session->removeMidiNote(trackIndex,selectedIndex);
+        selectedValid=false;
+        if(removed){history.record(*session,trackIndex,before);if(onChanged)onChanged();repaint();}
+        return removed;
+    }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff141b24));
         const auto bounds=getLocalBounds();
@@ -43,9 +64,9 @@ public:
         }
     }
     void mouseDown(const juce::MouseEvent& e) override {
-        dragging=false;
+        finishGesture();
         selectedValid=false;
-        if(!session || trackIndex>=session->tracks.size() ||
+        if(!editingAllowed() ||
            session->tracks[trackIndex].type!=idw::daw::TrackType::midi ||
            e.x<54 || e.y<0 || e.y>=37*13)return;
         auto& notes=session->tracks[trackIndex].notes;
@@ -58,18 +79,28 @@ public:
                 activeNote=i-1;selectedIndex=activeNote;selectedValid=true;
                 grabKeyboardFocus();dragging=true;resizing=e.x>=x+w-6;
                 originX=e.x;originY=e.y;original=notes[activeNote];
+                gestureTrack=trackIndex;gestureBefore=notes;gestureExpected=notes;
+                gestureTrackName=session->tracks[trackIndex].name;
+                repaint();
                 return;
             }
         }
         const int pitch=84-e.y/13;
         const double beat=std::max(0.0,std::round(((double)e.x-54)/16.0*4.0)/4.0);
+        const auto before=notes;
         if(session->addMidiNote(trackIndex,{pitch,beat,1.0,100})){
+            history.record(*session,trackIndex,before);
+            selectedIndex=notes.size()-1;selectedValid=true;grabKeyboardFocus();
             if(onChanged)onChanged();
             repaint();
         }
     }
     void mouseDrag(const juce::MouseEvent& e) override {
-        if(!dragging || !session || trackIndex>=session->tracks.size())return;
+        if(!dragging || !editingAllowed() || trackIndex!=gestureTrack)return;
+        if(!gestureMatches()){
+            gestureBefore.reset();dragging=false;selectedValid=false;
+            if(onHistoryConflict)onHistoryConflict();return;
+        }
         const double delta=std::round((e.x-originX)/4.0)/4.0;
         bool changed=false;
         if(resizing)
@@ -78,18 +109,45 @@ public:
             changed=session->moveMidiNote(trackIndex,activeNote,
                 std::max(0.0,original.startBeat+delta),
                 juce::jlimit(0,127,original.pitch-(e.y-originY)/13));
-        if(changed){if(onChanged)onChanged();repaint();}
+        if(changed){gestureExpected=session->tracks[trackIndex].notes;if(onChanged)onChanged();repaint();}
     }
-    void mouseUp(const juce::MouseEvent&) override {dragging=false;}
+    void mouseUp(const juce::MouseEvent&) override {finishGesture();}
     bool keyPressed(const juce::KeyPress& key) override {
-        if(!selectedValid || !session || trackIndex>=session->tracks.size())return false;
+        if(!hasKeyboardFocus(false) || dragging || !editingAllowed())return false;
+        const auto mods=key.getModifiers();
+        if(mods.isCommandDown() && !mods.isAltDown() &&
+           (key.getKeyCode()=='Z' || (key.getKeyCode()=='Y' && !mods.isShiftDown()))){
+            const bool undo=key.getKeyCode()=='Z' && !mods.isShiftDown();
+            restoreHistory(undo);
+            return true;
+        }
+        if(!selectedValid || mods.isAnyModifierKeyDown())return false;
         if(key.getKeyCode()!=juce::KeyPress::deleteKey && key.getKeyCode()!=juce::KeyPress::backspaceKey)return false;
-        const bool removed=session->removeMidiNote(trackIndex,selectedIndex);
-        selectedValid=false;dragging=false;
-        if(removed){if(onChanged)onChanged();repaint();}
-        return removed;
+        return deleteSelection();
     }
 private:
+    idw::daw::MidiEditHistory history;
+    std::optional<std::vector<idw::daw::MidiNote>> gestureBefore;
+    std::vector<idw::daw::MidiNote> gestureExpected;
+    std::string gestureTrackName;
+    size_t gestureTrack=0;
+    bool editingAllowed() const {
+        return session && trackIndex<session->tracks.size() &&
+            session->tracks[trackIndex].type==idw::daw::TrackType::midi && (!canEdit || canEdit());
+    }
+    void finishGesture(){
+        if(gestureBefore){
+            if(gestureMatches())history.record(*session,gestureTrack,*gestureBefore);
+            else if(onHistoryConflict)onHistoryConflict();
+        }
+        gestureBefore.reset();dragging=false;
+    }
+    bool gestureMatches() const {
+        return session && gestureTrack<session->tracks.size() &&
+            session->tracks[gestureTrack].type==idw::daw::TrackType::midi &&
+            session->tracks[gestureTrack].name==gestureTrackName &&
+            idw::daw::sameMidiNotes(session->tracks[gestureTrack].notes,gestureExpected);
+    }
     bool selectedValid=false;
     size_t selectedIndex=0;
     bool dragging=false,resizing=false;
