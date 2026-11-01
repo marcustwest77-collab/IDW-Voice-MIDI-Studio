@@ -1,6 +1,8 @@
 #pragma once
 #include <juce_core/juce_core.h>
 #include "SessionModel.h"
+#include <algorithm>
+#include <cstring>
 namespace idw::daw {
 inline juce::var sessionToJson(const Session& s) {
     auto root=std::make_unique<juce::DynamicObject>();
@@ -148,8 +150,45 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
     output=std::move(next);
     return true;
 }
+namespace persistence_detail {
+// Internal staging seam permits deterministic short-write tests without changing
+// disk permissions or filling a volume. Never write the destination through it.
+template<class WriteCandidate>
+inline bool saveValidated(const Session& session,const juce::File& file,WriteCandidate&& writeCandidate){
+    if(file==juce::File{} || file.isDirectory())return false;
+    const auto text=juce::JSON::toString(sessionToJson(session),true);
+    Session checked;
+    if(!sessionFromJson(juce::JSON::parse(text),checked) ||
+       juce::JSON::toString(sessionToJson(checked),true)!=text)return false;
+    juce::TemporaryFile staged(file);
+    if(!writeCandidate(staged.getFile(),text))return false;
+    // Verify exact bytes, not just readable JSON: a different/partial snapshot
+    // must never replace the last manually saved project. Bound readback memory.
+    const auto bytes=static_cast<std::size_t>(text.getNumBytesAsUTF8());
+    if(staged.getFile().getSize()!=static_cast<juce::int64>(bytes))return false;
+    {
+        juce::FileInputStream input(staged.getFile());
+        if(!input.openedOk())return false;
+        char block[4096];const char* expected=text.toRawUTF8();
+        for(std::size_t position=0;position<bytes;){
+            const int count=static_cast<int>(std::min<std::size_t>(sizeof(block),bytes-position));
+            if(input.read(block,count)!=count || std::memcmp(block,expected+position,static_cast<std::size_t>(count))!=0)
+                return false;
+            position+=static_cast<std::size_t>(count);
+        }
+    }
+    // Windows replacement requires every staged-file stream to be closed first.
+    return staged.overwriteTargetFileWithTemporary();
+}
+}
 inline bool saveSession(const Session& s,const juce::File& file){
-    return file.replaceWithText(juce::JSON::toString(sessionToJson(s),true));
+    return persistence_detail::saveValidated(s,file,[](const juce::File& candidate,const juce::String& text){
+        auto output=candidate.createOutputStream();
+        if(!output)return false;
+        const bool written=output->write(text.toRawUTF8(),static_cast<std::size_t>(text.getNumBytesAsUTF8()));
+        output->flush();
+        return written && output->getStatus().wasOk();
+    });
 }
 inline bool loadSession(const juce::File& file,Session& result){
     if(!file.existsAsFile())return false;

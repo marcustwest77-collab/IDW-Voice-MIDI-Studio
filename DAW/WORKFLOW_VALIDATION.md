@@ -194,4 +194,35 @@ the test cleans up its own temporary output. This is a short device-free engine
 integration check, not physical eight-input recording or hardware overdub-latency
 calibration. Partial per-writer disk failures and long multitrack sessions are
 not covered by this healthy-path test. Physical overdub playback is a separate
-user check on the working AudioBox ASIO build.
+user check on the working AudioBox ASIO build. That check subsequently passed by
+user report: both backing and new take play cleanly, with the original preserved.
+Physical latency remains unmeasured.
+
+## Validated manual saves and recovery/relink regressions
+
+Manual project saves now validate the serialized session's roundtrip before
+writing. They write a candidate beside the destination, check write/flush status,
+then verify its size and exact UTF-8 bytes in 4096-byte readback blocks. Only a
+complete matching candidate replaces the destination through JUCE's existing
+temporary-file replacement mechanism. Staged streams are closed before replacement
+for Windows compatibility. Invalid session values that would be rejected or
+silently clamped on reopening cannot overwrite the prior valid project.
+
+`IDWDAWSessionSaveTests` deterministically injects no-output/partial write failures,
+truncated output reported as successful, and same-size incorrect snapshots near
+the beginning and beyond the first readback block. Failed attempts retain the
+original project byte-for-byte and remove their temporary output. Exception
+cleanup, invalid models, directory/blocked-parent destinations, Unicode/large
+metadata, MIDI and missing-media references, valid replacement and repeated saves
+are covered. Missing audio does not prevent saving its project references.
+The internal writer seam is for fault injection; production always uses the checked
+file writer. No disk permissions or volume capacity are changed for testing.
+
+The recovery/relink regression executables were rebuilt against this save path.
+They pass corrupt-copy fallback, failed-checkpoint retry, two-generation rotation,
+document-owner isolation, preserved missing-media references, invalid/short audio
+rejection, relink undo/redo, save/reopen/recovery and actual WAV playback/export.
+The project persistence, record/edit roundtrip, extended recording and multitrack
+regressions also pass locally. All fixtures are disposable; user projects and
+source recordings are untouched. This is not a forced power-loss or full UI-crash
+recovery qualification.
