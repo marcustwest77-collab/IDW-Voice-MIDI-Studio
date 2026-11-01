@@ -244,3 +244,31 @@ the legacy optional-field defaults. The test uses disposable metadata fixtures;
 it does not open microphones or change user data. The user-provided Session7 and
 Session9 projects were additionally loaded read-only through the corrected parser
 to verify compatibility.
+
+## Portable project media reuse and relocation
+
+Portable export copies each distinct normalized absolute source path once.
+Split/repeated clips and references on different tracks share that copied asset;
+different paths with the same basename receive distinct numbered filenames.
+Each new copy is checked against its source bytes before the relative project
+is saved. Unresolved relative inputs are rejected because this API has no project
+base-directory context; the Workstation resolves paths when opening a project.
+Existing destinations remain protected, stale errors clear on success, and
+ordinary missing-source or metadata-save failures remove the newly created
+partial package.
+
+`IDWDAWPortableProjectTests` reproduces the previous repeated-copy behavior,
+then verifies unique copies, same-basename separation, preserved clip/mix/MIDI
+metadata, exact media bytes, and identical audio mixes after relocating the
+package and making the original generated sources unavailable. It also checks
+existing-destination protection, missing-media rollback, invalid metadata,
+unresolved paths and default temporary cleanup. Its retained-evidence argument
+requires a fresh directory. All destructive fixture operations are confined to
+newly generated test data.
+
+A separate portable copy of the user-provided Session9 was created locally with
+the corrected exporter. Its two previously verified WAVs total 72,110,800 bytes;
+the former per-clip copying would use 220,387,048 bytes. Its project uses relative
+audio references and the original project bytes are unchanged. User audio was
+copied locally only; no recordings were uploaded. This is a portable copy on the
+same computer, not an independently stored disaster-recovery backup.
