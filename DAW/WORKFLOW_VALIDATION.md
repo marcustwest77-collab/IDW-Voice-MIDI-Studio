@@ -109,3 +109,65 @@ silence during unmonitored capture and after interruption, isolated monitoring,
 bounded calibration pulses and silence after completion, plus input-only/null
 output handling. No hardware is opened. See
 [JUCE's callback summation](https://github.com/juce-framework/JUCE/blob/9.0.2/modules/juce_audio_devices/audio_io/juce_AudioDeviceManager.cpp).
+
+## Corrected-build physical acceptance: 2026-11-01
+
+The preceding failed/pending observations describe the older build. On the
+isolated PR #211 build (`e7b9ab0a19853631b88719124ff55b2ac4d9a6ab`), the user
+selected AudioBox USB 96 ASIO with headphones and subsequently confirmed:
+
+- Clean device test and audible recorded voice, without continuing whine.
+- Split/move editing and undo/redo work.
+- Save/reopen retains edits and correct playback.
+- Exported WAV sounds correct in a separate audio player.
+- The requested longer recording check "works good" (user report); its exact
+  physical duration remains unverified.
+
+This is acceptance on one user's setup. A read-only header check found the three
+newest visible takes are 49.688, 33.260 and 40.510 seconds long; the exact extended
+physical test take has not been identified. Those files cannot verify five
+minutes of physical recording. Hardware dropout counters, latency and sample
+continuity were not measured by the agent. This is not a five-minute or multi-hour
+physical stability qualification, or other-device qualification.
+The installed beta was not replaced. All five PR #211 CI checks passed,
+including all 48 Windows workstation CTest cases.
+
+## Extended recording engine regression
+
+`IDWDAWExtendedRecordingTests` records deterministic stereo samples through the
+production recorder and isolated callback at 48 kHz and 44.1 kHz. It streams the
+finished WAVs back in bounded blocks and checks every sample and exact frame
+count. A distinct unselected input must not leak into the take. Dirty output
+scratch must remain silent. Recorder diagnostics must report no dropped/rejected
+blocks, missing inputs or interruption; a subsequent odd-sized take checks clean
+restart, counter reset and final-block flush.
+
+A separate worker performs 12 snapshot save/reopen/recovery/export cycles per
+rate while the recorder's disk writer remains open. Checkpoint revisions and
+bounded recovery slots are verified; independent exported snapshots must have
+the expected duration and stereo signal. This applies engine-level disk load;
+it does not enable simultaneous recording and export/save in the Workstation UI.
+
+CI runs a wall-clock-paced ten-second **sample timeline per rate**, with a
+120-second test timeout. Run a larger generated timeline locally with:
+
+```
+IDWDAWExtendedRecordingTests --seconds 90 --evidence NEW-EMPTY-OUTPUT-DIRECTORY
+```
+
+The evidence directory must not exist yet. It retains both source takes,
+snapshot projects, recovery copies, independent exports and restarted takes.
+Without `--evidence`, the test cleans up its own temporary directory. Timeline
+duration is paced with a steady clock (90 seconds per rate takes at least three
+minutes total), but callbacks are synthetic. Early accelerated producer profiles
+overran the writer's bounded queue; those are throughput-overload observations,
+not physical dropout evidence. The clock-paced profile respects the production
+writer's time budget. It does not measure physical latency, actual hardware
+callback deadlines, or ASIO reliability.
+
+Local clock-paced validation completed 90 seconds at each rate in 180.616 wall
+seconds. All 4,320,000 stereo frames at 48 kHz and 3,969,000 at 44.1 kHz matched
+the generated samples. Both runs reported zero dropped/rejected blocks, missing
+inputs and interruptions. All 24 snapshot/recovery/export cycles and both odd-sized
+recorder restarts passed. Generated evidence was retained in an isolated workspace
+folder; no user audio was modified or uploaded.
