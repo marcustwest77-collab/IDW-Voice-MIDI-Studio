@@ -2,6 +2,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "SessionModel.h"
 #include "MidiEditHistory.h"
+#include "PianoRollViewport.h"
 #include <functional>
 #include <optional>
 
@@ -14,8 +15,9 @@ public:
     std::function<bool()> canEdit;
     std::function<void()> onHistoryConflict;
     IDWPianoRoll(){setWantsKeyboardFocus(true);}
-    void resetEditor(){history.clear();gestureBefore.reset();gestureExpected.clear();dragging=false;selectedValid=false;repaint();}
-    void setTrackIndex(size_t index){finishGesture();trackIndex=index;selectedValid=false;repaint();}
+    void resetEditor(){history.clear();gestureBefore.reset();gestureExpected.clear();dragging=false;selectedValid=false;view={};constrainView();repaint();}
+    void setTrackIndex(size_t index){finishGesture();trackIndex=index;selectedValid=false;constrainView();repaint();}
+    void resized() override {finishGesture();constrainView();}
     void visibilityChanged() override {if(!isVisible())finishGesture();}
     bool restoreHistory(bool undo){
         if(dragging || !editingAllowed())return false;
@@ -35,9 +37,12 @@ public:
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff141b24));
         const auto bounds=getLocalBounds();
-        constexpr int keyWidth=54,rowHeight=13;
-        for(int pitch=84;pitch>=48;--pitch){
-            const int y=(84-pitch)*rowHeight;
+        constrainView();
+        constexpr int keyWidth=idw::daw::PianoRollViewport::keyWidth;
+        constexpr int rowHeight=idw::daw::PianoRollViewport::rowHeight;
+        constexpr int header=idw::daw::PianoRollViewport::headerHeight;
+        for(int row=0;row<idw::daw::PianoRollViewport::rows(gridHeight());++row){
+            const int pitch=view.topPitch-row,y=header+row*rowHeight;
             g.setColour((pitch%12==1||pitch%12==3||pitch%12==6||
                          pitch%12==8||pitch%12==10)?juce::Colour(0xff1e2631):
                                                         juce::Colour(0xff29323e));
@@ -45,39 +50,46 @@ public:
             g.setColour(juce::Colours::lightgrey);
             if(pitch%12==0)g.drawText("C"+juce::String(pitch/12-1),2,y,48,rowHeight,juce::Justification::centredLeft);
         }
-        for(int beat=0;beat<64;++beat){
-            const int x=keyWidth+beat*16;
+        g.setColour(juce::Colours::lightgrey);g.setFont(juce::Font(juce::FontOptions(10.0f)));
+        g.drawText("Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",2,0,bounds.getWidth()-4,12,juce::Justification::centredLeft);
+        const double first=std::ceil(view.firstBeat);
+        const int lines=(int)std::ceil(gridWidth()/view.pixelsPerBeat())+1;
+        for(int i=0;i<lines;++i){
+            const double beat=first+i;
+            const int x=keyWidth+juce::roundToInt((beat-view.firstBeat)*view.pixelsPerBeat());
             if(x>getWidth())break;
-            g.setColour(beat%4==0?juce::Colours::grey:juce::Colour(0xff435064));
-            g.drawVerticalLine(x,0,(float)getHeight());
+            g.setColour(std::fmod(beat,4.0)==0?juce::Colours::grey:juce::Colour(0xff435064));
+            g.drawVerticalLine(x,(float)header,(float)getHeight());
+            if(std::fmod(beat,4.0)==0)g.drawText(juce::String(beat,0),x+2,12,42,12,juce::Justification::centredLeft);
         }
         if(!session || trackIndex>=session->tracks.size())return;
         size_t noteIndex=0;
         for(const auto& note:session->tracks[trackIndex].notes){
             ++noteIndex;
-            if(note.pitch<48 || note.pitch>84)continue;
-            const int y=(84-note.pitch)*rowHeight;
-            const int x=keyWidth+juce::roundToInt(note.startBeat*16.0);
-            const int w=juce::jmax(3,juce::roundToInt(note.lengthBeats*16.0));
+            const auto rect=view.bounds(note,gridWidth(),gridHeight());
+            if(!rect)continue;
             g.setColour(selectedValid && noteIndex-1==selectedIndex ? juce::Colours::gold : juce::Colours::orange);
-            g.fillRoundedRectangle((float)x,(float)y+1,(float)w,rowHeight-3,2.0f);
+            g.fillRoundedRectangle((float)(keyWidth+rect->x),(float)(header+rect->y)+1,
+                                   (float)rect->width,rowHeight-3,2.0f);
         }
     }
     void mouseDown(const juce::MouseEvent& e) override {
         finishGesture();
+        constrainView();
         selectedValid=false;
         if(!editingAllowed() ||
-           session->tracks[trackIndex].type!=idw::daw::TrackType::midi ||
-           e.x<54 || e.y<0 || e.y>=37*13)return;
+           e.x<54 || e.x>=getWidth())return;
+        const auto pitch=view.pitchAt(e.y-idw::daw::PianoRollViewport::headerHeight,gridHeight());
+        if(!pitch)return;
         auto& notes=session->tracks[trackIndex].notes;
         for(size_t i=notes.size();i>0;--i){
             const auto& n=notes[i-1];
-            const int x=54+juce::roundToInt(n.startBeat*16.0);
-            const int y=(84-n.pitch)*13;
-            const int w=juce::jmax(3,juce::roundToInt(n.lengthBeats*16.0));
-            if(e.x>=x && e.x<x+w && e.y>=y && e.y<y+13){
+            const auto rect=view.bounds(n,gridWidth(),gridHeight());
+            if(!rect)continue;
+            const double x=54+rect->x;const int y=idw::daw::PianoRollViewport::headerHeight+rect->y;
+            if(e.x>=x && e.x<x+rect->width && e.y>=y && e.y<y+13){
                 activeNote=i-1;selectedIndex=activeNote;selectedValid=true;
-                grabKeyboardFocus();dragging=true;resizing=e.x>=x+w-6;
+                grabKeyboardFocus();dragging=true;resizing=rect->rightEdgeVisible && e.x>=x+rect->width-6;
                 originX=e.x;originY=e.y;original=notes[activeNote];
                 gestureTrack=trackIndex;gestureBefore=notes;gestureExpected=notes;
                 gestureTrackName=session->tracks[trackIndex].name;
@@ -85,10 +97,9 @@ public:
                 return;
             }
         }
-        const int pitch=84-e.y/13;
-        const double beat=std::max(0.0,std::round(((double)e.x-54)/16.0*4.0)/4.0);
+        const double beat=std::round(view.beatAt(e.x-54)*4.0)/4.0;
         const auto before=notes;
-        if(session->addMidiNote(trackIndex,{pitch,beat,1.0,100})){
+        if(session->addMidiNote(trackIndex,{*pitch,beat,1.0,100})){
             history.record(*session,trackIndex,before);
             selectedIndex=notes.size()-1;selectedValid=true;grabKeyboardFocus();
             if(onChanged)onChanged();
@@ -101,7 +112,7 @@ public:
             gestureBefore.reset();dragging=false;selectedValid=false;
             if(onHistoryConflict)onHistoryConflict();return;
         }
-        const double delta=std::round((e.x-originX)/4.0)/4.0;
+        const double delta=std::round((e.x-originX)/view.pixelsPerBeat()*4.0)/4.0;
         bool changed=false;
         if(resizing)
             changed=session->resizeMidiNote(trackIndex,activeNote,std::max(0.25,original.lengthBeats+delta));
@@ -112,6 +123,16 @@ public:
         if(changed){gestureExpected=session->tracks[trackIndex].notes;if(onChanged)onChanged();repaint();}
     }
     void mouseUp(const juce::MouseEvent&) override {finishGesture();}
+    void mouseWheelMove(const juce::MouseEvent& e,const juce::MouseWheelDetails& wheel) override {
+        if(dragging)return;
+        if(e.mods.isCommandDown())
+            view.zoomAt(wheel.deltaY>0?1:wheel.deltaY<0?-1:0,e.x-54,gridWidth(),gridHeight(),lastBeat());
+        else if(e.mods.isShiftDown() || std::abs(wheel.deltaX)>std::abs(wheel.deltaY))
+            view.scrollTime(-16.0*(e.mods.isShiftDown() && wheel.deltaY!=0?wheel.deltaY:wheel.deltaX),
+                            gridWidth(),gridHeight(),lastBeat());
+        else view.scrollPitch(12.0*wheel.deltaY,gridHeight());
+        repaint();
+    }
     bool keyPressed(const juce::KeyPress& key) override {
         if(!hasKeyboardFocus(false) || dragging || !editingAllowed())return false;
         const auto mods=key.getModifiers();
@@ -126,6 +147,16 @@ public:
         return deleteSelection();
     }
 private:
+    idw::daw::PianoRollViewport view;
+    int gridWidth() const {return std::max(1,getWidth()-idw::daw::PianoRollViewport::keyWidth);}
+    int gridHeight() const {return std::max(13,getHeight()-idw::daw::PianoRollViewport::headerHeight);}
+    double lastBeat() const {
+        double end=0;
+        if(session && trackIndex<session->tracks.size())for(const auto& n:session->tracks[trackIndex].notes)
+            if(std::isfinite(n.startBeat+n.lengthBeats))end=std::max(end,n.startBeat+n.lengthBeats);
+        return end;
+    }
+    void constrainView(){view.constrain(gridWidth(),gridHeight(),lastBeat());}
     idw::daw::MidiEditHistory history;
     std::optional<std::vector<idw::daw::MidiNote>> gestureBefore;
     std::vector<idw::daw::MidiNote> gestureExpected;

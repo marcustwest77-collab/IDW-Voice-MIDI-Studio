@@ -351,3 +351,28 @@ a drag), project reset, the history cap, and saved/reopened edited notes.
 Strict local MSVC /W4 /WX compilation and the regression pass. The target is
 registered in CTest and Windows/macOS foundation CI. Interactive shortcut
 delivery still needs a physical UI check; no installed application was replaced.
+
+## Navigate the full piano roll
+
+The piano roll now reaches all MIDI pitches 0–127 and later song sections.
+Wheel vertically to change the pitch range; Shift+wheel or a horizontal wheel
+scrolls time. Ctrl/Cmd+wheel selects one of five zoom levels (8–48 pixels per
+beat), keeping the beat under the cursor fixed where the content bounds allow.
+A header shows the navigation controls and a beat ruler. View state is separate
+from notes, persistence and undo history. Navigation is held steady during a
+drag; quarter-beat drawing, movement and resizing use the current zoom/scroll.
+
+Shared viewport geometry clips notes before pixel conversion, so offscreen or
+very large finite note positions are not narrowed to integers. A long note
+clipped by the right edge is not mistakenly treated as a resize handle. Pitch
+and time scroll limits adapt to the visible grid and track content. Project
+load resets the view along with the editor's existing history reset.
+
+PianoRollNavigationTests checks all 128 pitches at multiple viewport heights,
+cursor-anchored zoom, scroll/zoom limits, clipped and nonfinite geometry, actual
+component wheel/draw/resize handlers at pitches 0/127 beyond beat 149, gesture
+navigation guards, undo isolation, persistence and the production painter.
+The prior MIDI edit-history regression also passes with the new ruler offset.
+Both local regressions compile under MSVC /W4 /WX. The new test is registered in
+CTest and Windows/macOS foundation CI. Physical wheel/trackpad interaction
+remains a separate user check; the installed beta has not been changed.
