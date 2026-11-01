@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #endif
 #include "../RemoteWindowsCommandReviewChannel.h"
+#include "../RemoteLocalCommandConsent.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -39,28 +40,31 @@ int main(int argc,char** argv) {
         std::cout << "PIPE " << path << '\n' << std::flush;
         std::thread canceler;
         if(mode=="cancel") canceler=std::thread([&]{Sleep(80);channel.cancel();});
+        LocalCommandConsent commandConsent;std::atomic<bool> controllerFinished{false};std::thread controller;
+        if(mode=="manual") controller=std::thread([&] {
+            const auto input=GetStdHandle(STD_INPUT_HANDLE);
+            while(!controllerFinished.load()) {
+                const auto prompt=commandConsent.pending();
+                if(prompt) {
+                    DWORD available=0;
+                    if(!PeekNamedPipe(input,nullptr,0,nullptr,&available,nullptr)){commandConsent.close();return;}
+                    if(available) {
+                        char command[6]{};DWORD read=0;
+                        if(available!=6 || !ReadFile(input,command,6,&read,nullptr) || read!=6){commandConsent.close();return;}
+                        const std::string decision(command,command+6);
+                        if(decision!="ALLOW\n" && decision!="DENY!\n"){commandConsent.close();return;}
+                        commandConsent.resolve(*prompt,decision=="ALLOW\n");return;
+                    }
+                }
+                Sleep(1);
+            }
+        });
         const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(mode=="expire"?100:2000);
         const bool result=channel.reviewFrom(peer,expected,"guest",
-            [&](const LocalCommandProposal&,bool& allow,const std::atomic<bool>& canceled,WindowsCommandReviewChannel::Deadline until) {
+            [&](const LocalCommandProposal& proposal,bool& allow,const std::atomic<bool>& canceled,WindowsCommandReviewChannel::Deadline until) {
                 std::cout << "REVIEW\n" << std::flush;
                 if(mode=="manual") {
-                    // TEST driver is the local decision owner over captured
-                    // stdin, separate from both TLS and the private review pipe.
-                    const auto input=GetStdHandle(STD_INPUT_HANDLE);
-                    while(!canceled.load() && std::chrono::steady_clock::now()<until) {
-                        DWORD available=0;
-                        if(!PeekNamedPipe(input,nullptr,0,nullptr,&available,nullptr)) return false;
-                        if(available) {
-                            if(available!=6) return false;
-                            char command[6]{};DWORD read=0;
-                            if(!ReadFile(input,command,6,&read,nullptr) || read!=6) return false;
-                            const std::string decision(command,command+6);
-                            if(decision!="ALLOW\n" && decision!="DENY!\n") return false;
-                            allow=decision=="ALLOW\n";return true;
-                        }
-                        Sleep(1);
-                    }
-                    return false;
+                    return commandConsent.request(proposal,allow,canceled,until);
                 }
                 if(mode=="expire") std::this_thread::sleep_until(until+std::chrono::milliseconds(10));
                 if(mode=="slow") Sleep(1000);
@@ -68,6 +72,8 @@ int main(int argc,char** argv) {
                 if(canceled.load()) return false;
                 allow=mode!="deny";return true;
             },2000,deadline);
+        controllerFinished.store(true);commandConsent.close();
+        if(controller.joinable()) controller.join();
         if(canceler.joinable()) canceler.join();
         const bool retired=channel.name().empty();channel.close();CloseHandle(peer);
         std::cout << (result?"DONE\n":"FAILED\n") << std::flush;

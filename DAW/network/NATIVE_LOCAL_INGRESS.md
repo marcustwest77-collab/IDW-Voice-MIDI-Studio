@@ -827,6 +827,50 @@ credential trust and activation remain unfinished. The packaged compatibility
 fixture still uses its fixed automatic TEST approval. No DAW execution or live
 two-computer collaboration is claimed.
 
+### Native command mailbox and optional JUCE review controls
+
+`LocalCommandConsent` adapts a process-verified native review callback to one
+trusted local UI/controller. Its worker waits off UI/audio threads within the
+original native deadline (at most five seconds) and cancellation flag. A live
+explicit allow or deny returns a decision; expiry, cancellation or close returns
+failure without modifying the caller's output. Completion retires the request
+and its borrowed cancellation reference, including exceptions. One request is
+allowed per mailbox instance.
+
+`pending()` returns the exact proposal plus an in-process lifetime token. The
+token is never serialized; held snapshots keep its allocation alive so even an
+identical proposal in a replacement mailbox cannot accept a queued old decision.
+`resolve()` checks both lifetime and complete canonical proposal before recording
+one explicit decision. The mailbox supplies no TLS/process verification itself;
+only the independently verified channel owner may publish proposals.
+
+`HostReviewPanel::showCommandConsent` can display that snapshot with action,
+one-based track, request ID, peer and certificate fingerprint. Explicit "Allow
+review request"/"Deny review request" buttons decide forwarding to native review,
+not action execution. Forwarding is disabled when live approvals are disabled
+or connection consent is pending. Connection consent takes display precedence;
+queued-action approval buttons remain blocked while a forwarding prompt exists.
+The new button callbacks retain immutable snapshots and use JUCE SafePointer
+ownership, rejecting replacement/duplicate clicks and safely ignoring callbacks
+after panel destruction. The owner must resolve the live mailbox and poll again
+to clear expired/completed/lost requests; displayed data alone is not authority.
+
+Strict mailbox tests cover allow/deny, all identity/content substitutions, local
+mailbox replacement, expiry, close/cancel and unchanged failure outputs. Headless
+JUCE tests wire actual mailbox resolution to the buttons and verify forwarding
+cannot invoke final action approval, disabled-state/connection precedence,
+stale/duplicate/expired clicks and panel destruction. A software-rendered component
+snapshot verifies layout at the existing 630x260 panel size. The native pipe TEST
+fixture's manual mode now uses this same mailbox, with a separate polling TEST
+controller, so real TLS -> native decision -> ledger -> pending-review tests
+exercise its decision path as well.
+
+Normal Workstation command-controller/endpoint provisioning is not wired in this
+step: no default startup or new user action activates a helper. These are native
+mailbox, optional panel and fixture integrations, not a running Workstation TLS
+session, DAW execution or two-computer collaboration. Production bundle and
+credential trust and same-host lifecycle/UI ownership still need completion.
+
 ### Native receiver expiry independent of worker scheduling
 
 The native receiver fixes its absolute steady-clock session deadline before
