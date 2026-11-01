@@ -209,4 +209,19 @@ inline bool loadSession(const juce::File& file,Session& result){
     auto data=juce::JSON::parse(file);
     return sessionFromJson(data,result);
 }
+// Workstation saves receive resolved live paths. Keep assets within the project
+// folder portable without changing live player paths; preserve external links.
+inline bool saveProjectSession(const Session& live,const juce::File& project){
+    if(project==juce::File{})return false;
+    Session stored=live;
+    const auto base=project.getParentDirectory();
+    for(auto& track:stored.tracks)for(auto& clip:track.clips){
+        const juce::String path(clip.sourcePath);
+        if(!juce::File::isAbsolutePath(path))return false; // No unknown base/cwd guessing.
+        const juce::File media(path);
+        if(media.isAChildOf(base))
+            clip.sourcePath=media.getRelativePathFrom(base).replaceCharacter('\\','/').toStdString();
+    }
+    return saveSession(stored,project);
+}
 }

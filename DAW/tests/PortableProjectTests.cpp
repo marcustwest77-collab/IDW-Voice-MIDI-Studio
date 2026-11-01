@@ -86,6 +86,13 @@ int main(int argc,char** argv) {
         }
         const auto mix=root.getChildFile("Relocated.wav");
         require(renderSessionWav(portable,mix,error),"relocated mix needs unavailable originals");compareMix(reference,mix);
+        const auto liveBeforeSave=json(portable);
+        require(saveProjectSession(portable,relocated.getChildFile("Session.idwproj")),"resave opened portable project");
+        require(json(portable)==liveBeforeSave,"portable resave changed live player paths");
+        Session resaved;
+        require(loadSession(relocated.getChildFile("Session.idwproj"),resaved),"read resaved portable project");
+        for(const auto& track:resaved.tracks)for(const auto& clip:track.clips)
+            require(!juce::File::isAbsolutePath(clip.sourcePath),"resaving portable project wrote absolute asset paths");
         const auto originalPackageBytes=bytes(relocated.getChildFile("Session.idwproj"));
         require(!exportPortableProject(portable,relocated,error) &&
                 bytes(relocated.getChildFile("Session.idwproj"))==originalPackageBytes,"existing package overwritten");
@@ -98,9 +105,38 @@ int main(int argc,char** argv) {
         require(!exportPortableProject(invalid,invalidFolder,error) && !invalidFolder.exists(),"invalid project package retained");
         require(bytes(hidden.getChildFile("A/take.wav"))==aBytes && bytes(hidden.getChildFile("B/take.wav"))==bBytes &&
                 json(source)==sourceJson,"portable failure paths changed original source/project");
+        const auto again=root.getChildFile("Relocated-Again/Package");
+        require(again.getParentDirectory().createDirectory().wasOk() && relocated.moveFileTo(again),"second package move");
+        Session movedAgain;require(loadSession(again.getChildFile("Session.idwproj"),movedAgain),"reopen resaved/moved project");
+        for(auto& track:movedAgain.tracks)for(auto& clip:track.clips) {
+            require(!juce::File::isAbsolutePath(clip.sourcePath),"resaved move retained absolute asset path");
+            clip.sourcePath=again.getChildFile(clip.sourcePath).getFullPathName().toStdString();
+        }
+        const auto secondMix=root.getChildFile("Moved-Again.wav");
+        require(renderSessionWav(movedAgain,secondMix,error),"resaved/moved mix");compareMix(reference,secondMix);
+        auto mixedPaths=movedAgain;
+        const auto external=hidden.getChildFile("B/take.wav").getFullPathName().toStdString();
+        mixedPaths.tracks[1].clips[0].sourcePath=external;
+        const auto mixedBefore=json(mixedPaths);
+        const auto mixedFile=again.getChildFile("External.idwproj");
+        require(saveProjectSession(mixedPaths,mixedFile) && json(mixedPaths)==mixedBefore,"external-link save mutated live state");
+        Session savedMixed;require(loadSession(mixedFile,savedMixed) &&
+                !juce::File::isAbsolutePath(savedMixed.tracks[0].clips[0].sourcePath) &&
+                savedMixed.tracks[1].clips[0].sourcePath==external,"internal/external path policy");
+        const auto mixedBytes=bytes(mixedFile);
+        require(!saveProjectSession(relative,mixedFile) && bytes(mixedFile)==mixedBytes,"unresolved save overwrote prior project");
+        auto missingPath=movedAgain;
+        missingPath.tracks[0].clips[0].sourcePath=again.getChildFile("Audio/missing.wav").getFullPathName().toStdString();
+        const auto missingFile=again.getChildFile("Missing.idwproj");
+        require(saveProjectSession(missingPath,missingFile) && loadSession(missingFile,savedMixed) &&
+                savedMixed.tracks[0].clips[0].sourcePath=="Audio/missing.wav","missing internal reference was lost");
+        const auto elsewhere=root.getChildFile("SaveAs/Session.idwproj");
+        require(elsewhere.getParentDirectory().createDirectory().wasOk() && saveProjectSession(movedAgain,elsewhere) &&
+                loadSession(elsewhere,savedMixed) && savedMixed.tracks[0].clips[0].sourcePath==movedAgain.tracks[0].clips[0].sourcePath,
+                "Save As guessed or moved externally located media");
         if(argc==1)require(root.deleteRecursively(),"fixture cleanup");
         else std::cout<<"Synthetic portable evidence: "<<root.getFullPathName()<<'\n';
-        std::cout<<"PASS: unique-source copies, basename separation, relocation, exact mix and rollback protection\n";
+        std::cout<<"PASS: portable export/resave/repeated relocation, exact mix, external links and failure protection\n";
         return 0;
     } catch(const std::exception& e) {std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}
 }

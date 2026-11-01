@@ -2618,7 +2618,7 @@ private:
                 const auto file=picker.getResult();
                 if(file==juce::File{} || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
                 const auto destination=file.withFileExtension(".idwproj");
-                if(!idw::daw::saveSession(session,destination))
+                if(!idw::daw::saveProjectSession(session,destination))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save failed","Could not write IDW project.");
                 else{
                     currentProject=destination;

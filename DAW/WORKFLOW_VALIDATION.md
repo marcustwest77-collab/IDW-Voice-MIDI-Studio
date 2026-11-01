@@ -272,3 +272,28 @@ the former per-clip copying would use 220,387,048 bytes. Its project uses relati
 audio references and the original project bytes are unchanged. User audio was
 copied locally only; no recordings were uploaded. This is a portable copy on the
 same computer, not an independently stored disaster-recovery backup.
+
+## Portable copies stay portable after saving
+
+The Workstation save handler now stores references to media inside the chosen
+project directory as relative paths, while retaining absolute references to
+external media. It saves a cloned session, so live reader paths and the
+in-memory project remain unchanged. Missing internal references are preserved;
+unresolved live relative paths fail without overwriting the previous project.
+Save As into a different directory preserves links to assets outside that
+directory. Media files are never automatically moved by Save.
+
+The portable-project regression first reproduced the old behavior: opening and
+resaving a portable project wrote absolute references, defeating a later move.
+It now saves, moves and reopens the package a second time and checks every stereo
+mix sample. Additional checks cover unchanged live paths, mixed internal/external
+references, missing internal media, unknown relative bases and Save As behavior.
+
+The actual Session9 portable folder was additionally compared with the source
+project: all metadata matches after path normalization, and every source WAV
+SHA-256 matches its packaged copy. A local ZIP keeps the project and Audio folder
+together. All five ZIP entries passed CRC verification, and each content entry
+matched the SHA-256 manifest. The ZIP is 61,458,533 bytes with SHA-256
+`2fe720230a0e65fbabcb80063b907362735e0e8a77605f728bb980d0db5f556a`.
+No audio was uploaded; originals and installed beta remain unchanged. Physical
+listening of the moved/resaved real package is still a separate user check.
