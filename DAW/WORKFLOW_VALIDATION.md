@@ -120,15 +120,15 @@ selected AudioBox USB 96 ASIO with headphones and subsequently confirmed:
 - Split/move editing and undo/redo work.
 - Save/reopen retains edits and correct playback.
 - Exported WAV sounds correct in a separate audio player.
-- The requested longer recording check "works good" (user report); its exact
-  physical duration remains unverified.
+- The longer recording plays correctly (user report). A read-only header check
+  of the user-provided `IDW Session9.idwproj` identified `Vocal Take36.wav`:
+  16,475,104 mono frames at 44.1 kHz, 24-bit, or 373.585 seconds (6:13.585).
+  The project preserves this source as four split clips alongside the earlier take.
 
-This is acceptance on one user's setup. A read-only header check found the three
-newest visible takes are 49.688, 33.260 and 40.510 seconds long; the exact extended
-physical test take has not been identified. Those files cannot verify five
-minutes of physical recording. Hardware dropout counters, latency and sample
-continuity were not measured by the agent. This is not a five-minute or multi-hour
-physical stability qualification, or other-device qualification.
+This supersedes the earlier duration-unverified result from inspecting shorter
+takes. It verifies a recording beyond five minutes and user-reported clean playback
+on one setup. Hardware dropout counters, latency and sample continuity were not
+measured by the agent. It is not multi-hour stability or other-device qualification.
 The installed beta was not replaced. All five PR #211 CI checks passed,
 including all 48 Windows workstation CTest cases.
 
@@ -171,3 +171,27 @@ the generated samples. Both runs reported zero dropped/rejected blocks, missing
 inputs and interruptions. All 24 snapshot/recovery/export cycles and both odd-sized
 recorder restarts passed. Generated evidence was retained in an isolated workspace
 folder; no user audio was modified or uploaded.
+
+## Simultaneous capture and software overdub regression
+
+`IDWDAWMultitrackOverdubTests` captures two mono takes at 44.1 kHz and eight
+at 48 kHz, using reversed input assignments and distinct generated samples.
+Both cases run two seconds of clock-paced callbacks while the production WAV
+reader/transport and `readClipWindow` play a backing file. Monitoring stays off;
+the isolated capture callback must neither erase, double nor contaminate playback.
+The two-take case also includes an unselected input with a distinct signal.
+
+Every sample and exact duration of every captured mono file is verified. The
+test saves/reopens a project containing the backing and takes, with take input
+assignments, explicit half-second software placement, gain and hard pans. A
+stereo WAV bounce is checked sample by sample, including backing-only lead/tail,
+take offsets and channel separation. The original backing WAV must remain
+byte-identical. CI builds/runs this test on Windows/macOS with a 60-second timeout.
+
+Run `IDWDAWMultitrackOverdubTests NEW-EVIDENCE-DIRECTORY` to retain generated
+takes, projects and mixes; the directory must not exist. Without an argument,
+the test cleans up its own temporary output. This is a short device-free engine
+integration check, not physical eight-input recording or hardware overdub-latency
+calibration. Partial per-writer disk failures and long multitrack sessions are
+not covered by this healthy-path test. Physical overdub playback is a separate
+user check on the working AudioBox ASIO build.
