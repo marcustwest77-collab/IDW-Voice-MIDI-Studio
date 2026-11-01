@@ -376,3 +376,32 @@ The prior MIDI edit-history regression also passes with the new ruler offset.
 Both local regressions compile under MSVC /W4 /WX. The new test is registered in
 CTest and Windows/macOS foundation CI. Physical wheel/trackpad interaction
 remains a separate user check; the installed beta has not been changed.
+
+## Recall the project master mix
+
+Projects now save master volume, low/high tone and output ceiling in an optional
+`masterMix` block in the v1 project format. Opening or recovering a project
+restores both its sliders and live audio parameters. Older projects without
+the block load the original defaults (gain 1, tone 0 dB, ceiling -1 dB), instead
+of carrying over the previously opened project's master settings. These older
+files never contained master settings, so their earlier slider positions cannot
+be reconstructed. Older application versions do not retain this new block when
+resaving; use a supporting test build to preserve the recalled settings.
+
+Master changes participate in recovery dirty detection and portable export.
+WAV export now consumes the master settings from the captured session snapshot,
+matching recalled playback parameters. The explicit-parameter audio renderer
+remains available for reference mixes. Master ranges match the existing UI:
+gain 0–1.5, tone -12–12 dB and ceiling -12–-0.1 dB. A present block must be
+complete and numeric; malformed or out-of-range values are rejected before
+replacing live state, saved projects or output WAVs.
+
+MasterMixRecallTests checks actual disk save/reopen, identical mixed audio/MIDI
+WAV samples before and after reopening, explicit master processing parity,
+silent master gain, output ceiling, master-only recovery changes, portable
+settings, legacy defaults, numeric boundaries, 46 invalid cases and unchanged
+saved/source files. It passes under strict local MSVC /W4 /WX. Rebuilt save,
+persistence, recovery, portable-project and strict-integer regressions also pass.
+The new target is registered in CTest and Windows/macOS foundation CI. Full
+application build and physical slider/playback recall remain pending validation.
+Installed beta, working PR #211 application and user projects are unchanged.

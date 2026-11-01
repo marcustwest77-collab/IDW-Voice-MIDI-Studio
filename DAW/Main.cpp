@@ -790,7 +790,7 @@ public:
         masterGain.setValue(1.0);
         masterGain.setTextBoxStyle(juce::Slider::TextBoxRight,false,55,25);
         addAndMakeVisible(masterGain);
-        masterGain.onValueChange=[this]{masterLevel.store((float)masterGain.getValue(),std::memory_order_relaxed);};
+        masterGain.onValueChange=[this]{session.masterMix.gain=masterGain.getValue();masterLevel.store((float)session.masterMix.gain,std::memory_order_relaxed);};
         clearClips.setButtonText("RESET CLIP");addAndMakeVisible(clearClips);
         clearClips.onClick=[this]{peakClipLeft.store(false);peakClipRight.store(false);repaint();};
         eqLabel.setText("MASTER TONE",juce::dontSendNotification);addAndMakeVisible(eqLabel);
@@ -800,13 +800,13 @@ public:
             slider->setTextBoxStyle(juce::Slider::TextBoxRight,false,56,24);
             addAndMakeVisible(*slider);
         }
-        lowEq.onValueChange=[this]{lowDb.store((float)lowEq.getValue());};
-        highEq.onValueChange=[this]{highDb.store((float)highEq.getValue());};
+        lowEq.onValueChange=[this]{session.masterMix.lowDb=lowEq.getValue();lowDb.store((float)session.masterMix.lowDb);};
+        highEq.onValueChange=[this]{session.masterMix.highDb=highEq.getValue();highDb.store((float)session.masterMix.highDb);};
         limitLabel.setText("OUTPUT CEILING",juce::dontSendNotification);addAndMakeVisible(limitLabel);
         ceilingControl.setRange(-12.0,-0.1,0.1);ceilingControl.setValue(-1.0);
         ceilingControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,60,24);
         addAndMakeVisible(ceilingControl);
-        ceilingControl.onValueChange=[this]{ceilingDb.store((float)ceilingControl.getValue(),std::memory_order_relaxed);};
+        ceilingControl.onValueChange=[this]{session.masterMix.ceilingDb=ceilingControl.getValue();ceilingDb.store((float)session.masterMix.ceilingDb,std::memory_order_relaxed);};
         refreshMixer();
         recovery.begin(session);
         recoveryTimer.startTimer(30000);
@@ -1599,6 +1599,17 @@ private:
             for(const auto& clip:track.clips)
                 end=std::max(end,clip.startBeat+clip.lengthBeats);
         return end;
+    }
+    void restoreMasterMix(){
+        const auto& m=session.masterMix;
+        masterGain.setValue(m.gain,juce::dontSendNotification);
+        ceilingControl.setValue(m.ceilingDb,juce::dontSendNotification);
+        lowEq.setValue(m.lowDb,juce::dontSendNotification);
+        highEq.setValue(m.highDb,juce::dontSendNotification);
+        masterLevel.store((float)m.gain,std::memory_order_relaxed);
+        ceilingDb.store((float)m.ceilingDb,std::memory_order_relaxed);
+        lowDb.store((float)m.lowDb,std::memory_order_relaxed);
+        highDb.store((float)m.highDb,std::memory_order_relaxed);
     }
     void clampTimelineScroll(){
         timelineScrollBeats=idw::daw::timelineClampScroll(
@@ -2536,6 +2547,7 @@ private:
         for(auto& slot:sources){slot->transport.stop();slot->transport.setSource(nullptr);}
         sources.clear();
         session=std::move(restored);
+        restoreMasterMix();
         currentProject=origin;
         recovery.begin(session,fromRecovery);
         // Undo snapshots refer to the prior project; never restore them into a new one.
@@ -2577,7 +2589,6 @@ private:
                 output=output.withFileExtension(".wav");
                 if(exportThread.joinable())exportThread.join();
                 const auto snapshot=session;
-                const float gain=masterLevel.load(),ceiling=ceilingDb.load(),bass=lowDb.load(),treble=highDb.load();
                 bounce.setEnabled(false);
                 cancelBounce.setEnabled(true);
                 exportCancel.store(false);
@@ -2585,9 +2596,9 @@ private:
                 exportRunning.store(true);
                 startTimerHz(10);
                 const juce::Component::SafePointer<Workstation> safeThis(this);
-                exportThread=std::thread([this,safeThis,snapshot,output,gain,ceiling,bass,treble]{
+                exportThread=std::thread([this,safeThis,snapshot,output]{
                     juce::String error;
-                    const bool ok=idw::daw::renderSessionWav(snapshot,output,error,44100,gain,ceiling,bass,treble,&exportProgress,&exportCancel);
+                    const bool ok=idw::daw::renderProjectWav(snapshot,output,error,44100,&exportProgress,&exportCancel);
                     juce::MessageManager::callAsync([safeThis,ok,error]{
                         if(!safeThis)return;
                         safeThis->exportRunning.store(false);
