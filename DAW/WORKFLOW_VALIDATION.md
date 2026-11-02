@@ -550,3 +550,39 @@ navigation. The new target is registered in CTest and Windows/macOS foundation
 CI. Full app builds and physical button/shortcut delivery remain pending. The
 installed beta, separate #223 test app and user projects/audio are unchanged;
 the AudioBox listening check is still unconfirmed.
+
+## Remember the chosen audio interface
+
+The Workstation now loads JUCE audio-device state before opening audio, and saves
+explicitly chosen state after idle device changes and before shutdown. Preferences
+live in the per-user application-data folder at
+`IDW Neo Studio/AudioDeviceSettings.xml`, separately from projects, recovery and
+audio files. They include driver type, input/output names, sample rate, buffer
+size and active-channel masks. This is intended to retain an AudioBox ASIO setup
+between launches instead of asking the user to select it each time.
+
+JUCE's saved-state/default-on-failure behavior is used through
+`setAudioChannels(8, 2, savedState)`. If the preferred interface cannot open,
+JUCE may fall back to an available default; the UI still shows the actual device
+and recording remains disarmed. A null state (no explicit choice) does not erase
+the saved preference. The store writes JUCE's last chosen state rather than
+reconstructing preferences from an incidental fallback. The relevant contract
+and XML format were checked against the pinned JUCE 9.0.2 manager source.
+
+Preference reads are bounded to 64 KiB and reject malformed roots, invalid
+numbers/masks, excessive XML structure and DTD/entity declarations before parsing.
+Missing or bad preferences use the existing default startup path. Saves validate,
+stage, flush and verify exact bytes and parsed XML before replacing the previous
+file; unchanged state avoids a rewrite. Failure leaves current audio active and
+reports a local status/log message. No file I/O is added to audio callbacks.
+
+AudioDevicePreferencesTests checks exact ASIO-style state recall (including names,
+rate, buffer, masks and MIDI metadata), a fresh store instance, null/default
+preservation, unchanged-state writes, failed/partial/same-size-wrong writes and
+exceptions, bad XML/numeric/mask data, entity/depth/size limits, disabled inputs,
+and blocked destinations. Strict local MSVC /W4 /WX compilation and this test pass;
+the rebuilt callback-isolation regression also passes. Tests never enumerate or
+open drivers. The new target is registered in CTest and Windows/macOS foundation
+CI. Full application builds, actual AudioBox restart recall and hardware fallback
+remain pending physical validation. Installed beta, separate #223 test app and
+user projects/audio are unchanged.
