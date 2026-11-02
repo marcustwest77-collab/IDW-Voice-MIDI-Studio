@@ -23,11 +23,16 @@ public:
         velocity.setWantsKeyboardFocus(false); // Keep piano-roll undo after a thumb drag; text entry owns its own focus.
         velocity.setScrollWheelEnabled(false);velocity.setTooltip("Select a note, then set its velocity (1–127). Dragging is one undo step.");
         addAndMakeVisible(velocity);velocity.setEnabled(false);
+        duplicate.setButtonText("DUPLICATE NOTE");duplicate.setWantsKeyboardFocus(false);
+        duplicate.setTooltip("Repeat the selected note immediately after itself (Ctrl/Cmd+D).");
+        addAndMakeVisible(duplicate);duplicate.setEnabled(false);
+        duplicate.onClick=[this]{duplicateSelection();};
         velocity.onDragStart=[this]{
             finishGesture();
             if(!editingAllowed() || !selectionMatches())return;
             gestureTrack=trackIndex;gestureBefore=selectedSnapshot;gestureExpected=selectedSnapshot;
             gestureTrackName=selectedTrackName;dragging=true;velocityDragging=true;
+            refreshVelocity();
         };
         velocity.onValueChange=[this]{setSelectionVelocity((int)velocity.getValue());};
         velocity.onDragEnd=[this]{finishGesture();};
@@ -37,7 +42,9 @@ public:
     void resized() override {
         finishGesture();constrainView();
         velocityLabel.setBounds(4,getHeight()-28,104,24);
-        velocity.setBounds(110,getHeight()-28,std::max(1,getWidth()-114),24);
+        const bool showDuplicate=getWidth()>=480;duplicate.setVisible(showDuplicate);
+        duplicate.setBounds(getWidth()-134,getHeight()-28,130,24);
+        velocity.setBounds(110,getHeight()-28,std::max(1,getWidth()-114-(showDuplicate?136:0)),24);
     }
     void visibilityChanged() override {if(!isVisible())finishGesture();}
     bool restoreHistory(bool undo){
@@ -69,6 +76,26 @@ public:
         selectedValid=false;refreshVelocity();
         if(removed){history.record(*session,trackIndex,before);if(onChanged)onChanged();repaint();}
         return removed;
+    }
+    bool duplicateSelection(){
+        if(dragging || !editingAllowed()){refreshVelocity();return false;}
+        if(!selectionMatches()){
+            if(selectedValid && onHistoryConflict)onHistoryConflict();
+            selectedValid=false;refreshVelocity();return false;
+        }
+        const auto before=session->tracks[trackIndex].notes;
+        if(!session->duplicateMidiNote(trackIndex,selectedIndex))return false;
+        history.record(*session,trackIndex,before);
+        selectedIndex=session->tracks[trackIndex].notes.size()-1;selectedValid=true;
+        rememberSelection();
+        // Keep the newly selected repeat visible without changing any notes.
+        const auto& n=selectedSnapshot.back();
+        const double visible=gridWidth()/view.pixelsPerBeat();
+        if(n.startBeat<view.firstBeat)view.firstBeat=n.startBeat;
+        else if(n.startBeat+std::min(n.lengthBeats,visible)>view.firstBeat+visible)
+            view.firstBeat=n.startBeat+std::min(n.lengthBeats,visible)-visible;
+        constrainView();refreshVelocity();grabKeyboardFocus();
+        if(onChanged)onChanged();repaint();return true;
     }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff141b24));
@@ -181,6 +208,9 @@ public:
             restoreHistory(undo);
             return true;
         }
+        if(mods.isCommandDown() && !mods.isAltDown() && !mods.isShiftDown() && key.getKeyCode()=='D'){
+            duplicateSelection();return true;
+        }
         if(!selectedValid || mods.isAnyModifierKeyDown())return false;
         if(key.getKeyCode()!=juce::KeyPress::deleteKey && key.getKeyCode()!=juce::KeyPress::backspaceKey)return false;
         return deleteSelection();
@@ -188,6 +218,7 @@ public:
 private:
     juce::Label velocityLabel;
     juce::Slider velocity;
+    juce::TextButton duplicate;
     bool velocityDragging=false;
     std::vector<idw::daw::MidiNote> selectedSnapshot;
     std::string selectedTrackName;
@@ -202,6 +233,7 @@ private:
     void refreshVelocity(){
         const bool valid=selectionMatches();
         velocity.setEnabled(valid && editingAllowed());
+        duplicate.setEnabled(valid && editingAllowed() && !dragging);
         velocity.setValue(valid?session->tracks[trackIndex].notes[selectedIndex].velocity:100,juce::dontSendNotification);
     }
     idw::daw::PianoRollViewport view;

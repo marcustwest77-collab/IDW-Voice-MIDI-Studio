@@ -465,3 +465,31 @@ footer layout; this is not a live application screenshot or physical interaction
 test. The target is registered in CTest and Windows/macOS foundation CI.
 Fresh application builds and physical inspector/shortcut testing remain pending.
 Installed beta, working PR #211 app and user audio/projects remain unchanged.
+
+## Repeat a selected MIDI note
+
+The piano roll now offers DUPLICATE NOTE and Ctrl/Cmd+D. It appends a copy
+immediately after the selected note with the same pitch, length and velocity,
+then selects the copy so repeated duplication builds a sequence. Each repeat is
+one undo step. The view follows a copy extending beyond the right edge, without
+altering the musical timing. The button shares the velocity footer and hides
+in narrow editors; the keyboard operation remains available with editor focus.
+
+The operation refuses busy/dragging states, stale selections, wrong/missing
+tracks, invalid note metadata, floating-point timing overflow or collapsed
+duration, and the 100,000-note track limit. Failed operations do not add history
+or change the source note list. Undo preserves unrelated audio, tempo, mixer and
+master work. The copied notes use the existing persistence, synth and MIDI-file
+export paths.
+
+MidiDuplicateTests exercises the production button/selection operation, repeat
+selection, undo/redo, busy/stale/drag guards, capacity/overflow checks, narrow
+layout, new-note visibility via the production painter, project save/reopen,
+actual exported MIDI timing/velocity and every repeated note's WAV samples.
+Strict MSVC /W4 /WX compilation and this regression pass. Rebuilt velocity,
+MIDI-history and piano-navigation regressions are also checked. A software-rendered
+preview was inspected for footer layout. The new test is registered in CTest
+and Windows/macOS foundation CI. Full application builds and physical duplicate
+button/shortcut testing remain pending. The open PR #223 test app, installed
+beta and user projects/audio have not been replaced or modified; the pending
+AudioBox listening check is still unconfirmed.
