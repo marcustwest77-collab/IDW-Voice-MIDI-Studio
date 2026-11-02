@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 namespace idw::daw {
@@ -218,6 +219,19 @@ public:
            !std::isfinite(copy.lengthBeats) || copy.lengthBeats<=0 ||
            !std::isfinite(next) || !std::isfinite(end) || next<=copy.startBeat || end<=next)return false;
         copy.startBeat=next;return addMidiNote(trackIndex,copy);
+    }
+    bool nudgeMidiNote(size_t trackIndex,size_t noteIndex,double beats,int semitones){
+        if(trackIndex>=tracks.size() || tracks[trackIndex].type!=TrackType::midi ||
+           noteIndex>=tracks[trackIndex].notes.size() || !std::isfinite(beats))return false;
+        const auto& n=tracks[trackIndex].notes[noteIndex];
+        const auto pitch=(std::int64_t)n.pitch+semitones;
+        const double start=std::max(0.0,n.startBeat+beats),end=start+n.lengthBeats;
+        if(n.pitch<0 || n.pitch>127 || n.velocity<1 || n.velocity>127 ||
+           !std::isfinite(n.startBeat) || n.startBeat<0 ||
+           !std::isfinite(n.lengthBeats) || n.lengthBeats<=0 ||
+           !std::isfinite(start) || !std::isfinite(end) || end<=start || pitch<0 || pitch>127 ||
+           (start==n.startBeat && pitch==n.pitch))return false;
+        return moveMidiNote(trackIndex,noteIndex,start,(int)pitch);
     }
     bool moveMidiNote(size_t trackIndex,size_t noteIndex,double startBeat,int pitch) {
         if(trackIndex>=tracks.size() || noteIndex>=tracks[trackIndex].notes.size() ||

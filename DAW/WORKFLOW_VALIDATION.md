@@ -493,3 +493,32 @@ and Windows/macOS foundation CI. Full application builds and physical duplicate
 button/shortcut testing remain pending. The open PR #223 test app, installed
 beta and user projects/audio have not been replaced or modified; the pending
 AudioBox listening check is still unconfirmed.
+
+## Nudge selected MIDI notes with the keyboard
+
+With the piano roll itself focused, Left/Right moves the selected note by a
+quarter beat and Up/Down transposes one semitone. Shift changes the steps to a
+whole beat or octave. Ctrl/Cmd/Alt+arrow combinations are left to other controls;
+text fields keep their own keys. Each successful move is one MIDI undo step,
+retains selection, and preserves note length and velocity. Time moves stop at
+beat zero; pitch moves requiring values outside 0–127 are refused as a whole,
+so an octave command never silently applies a partial octave.
+
+The view follows the selected note in both time and pitch. The same reveal
+helper now serves note duplication. Busy/dragging states and stale selections
+cannot mutate notes. Invalid targets, nonfinite timing, overflow, collapsed
+duration and pitch-integer overflow are refused. No-op/boundary attempts do not
+clear redo. Undo preserves unrelated audio, tempo, mixer and master work.
+
+MidiNudgeTests checks the exact shared arrow decoder and production selected-note
+operation, all simple/Shift mappings, modifier exclusions, undo/redo, no-op redo
+preservation, unfocused/busy/note-drag/velocity-drag/conflict guards, timing and
+pitch bounds, and note visibility through the production painter. Disk
+save/reopen and actual exported MIDI events retain the edited note. The rendered
+WAV is checked for its shifted onset and against an independent C-sharp-5 sine
+oracle. Strict local MSVC /W4 /WX compilation and this regression pass.
+Neighboring duplication, velocity, history and navigation regressions are
+rebuilt as well. The new target is registered in CTest and Windows/macOS
+foundation CI. Full application builds and physical shortcut delivery remain
+pending; installed beta, the separate #223 test app and user projects/audio are
+unchanged. The AudioBox listening check remains unconfirmed.
