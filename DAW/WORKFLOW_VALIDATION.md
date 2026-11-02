@@ -405,3 +405,36 @@ persistence, recovery, portable-project and strict-integer regressions also pass
 The new target is registered in CTest and Windows/macOS foundation CI. Full
 application build and physical slider/playback recall remain pending validation.
 Installed beta, working PR #211 application and user projects are unchanged.
+
+## Standard MIDI arrangement export
+
+OPEN / RECOVER > Export audible MIDI tracks writes a Standard MIDI File (.mid),
+type 1 at 960 ticks per quarter note. A conductor track stores tempo (rounded to
+the nearest microsecond per quarter) and meter; each audible MIDI track retains
+its name, note pitches, velocities and timing rounded to the nearest tick.
+Note-offs precede same-tick retriggers. Muted tracks and tracks excluded by solo
+are omitted; an audio-only solo therefore leaves no MIDI notes to export.
+Empty tracks and audio clips are omitted. This transfers notes, not audio,
+built-in synth patches, master processing or external instrument assignments.
+Choose instruments in the receiving DAW; a physical import into another DAW
+has not yet been demonstrated.
+
+Export supports up to 15 audible MIDI tracks on distinct melodic channels,
+skipping percussion channel 10. It rejects additional tracks rather than
+silently reusing channels. Invalid notes, notes rounding to zero ticks, durations
+past four hours and meter denominators not expressible by SMF (not powers of
+two) fail with a readable error. The project and existing MIDI files remain
+unchanged. Export runs on the existing worker, reports progress, and observes
+CANCEL EXPORT before publishing. A staged file is flushed, read back without
+inventing missing note-offs, and checked event-for-event before publication.
+
+StandardMidiExportTests passes strict local MSVC /W4 /WX compilation. It verifies
+both JUCE readback and an independent binary decoder for SMF chunks, variable
+length deltas, running status, metadata and the complete expected note event
+sequence. Coverage includes fractional timing, velocities, Unicode track names,
+tempo/meter, same-tick ordering, project save/reopen, mute/solo, all 15 separate
+melodic channels, the four-hour tick boundary, malformed data, cancellation,
+failed output creation, unchanged source session and existing-file protection.
+The target is registered in CTest and Windows/macOS foundation CI. Fresh full
+application builds and external-DAW import remain pending. No installed beta,
+working PR #211 application or user audio/project was changed.

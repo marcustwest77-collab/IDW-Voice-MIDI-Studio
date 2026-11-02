@@ -22,6 +22,7 @@
 #include "AudioRelink.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
+#include "StandardMidiExport.h"
 #include "IDWConnectPanel.h"
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
@@ -2465,6 +2466,7 @@ private:
         const auto copies=recovery.copies();
         juce::PopupMenu menu;menu.addItem(1,"Open saved project...");
         menu.addItem(3,"Relink missing audio...");
+        menu.addItem(4,"Export audible MIDI tracks...");
         juce::PopupMenu recoverMenu;
         for(size_t i=0;i<copies.size() && i<20;++i){
             idw::daw::Session ignored;juce::File origin;
@@ -2479,6 +2481,7 @@ private:
             if(safe==nullptr || !safe->recoveryIdle())return;
             if(result==1){safe->openProjectFile();return;}
             if(result==3){safe->showMissingAudioMenu();return;}
+            if(result==4){safe->exportMidiFile();return;}
             if(result==2){
                 if(safe->recovery.directory().createDirectory().wasOk())
                     safe->recovery.directory().revealToUser();
@@ -2608,6 +2611,35 @@ private:
                         safeThis->repaint();
                         juce::AlertWindow::showMessageBoxAsync(ok?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
                             ok?"WAV export complete":"WAV bounce unavailable",ok?"Stereo WAV written successfully.":error);
+                    });
+                });
+            });
+    }
+    void exportMidiFile(){
+        if(!recoveryIdle())return;
+        projectChooser=std::make_unique<juce::FileChooser>("Export audible MIDI tracks",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW Arrangement.mid"),"*.mid");
+        projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+            [safe=juce::Component::SafePointer<Workstation>(this)](const juce::FileChooser& picker){
+                if(safe==nullptr || !safe->recoveryIdle() || picker.getResult()==juce::File{})return;
+                const auto output=picker.getResult().withFileExtension(".mid");
+                const auto snapshot=safe->session;
+                if(safe->exportThread.joinable())safe->exportThread.join();
+                safe->bounce.setEnabled(false);safe->cancelBounce.setEnabled(true);
+                safe->exportCancel.store(false);safe->exportProgress.store(0);safe->exportRunning.store(true);
+                safe->startTimerHz(10);
+                auto* owner=safe.getComponent();
+                safe->exportThread=std::thread([owner,safe,snapshot,output]{
+                    juce::String error;bool ok=false;
+                    try{ok=idw::daw::exportSessionMidi(snapshot,output,error,&owner->exportProgress,&owner->exportCancel);}
+                    catch(...){error="Could not complete MIDI export.";}
+                    juce::MessageManager::callAsync([safe,ok,error]{
+                        if(safe==nullptr)return;
+                        safe->exportRunning.store(false);safe->bounce.setEnabled(true);safe->cancelBounce.setEnabled(false);
+                        if(!safe->playing.load())safe->stopTimer();safe->repaint();
+                        juce::AlertWindow::showMessageBoxAsync(ok?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
+                            ok?"MIDI export complete":"MIDI export unavailable",
+                            ok?"MIDI tracks exported. Open the file in another DAW and choose instruments for its tracks.":error);
                     });
                 });
             });
