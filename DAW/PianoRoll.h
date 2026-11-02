@@ -28,6 +28,14 @@ public:
         duplicate.setTooltip("Repeat the selected note immediately after itself (Ctrl/Cmd+D).");
         addAndMakeVisible(duplicate);duplicate.setEnabled(false);
         duplicate.onClick=[this]{duplicateSelection();};
+        halfLength.setButtonText("HALF LENGTH");doubleLength.setButtonText("2x LENGTH");
+        for(auto* button:{&halfLength,&doubleLength}){
+            button->setWantsKeyboardFocus(false);addAndMakeVisible(*button);button->setEnabled(false);
+        }
+        halfLength.setTooltip("Halve selected note duration ([). Keeps start, pitch and velocity.");
+        doubleLength.setTooltip("Double selected note duration (]). Keeps start, pitch and velocity.");
+        halfLength.onClick=[this]{scaleSelectionLength(0.5);};
+        doubleLength.onClick=[this]{scaleSelectionLength(2.0);};
         velocity.onDragStart=[this]{
             finishGesture();
             if(!editingAllowed() || !selectionMatches())return;
@@ -43,9 +51,13 @@ public:
     void resized() override {
         finishGesture();constrainView();
         velocityLabel.setBounds(4,getHeight()-28,104,24);
-        const bool showDuplicate=getWidth()>=480;duplicate.setVisible(showDuplicate);
-        duplicate.setBounds(getWidth()-134,getHeight()-28,130,24);
-        velocity.setBounds(110,getHeight()-28,std::max(1,getWidth()-114-(showDuplicate?136:0)),24);
+        const bool showDuplicate=getWidth()>=480,showLength=getWidth()>=760;
+        duplicate.setVisible(showDuplicate);halfLength.setVisible(showLength);doubleLength.setVisible(showLength);
+        int right=getWidth()-4;
+        duplicate.setBounds(right-130,getHeight()-28,130,24);if(showDuplicate)right-=136;
+        doubleLength.setBounds(right-96,getHeight()-28,96,24);
+        halfLength.setBounds(right-202,getHeight()-28,100,24);if(showLength)right-=208;
+        velocity.setBounds(110,getHeight()-28,std::max(1,right-110),24);
     }
     void visibilityChanged() override {if(!isVisible())finishGesture();}
     bool restoreHistory(bool undo){
@@ -104,6 +116,18 @@ public:
         revealSelection();refreshVelocity();
         if(onChanged)onChanged();repaint();return true;
     }
+    bool scaleSelectionLength(double factor){
+        if(dragging || !editingAllowed())return false;
+        if(!selectionMatches()){
+            if(selectedValid && onHistoryConflict)onHistoryConflict();
+            selectedValid=false;refreshVelocity();return false;
+        }
+        const auto before=session->tracks[trackIndex].notes;
+        if(!session->scaleMidiNoteLength(trackIndex,selectedIndex,factor))return false;
+        history.record(*session,trackIndex,before);rememberSelection();
+        revealSelection();refreshVelocity();grabKeyboardFocus();
+        if(onChanged)onChanged();repaint();return true;
+    }
     void paint(juce::Graphics& g) override {
         g.fillAll(juce::Colour(0xff141b24));
         const auto bounds=getLocalBounds();
@@ -121,7 +145,7 @@ public:
             if(pitch%12==0)g.drawText("C"+juce::String(pitch/12-1),2,y,48,rowHeight,juce::Justification::centredLeft);
         }
         g.setColour(juce::Colours::lightgrey);g.setFont(juce::Font(juce::FontOptions(10.0f)));
-        g.drawText("Arrows: move | Shift: beat/octave | Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",2,0,bounds.getWidth()-4,12,juce::Justification::centredLeft);
+        g.drawText("Arrows: move | Shift: beat/octave | [ ]: length | Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",2,0,bounds.getWidth()-4,12,juce::Justification::centredLeft);
         const double first=std::ceil(view.firstBeat);
         const int lines=(int)std::ceil(gridWidth()/view.pixelsPerBeat())+1;
         for(int i=0;i<lines;++i){
@@ -222,6 +246,9 @@ public:
             nudgeSelection(nudge->beats,nudge->semitones);return true;
         }
         if(!selectedValid || mods.isAnyModifierKeyDown())return false;
+        if(key.getKeyCode()=='[' || key.getKeyCode()==']'){
+            scaleSelectionLength(key.getKeyCode()=='['?0.5:2.0);return true;
+        }
         if(key.getKeyCode()!=juce::KeyPress::deleteKey && key.getKeyCode()!=juce::KeyPress::backspaceKey)return false;
         return deleteSelection();
     }
@@ -229,6 +256,7 @@ private:
     juce::Label velocityLabel;
     juce::Slider velocity;
     juce::TextButton duplicate;
+    juce::TextButton halfLength,doubleLength;
     bool velocityDragging=false;
     std::vector<idw::daw::MidiNote> selectedSnapshot;
     std::string selectedTrackName;
@@ -256,6 +284,8 @@ private:
         const bool valid=selectionMatches();
         velocity.setEnabled(valid && editingAllowed());
         duplicate.setEnabled(valid && editingAllowed() && !dragging);
+        halfLength.setEnabled(valid && editingAllowed() && !dragging);
+        doubleLength.setEnabled(valid && editingAllowed() && !dragging);
         velocity.setValue(valid?session->tracks[trackIndex].notes[selectedIndex].velocity:100,juce::dontSendNotification);
     }
     idw::daw::PianoRollViewport view;
