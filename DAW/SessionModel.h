@@ -209,6 +209,16 @@ public:
            noteIndex>=tracks[trackIndex].notes.size() || velocity<1 || velocity>127)return false;
         tracks[trackIndex].notes[noteIndex].velocity=velocity;return true;
     }
+    bool duplicateMidiNote(size_t trackIndex,size_t noteIndex){
+        if(trackIndex>=tracks.size() || tracks[trackIndex].type!=TrackType::midi ||
+           noteIndex>=tracks[trackIndex].notes.size())return false;
+        auto copy=tracks[trackIndex].notes[noteIndex];
+        const double next=copy.startBeat+copy.lengthBeats,end=next+copy.lengthBeats;
+        if(!std::isfinite(copy.startBeat) || copy.startBeat<0 ||
+           !std::isfinite(copy.lengthBeats) || copy.lengthBeats<=0 ||
+           !std::isfinite(next) || !std::isfinite(end) || next<=copy.startBeat || end<=next)return false;
+        copy.startBeat=next;return addMidiNote(trackIndex,copy);
+    }
     bool moveMidiNote(size_t trackIndex,size_t noteIndex,double startBeat,int pitch) {
         if(trackIndex>=tracks.size() || noteIndex>=tracks[trackIndex].notes.size() ||
            !std::isfinite(startBeat) || startBeat<0 || pitch<0 || pitch>127)return false;
