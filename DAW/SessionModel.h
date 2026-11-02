@@ -233,6 +233,16 @@ public:
            (start==n.startBeat && pitch==n.pitch))return false;
         return moveMidiNote(trackIndex,noteIndex,start,(int)pitch);
     }
+    bool scaleMidiNoteLength(size_t trackIndex,size_t noteIndex,double factor){
+        if(trackIndex>=tracks.size() || tracks[trackIndex].type!=TrackType::midi ||
+           noteIndex>=tracks[trackIndex].notes.size() || !std::isfinite(factor) || factor<=0)return false;
+        auto& n=tracks[trackIndex].notes[noteIndex];
+        const double length=n.lengthBeats*factor,end=n.startBeat+length;
+        if(n.pitch<0 || n.pitch>127 || n.velocity<1 || n.velocity>127 ||
+           !std::isfinite(n.startBeat) || n.startBeat<0 || !std::isfinite(n.lengthBeats) || n.lengthBeats<=0 ||
+           !std::isfinite(length) || length<=0 || !std::isfinite(end) || end<=n.startBeat || length==n.lengthBeats)return false;
+        n.lengthBeats=length;return true;
+    }
     bool moveMidiNote(size_t trackIndex,size_t noteIndex,double startBeat,int pitch) {
         if(trackIndex>=tracks.size() || noteIndex>=tracks[trackIndex].notes.size() ||
            !std::isfinite(startBeat) || startBeat<0 || pitch<0 || pitch>127)return false;

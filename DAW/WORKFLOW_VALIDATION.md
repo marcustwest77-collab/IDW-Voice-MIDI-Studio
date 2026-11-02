@@ -522,3 +522,31 @@ rebuilt as well. The new target is registered in CTest and Windows/macOS
 foundation CI. Full application builds and physical shortcut delivery remain
 pending; installed beta, the separate #223 test app and user projects/audio are
 unchanged. The AudioBox listening check remains unconfirmed.
+
+## Halve or double MIDI note duration
+
+Select a piano-roll note and use HALF LENGTH / 2x LENGTH, or the unmodified
+`[` / `]` keys with the editor focused. Each successful operation changes only
+duration, retains selection, and creates one undo step. Start, pitch and velocity
+remain unchanged. The view follows the resulting note endpoint. The buttons
+share the footer with velocity and duplication and hide below 760 pixels; the
+keyboard operation remains available. Text fields keep their own keys.
+
+The checked model operation refuses invalid targets, malformed note metadata,
+nonpositive/nonfinite factors, multiplication overflow/underflow, unrepresentable
+endpoints and no-ops. Busy states, note/velocity drags and stale selections are
+guarded. Failed/no-op operations preserve redo and notes. Undo preserves newer
+audio, tempo, mixer and master work. Very short positive durations still face
+the existing standard-MIDI export rule rejecting notes that round to zero ticks.
+
+MidiLengthTests exercises production buttons, repeat selection, undo/redo,
+no-op redo preservation, busy/unfocused/drag/stale/reset guards, numeric limits,
+footer layout and actual project save/reopen. It checks the exported MIDI note
+pair and verifies the shifted WAV endpoint/release while comparing unchanged
+pitch/velocity samples in the shared duration. The software-rendered footer
+preview was visually inspected. Strict local MSVC /W4 /WX builds and all six
+regressions pass: length, nudge, duplication, velocity, MIDI history and piano
+navigation. The new target is registered in CTest and Windows/macOS foundation
+CI. Full app builds and physical button/shortcut delivery remain pending. The
+installed beta, separate #223 test app and user projects/audio are unchanged;
+the AudioBox listening check is still unconfirmed.

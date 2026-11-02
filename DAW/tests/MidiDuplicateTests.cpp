@@ -23,7 +23,8 @@ int main(int argc,char** argv){try{
     bool allowed=true;int conflicts=0;editor.canEdit=[&]{return allowed;};editor.onHistoryConflict=[&]{++conflicts;};
     juce::TextButton* button=nullptr;
     for(int i=0;i<editor.getNumChildComponents();++i)
-        if(auto* found=dynamic_cast<juce::TextButton*>(editor.getChildComponent(i)))button=found;
+        if(auto* found=dynamic_cast<juce::TextButton*>(editor.getChildComponent(i)))
+            if(found->getButtonText()=="DUPLICATE NOTE")button=found;
     require(button && button->getButtonText()=="DUPLICATE NOTE" && !button->isEnabled(),"duplicate affordance");
     require(!editor.duplicateSelection(),"unselected duplication");select(editor);
     require(button->isEnabled(),"selected duplicate disabled");button->onClick();
