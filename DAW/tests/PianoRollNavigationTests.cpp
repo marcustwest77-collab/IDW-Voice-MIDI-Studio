@@ -63,7 +63,8 @@ int main(){try{
     require(editor.restoreHistory(true) && s.tracks[0].notes.back().lengthBeats==1,"navigation entered undo history");
     require(editor.restoreHistory(false) && s.tracks[0].notes.back().lengthBeats==2,"zoomed redo");
     wheel(editor,0,-100);
-    editor.mouseDown(mouse(editor,400,34*13+1));editor.mouseUp(mouse(editor,400,34*13+1));
+    const int bottomRow=PianoRollViewport::rows(480-PianoRollViewport::headerHeight-IDWPianoRoll::velocityFooterHeight)-1;
+    editor.mouseDown(mouse(editor,400,bottomRow*13+1));editor.mouseUp(mouse(editor,400,bottomRow*13+1));
     require(s.tracks[0].notes.back().pitch==0,"lowest pitch draw mapping");
     // Shrinking the viewport and scrolling to earlier time keeps notes unchanged.
     const auto edited=s.tracks[0].notes;
@@ -73,11 +74,11 @@ int main(){try{
         sameMidiNotes(edited,reopened.tracks[0].notes),"navigation affected persisted timing");
     // Exercise the real painter with offscreen and enormous finite positions.
     Session extreme;extreme.addTrack(TrackType::midi);
-    extreme.tracks[0].notes={{60,0,1000,100},{60,1e300,1e300,100},{127,0,1,100}};
+    extreme.tracks[0].notes={{72,0,1000,100},{60,1e300,1e300,100},{127,0,1,100}};
     editor.session=&extreme;editor.resetEditor();
     juce::Image image(juce::Image::ARGB,800,350,true,juce::SoftwareImageType{});
     {juce::Graphics graphics(image);editor.paint(graphics);}
-    require(image.getPixelAt(100,PianoRollViewport::headerHeight+24*13+4)==juce::Colours::orange,
+    require(image.getPixelAt(100,PianoRollViewport::headerHeight+12*13+4)==juce::Colours::orange,
             "clipped spanning note painter disagrees with hit geometry");
     std::cout<<"PASS piano-roll full pitch range, time scroll, anchored zoom, clipped bounds, actual draw/resize mapping, undo isolation and persistence\n";
     return 0;

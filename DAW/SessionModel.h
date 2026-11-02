@@ -204,6 +204,11 @@ public:
         notes.erase(notes.begin()+static_cast<std::ptrdiff_t>(noteIndex));
         return true;
     }
+    bool setMidiNoteVelocity(size_t trackIndex,size_t noteIndex,int velocity){
+        if(trackIndex>=tracks.size() || tracks[trackIndex].type!=TrackType::midi ||
+           noteIndex>=tracks[trackIndex].notes.size() || velocity<1 || velocity>127)return false;
+        tracks[trackIndex].notes[noteIndex].velocity=velocity;return true;
+    }
     bool moveMidiNote(size_t trackIndex,size_t noteIndex,double startBeat,int pitch) {
         if(trackIndex>=tracks.size() || noteIndex>=tracks[trackIndex].notes.size() ||
            !std::isfinite(startBeat) || startBeat<0 || pitch<0 || pitch>127)return false;
