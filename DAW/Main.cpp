@@ -23,6 +23,7 @@
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
 #include "StandardMidiExport.h"
+#include "AudioDevicePreferences.h"
 #include "IDWConnectPanel.h"
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
@@ -114,7 +115,8 @@ public:
         setSize(1450,850);
         setLookAndFeel(&neoTheme);
         formats.registerBasicFormats();
-        setAudioChannels(8,2); // Request up to eight available hardware inputs.
+        const auto savedAudioSetup=audioDevicePreferences.load();
+        setAudioChannels(8,2,savedAudioSetup.get()); // JUCE falls back if a saved device is unavailable.
         deviceManager.addChangeListener(this);
         deviceManager.addAudioCallback(&recorderCallback);
         deviceManager.addAudioCallback(&multiRecorderCallback);
@@ -1757,9 +1759,17 @@ private:
             // Device selector changes are delivered on the message thread.
             // Do not rewrite routes while audio recording is in progress.
             if(!recorder.isRecording() && !multiRecorder.isRecording()){
+                if(!playing.load() && !exportRunning.load())saveAudioDevicePreferences(true);
                 refreshMixer();
                 repaint();
             }
+        }
+    }
+    void saveAudioDevicePreferences(bool reportFailure){
+        const auto state=deviceManager.createStateXml();
+        if(audioDevicePreferences.save(state.get())==idw::daw::AudioDevicePreferences::Result::failed){
+            juce::Logger::writeToLog("IDW audio-device preferences could not be saved; current audio setup remains active.");
+            if(reportFailure)commandStatus.setText("Audio-device preferences could not be saved; current setup remains active",juce::dontSendNotification);
         }
     }
     void refreshMixer(){
@@ -3337,6 +3347,7 @@ public:
         return false;
     }
     ~Workstation() override {
+        saveAudioDevicePreferences(false); // Capture the chosen setup before shutting the device down.
         remoteOfferController.stop();
         remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCallback);deviceManager.removeAudioCallback(&multiRecorderCallback);deviceManager.removeAudioCallback(&recorderCallback);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
@@ -3361,6 +3372,9 @@ public:
     private:
         Workstation& owner;
     };
+    idw::daw::AudioDevicePreferences audioDevicePreferences{
+        juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+            .getChildFile("IDW Neo Studio").getChildFile("AudioDeviceSettings.xml")};
     idw::daw::SessionRecovery recovery{
         juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
             .getChildFile("IDW Neo Studio").getChildFile("Recovery")};
