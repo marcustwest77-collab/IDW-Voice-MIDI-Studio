@@ -14,23 +14,59 @@ public:
     std::function<void()> onChanged;
     std::function<bool()> canEdit;
     std::function<void()> onHistoryConflict;
-    IDWPianoRoll(){setWantsKeyboardFocus(true);}
-    void resetEditor(){history.clear();gestureBefore.reset();gestureExpected.clear();dragging=false;selectedValid=false;view={};constrainView();repaint();}
-    void setTrackIndex(size_t index){finishGesture();trackIndex=index;selectedValid=false;constrainView();repaint();}
-    void resized() override {finishGesture();constrainView();}
+    static constexpr int velocityFooterHeight=30;
+    IDWPianoRoll(){
+        setWantsKeyboardFocus(true);
+        velocityLabel.setText("NOTE VELOCITY",juce::dontSendNotification);addAndMakeVisible(velocityLabel);
+        velocity.setRange(1,127,1);velocity.setValue(100,juce::dontSendNotification);
+        velocity.setTextBoxStyle(juce::Slider::TextBoxRight,false,50,24);
+        velocity.setWantsKeyboardFocus(false); // Keep piano-roll undo after a thumb drag; text entry owns its own focus.
+        velocity.setScrollWheelEnabled(false);velocity.setTooltip("Select a note, then set its velocity (1–127). Dragging is one undo step.");
+        addAndMakeVisible(velocity);velocity.setEnabled(false);
+        velocity.onDragStart=[this]{
+            finishGesture();
+            if(!editingAllowed() || !selectionMatches())return;
+            gestureTrack=trackIndex;gestureBefore=selectedSnapshot;gestureExpected=selectedSnapshot;
+            gestureTrackName=selectedTrackName;dragging=true;velocityDragging=true;
+        };
+        velocity.onValueChange=[this]{setSelectionVelocity((int)velocity.getValue());};
+        velocity.onDragEnd=[this]{finishGesture();};
+    }
+    void resetEditor(){history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};constrainView();refreshVelocity();repaint();}
+    void setTrackIndex(size_t index){finishGesture();trackIndex=index;selectedValid=false;constrainView();refreshVelocity();repaint();}
+    void resized() override {
+        finishGesture();constrainView();
+        velocityLabel.setBounds(4,getHeight()-28,104,24);
+        velocity.setBounds(110,getHeight()-28,std::max(1,getWidth()-114),24);
+    }
     void visibilityChanged() override {if(!isVisible())finishGesture();}
     bool restoreHistory(bool undo){
         if(dragging || !editingAllowed())return false;
         const auto result=undo?history.undo(*session):history.redo(*session);
         if(result==idw::daw::MidiEditHistory::Result::conflict){if(onHistoryConflict)onHistoryConflict();}
         if(result!=idw::daw::MidiEditHistory::Result::applied)return false;
-        selectedValid=false;if(onChanged)onChanged();repaint();return true;
+        selectedValid=false;refreshVelocity();if(onChanged)onChanged();repaint();return true;
+    }
+    bool setSelectionVelocity(int value){
+        if((dragging && !velocityDragging) || !editingAllowed() || value<1 || value>127){refreshVelocity();return false;}
+        if(!selectionMatches()){
+            if(selectedValid && onHistoryConflict)onHistoryConflict();
+            if(velocityDragging){gestureBefore.reset();dragging=false;velocityDragging=false;}
+            selectedValid=false;refreshVelocity();return false;
+        }
+        const auto before=session->tracks[trackIndex].notes;
+        if(before[selectedIndex].velocity==value){refreshVelocity();return false;}
+        if(!session->setMidiNoteVelocity(trackIndex,selectedIndex,value))return false;
+        rememberSelection();
+        if(velocityDragging)gestureExpected=selectedSnapshot;
+        else history.record(*session,trackIndex,before);
+        refreshVelocity();if(onChanged)onChanged();repaint();return true;
     }
     bool deleteSelection(){
-        if(dragging || !editingAllowed() || !selectedValid)return false;
+        if(dragging || !editingAllowed() || !selectionMatches())return false;
         const auto before=session->tracks[trackIndex].notes;
         const bool removed=session->removeMidiNote(trackIndex,selectedIndex);
-        selectedValid=false;
+        selectedValid=false;refreshVelocity();
         if(removed){history.record(*session,trackIndex,before);if(onChanged)onChanged();repaint();}
         return removed;
     }
@@ -59,7 +95,7 @@ public:
             const int x=keyWidth+juce::roundToInt((beat-view.firstBeat)*view.pixelsPerBeat());
             if(x>getWidth())break;
             g.setColour(std::fmod(beat,4.0)==0?juce::Colours::grey:juce::Colour(0xff435064));
-            g.drawVerticalLine(x,(float)header,(float)getHeight());
+            g.drawVerticalLine(x,(float)header,(float)(header+gridHeight()));
             if(std::fmod(beat,4.0)==0)g.drawText(juce::String(beat,0),x+2,12,42,12,juce::Justification::centredLeft);
         }
         if(!session || trackIndex>=session->tracks.size())return;
@@ -76,7 +112,7 @@ public:
     void mouseDown(const juce::MouseEvent& e) override {
         finishGesture();
         constrainView();
-        selectedValid=false;
+        selectedValid=false;refreshVelocity();
         if(!editingAllowed() ||
            e.x<54 || e.x>=getWidth())return;
         const auto pitch=view.pitchAt(e.y-idw::daw::PianoRollViewport::headerHeight,gridHeight());
@@ -93,6 +129,7 @@ public:
                 originX=e.x;originY=e.y;original=notes[activeNote];
                 gestureTrack=trackIndex;gestureBefore=notes;gestureExpected=notes;
                 gestureTrackName=session->tracks[trackIndex].name;
+                rememberSelection();refreshVelocity();
                 repaint();
                 return;
             }
@@ -102,14 +139,16 @@ public:
         if(session->addMidiNote(trackIndex,{*pitch,beat,1.0,100})){
             history.record(*session,trackIndex,before);
             selectedIndex=notes.size()-1;selectedValid=true;grabKeyboardFocus();
+            rememberSelection();refreshVelocity();
             if(onChanged)onChanged();
             repaint();
         }
     }
     void mouseDrag(const juce::MouseEvent& e) override {
-        if(!dragging || !editingAllowed() || trackIndex!=gestureTrack)return;
+        if(!dragging || velocityDragging || !editingAllowed() || trackIndex!=gestureTrack)return;
         if(!gestureMatches()){
             gestureBefore.reset();dragging=false;selectedValid=false;
+            refreshVelocity();
             if(onHistoryConflict)onHistoryConflict();return;
         }
         const double delta=std::round((e.x-originX)/view.pixelsPerBeat()*4.0)/4.0;
@@ -120,7 +159,7 @@ public:
             changed=session->moveMidiNote(trackIndex,activeNote,
                 std::max(0.0,original.startBeat+delta),
                 juce::jlimit(0,127,original.pitch-(e.y-originY)/13));
-        if(changed){gestureExpected=session->tracks[trackIndex].notes;if(onChanged)onChanged();repaint();}
+        if(changed){gestureExpected=session->tracks[trackIndex].notes;rememberSelection();refreshVelocity();if(onChanged)onChanged();repaint();}
     }
     void mouseUp(const juce::MouseEvent&) override {finishGesture();}
     void mouseWheelMove(const juce::MouseEvent& e,const juce::MouseWheelDetails& wheel) override {
@@ -147,9 +186,27 @@ public:
         return deleteSelection();
     }
 private:
+    juce::Label velocityLabel;
+    juce::Slider velocity;
+    bool velocityDragging=false;
+    std::vector<idw::daw::MidiNote> selectedSnapshot;
+    std::string selectedTrackName;
+    bool selectionMatches() const {
+        return selectedValid && session && trackIndex<session->tracks.size() &&
+            session->tracks[trackIndex].type==idw::daw::TrackType::midi &&
+            session->tracks[trackIndex].name==selectedTrackName &&
+            selectedIndex<session->tracks[trackIndex].notes.size() &&
+            idw::daw::sameMidiNotes(session->tracks[trackIndex].notes,selectedSnapshot);
+    }
+    void rememberSelection(){selectedSnapshot=session->tracks[trackIndex].notes;selectedTrackName=session->tracks[trackIndex].name;}
+    void refreshVelocity(){
+        const bool valid=selectionMatches();
+        velocity.setEnabled(valid && editingAllowed());
+        velocity.setValue(valid?session->tracks[trackIndex].notes[selectedIndex].velocity:100,juce::dontSendNotification);
+    }
     idw::daw::PianoRollViewport view;
     int gridWidth() const {return std::max(1,getWidth()-idw::daw::PianoRollViewport::keyWidth);}
-    int gridHeight() const {return std::max(13,getHeight()-idw::daw::PianoRollViewport::headerHeight);}
+    int gridHeight() const {return std::max(13,getHeight()-idw::daw::PianoRollViewport::headerHeight-velocityFooterHeight);}
     double lastBeat() const {
         double end=0;
         if(session && trackIndex<session->tracks.size())for(const auto& n:session->tracks[trackIndex].notes)
@@ -167,11 +224,14 @@ private:
             session->tracks[trackIndex].type==idw::daw::TrackType::midi && (!canEdit || canEdit());
     }
     void finishGesture(){
+        // Slider change notifications may be asynchronous. Commit its final
+        // value while the gesture is still grouped, before the queued callback.
+        if(velocityDragging)setSelectionVelocity((int)velocity.getValue());
         if(gestureBefore){
             if(gestureMatches())history.record(*session,gestureTrack,*gestureBefore);
             else if(onHistoryConflict)onHistoryConflict();
         }
-        gestureBefore.reset();dragging=false;
+        gestureBefore.reset();dragging=false;velocityDragging=false;refreshVelocity();
     }
     bool gestureMatches() const {
         return session && gestureTrack<session->tracks.size() &&

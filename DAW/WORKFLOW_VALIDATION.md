@@ -438,3 +438,30 @@ failed output creation, unchanged source session and existing-file protection.
 The target is registered in CTest and Windows/macOS foundation CI. Fresh full
 application builds and external-DAW import remain pending. No installed beta,
 working PR #211 application or user audio/project was changed.
+
+## Edit selected-note velocity
+
+The piano roll now has a NOTE VELOCITY inspector below the grid. Select a note
+and drag its slider or enter a value from 1–127. No selection leaves the control
+disabled, and mouse-wheel changes on the slider are disabled to prevent an
+accidental velocity edit while navigating. The inspector reserves its own footer
+space; full-range pitch navigation uses the remaining grid height.
+
+Each slider drag forms one MIDI undo entry, including its final value when a
+slider notification is still queued. Typed changes are individual edits. No-op
+changes retain redo. History, deletion and navigation cannot interfere with an
+active drag. The existing busy guard prevents edits during playback, recording,
+calibration capture or export. A stale selection fails safely if notes or track
+identity changed; project reset clears the inspector, selection and gesture.
+Undo changes only notes and preserves newer audio, master, mixer and tempo work.
+
+MidiVelocityTests exercises production slider callbacks and model validation,
+grouped undo/redo, final pending values, no-ops, busy/conflict/reset guards,
+unchanged unrelated work, disk save/reopen, standard MIDI note velocity and
+exported WAV amplitude at velocities 1 and 127. Strict MSVC /W4 /WX compilation
+and this regression pass, along with rebuilt MIDI-history and piano-navigation
+regressions. A software-rendered component preview was visually inspected for
+footer layout; this is not a live application screenshot or physical interaction
+test. The target is registered in CTest and Windows/macOS foundation CI.
+Fresh application builds and physical inspector/shortcut testing remain pending.
+Installed beta, working PR #211 app and user audio/projects remain unchanged.
