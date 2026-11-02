@@ -586,3 +586,33 @@ open drivers. The new target is registered in CTest and Windows/macOS foundation
 CI. Full application builds, actual AudioBox restart recall and hardware fallback
 remain pending physical validation. Installed beta, separate #223 test app and
 user projects/audio are unchanged.
+
+## Device recall through the real JUCE manager
+
+AudioDeviceRecallIntegrationTests now exercises the actual JUCE
+AudioDeviceManager lifecycle with two injected simulated audio backends. The
+test overrides the audio-driver factory entirely; it does not enumerate or open
+real audio drivers. The simulated ASIO label is test data, not a physical ASIO
+qualification. The CI target shares the application's audio-backend flags.
+
+Coverage starts with default startup (no chosen state), then makes an explicit
+choice through JUCE and saves JUCE's generated XML. A fresh manager restores the
+interface, 48 kHz rate, 128-frame buffer and second-input/stereo-output masks.
+A registered callback receives those settings during real manager preparation.
+The test verifies close/restart preservation, missing-interface startup using a
+simulated fallback without replacing the saved choice, reconnect restoring the
+original choice, and an explicit user change replacing that choice on disk.
+Additional cases cover no available devices, simulated device-open failure and
+bad-file startup, all preserving the appropriate saved bytes.
+
+An interface that remains listed but refuses to open is distinct from one that
+is absent. The former test verifies preference preservation; it does not promise
+that JUCE always selects a different working backend after every open failure.
+The user may still need AUDIO DEVICES when a driver cannot open.
+
+The integration regression passes strict local MSVC /W4 /WX compilation and is
+registered in CTest and Windows/macOS foundation CI with a 30-second timeout.
+Full application builds and physical AudioBox unplug/restart/reconnect behavior
+remain pending. No installed beta, separate #223 test application, active device
+settings or user projects/audio were changed by this test-only step. The pending
+AudioBox listening check remains unconfirmed.
