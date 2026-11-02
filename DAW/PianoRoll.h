@@ -3,6 +3,7 @@
 #include "SessionModel.h"
 #include "MidiEditHistory.h"
 #include "PianoRollViewport.h"
+#include "PianoRollKeyCommands.h"
 #include <functional>
 #include <optional>
 
@@ -88,13 +89,19 @@ public:
         history.record(*session,trackIndex,before);
         selectedIndex=session->tracks[trackIndex].notes.size()-1;selectedValid=true;
         rememberSelection();
-        // Keep the newly selected repeat visible without changing any notes.
-        const auto& n=selectedSnapshot.back();
-        const double visible=gridWidth()/view.pixelsPerBeat();
-        if(n.startBeat<view.firstBeat)view.firstBeat=n.startBeat;
-        else if(n.startBeat+std::min(n.lengthBeats,visible)>view.firstBeat+visible)
-            view.firstBeat=n.startBeat+std::min(n.lengthBeats,visible)-visible;
-        constrainView();refreshVelocity();grabKeyboardFocus();
+        revealSelection();refreshVelocity();grabKeyboardFocus();
+        if(onChanged)onChanged();repaint();return true;
+    }
+    bool nudgeSelection(double beats,int semitones){
+        if(dragging || !editingAllowed())return false;
+        if(!selectionMatches()){
+            if(selectedValid && onHistoryConflict)onHistoryConflict();
+            selectedValid=false;refreshVelocity();return false;
+        }
+        const auto before=session->tracks[trackIndex].notes;
+        if(!session->nudgeMidiNote(trackIndex,selectedIndex,beats,semitones))return false;
+        history.record(*session,trackIndex,before);rememberSelection();
+        revealSelection();refreshVelocity();
         if(onChanged)onChanged();repaint();return true;
     }
     void paint(juce::Graphics& g) override {
@@ -114,7 +121,7 @@ public:
             if(pitch%12==0)g.drawText("C"+juce::String(pitch/12-1),2,y,48,rowHeight,juce::Justification::centredLeft);
         }
         g.setColour(juce::Colours::lightgrey);g.setFont(juce::Font(juce::FontOptions(10.0f)));
-        g.drawText("Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",2,0,bounds.getWidth()-4,12,juce::Justification::centredLeft);
+        g.drawText("Arrows: move | Shift: beat/octave | Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",2,0,bounds.getWidth()-4,12,juce::Justification::centredLeft);
         const double first=std::ceil(view.firstBeat);
         const int lines=(int)std::ceil(gridWidth()/view.pixelsPerBeat())+1;
         for(int i=0;i<lines;++i){
@@ -211,6 +218,9 @@ public:
         if(mods.isCommandDown() && !mods.isAltDown() && !mods.isShiftDown() && key.getKeyCode()=='D'){
             duplicateSelection();return true;
         }
+        if(selectedValid)if(const auto nudge=idw::daw::pianoRollNudge(key)){
+            nudgeSelection(nudge->beats,nudge->semitones);return true;
+        }
         if(!selectedValid || mods.isAnyModifierKeyDown())return false;
         if(key.getKeyCode()!=juce::KeyPress::deleteKey && key.getKeyCode()!=juce::KeyPress::backspaceKey)return false;
         return deleteSelection();
@@ -230,6 +240,18 @@ private:
             idw::daw::sameMidiNotes(session->tracks[trackIndex].notes,selectedSnapshot);
     }
     void rememberSelection(){selectedSnapshot=session->tracks[trackIndex].notes;selectedTrackName=session->tracks[trackIndex].name;}
+    void revealSelection(){
+        if(!selectionMatches())return;
+        const auto& n=selectedSnapshot[selectedIndex];
+        const double visible=gridWidth()/view.pixelsPerBeat();
+        if(n.startBeat<view.firstBeat)view.firstBeat=n.startBeat;
+        else if(n.startBeat+std::min(n.lengthBeats,visible)>view.firstBeat+visible)
+            view.firstBeat=n.startBeat+std::min(n.lengthBeats,visible)-visible;
+        const int rows=idw::daw::PianoRollViewport::rows(gridHeight());
+        if(n.pitch>view.topPitch)view.topPitch=n.pitch;
+        else if(n.pitch<view.topPitch-rows+1)view.topPitch=n.pitch+rows-1;
+        constrainView();
+    }
     void refreshVelocity(){
         const bool valid=selectionMatches();
         velocity.setEnabled(valid && editingAllowed());
