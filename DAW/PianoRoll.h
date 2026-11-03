@@ -8,7 +8,7 @@
 #include <optional>
 
 // Graphical editor for notes played by the built-in instruments.
-class IDWPianoRoll final : public juce::Component {
+class IDWPianoRoll final : public juce::Component, private juce::Timer {
 public:
     idw::daw::Session* session=nullptr;
     size_t trackIndex=0;
@@ -80,7 +80,15 @@ public:
         halfLength.setBounds(right-202,getHeight()-28,100,24);if(showLength)right-=208;
         velocity.setBounds(110,getHeight()-28,std::max(1,right-110),24);
     }
-    void visibilityChanged() override {if(!isVisible())finishGesture();}
+    void visibilityChanged() override {
+        if(isVisible())startTimerHz(20);
+        else {stopTimer();finishGesture();}
+    }
+    // Recover a gesture still marked active after its physical release.
+    // Finalize its existing edit only when no mouse button is held.
+    void finishReleasedGesture(bool mouseButtonDown){
+        if(dragging && !mouseButtonDown)finishGesture();
+    }
     bool restoreHistory(bool undo){
         if(dragging || !editingAllowed())return false;
         const auto result=undo?history.undo(*session):history.redo(*session);
@@ -275,6 +283,9 @@ public:
         return deleteSelection();
     }
 private:
+    void timerCallback() override {
+        finishReleasedGesture(juce::ModifierKeys::getCurrentModifiersRealtime().isAnyMouseButtonDown());
+    }
     juce::TextButton closeEditor;
     juce::TextButton undoEdit,redoEdit;
     void restoreFromButton(bool undo){
