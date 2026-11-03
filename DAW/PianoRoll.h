@@ -31,6 +31,12 @@ public:
         velocityLabel.setText("NOTE VELOCITY",juce::dontSendNotification);addAndMakeVisible(velocityLabel);
         velocity.setRange(1,127,1);velocity.setValue(100,juce::dontSendNotification);
         velocity.setTextBoxStyle(juce::Slider::TextBoxRight,false,50,24);
+        velocity.valueFromTextFunction=[this](const juce::String& text){
+            const auto number=text.trim();
+            if(number.isEmpty() || number.length()>3 || !number.containsOnly("0123456789"))return velocity.getValue();
+            const int value=number.getIntValue();
+            return value>=1 && value<=127 ? (double)value : velocity.getValue();
+        };
         velocity.setWantsKeyboardFocus(false); // Keep piano-roll undo after a thumb drag; text entry owns its own focus.
         velocity.setScrollWheelEnabled(false);velocity.setTooltip("Select a note, then set its velocity (1–127). Dragging is one undo step.");
         addAndMakeVisible(velocity);velocity.setEnabled(false);

@@ -802,3 +802,38 @@ conflicting newer notes. It, PianoRollCloseTests and MidiLengthTests pass locall
 under MSVC /W4 /WX. The velocity CTest now has a 30-second timeout around the GUI
 dispatch test. Full application CI and physical qualification of this recovery
 are pending. Installed beta and the running #233 test app are not replaced.
+
+### Invalid numeric entry must not destroy MIDI redo
+
+Read-only inspection of user-created diagnostic saves established a controlled
+40 -> 70 edit, then Undo back to 40 using the panel close/reopen workaround.
+The subsequent reported Redo produced a saved velocity of 1, not 70. All copies
+retain the same two C4 notes, positions and lengths. The current live Redo check
+is failed; the earlier history-availability recovery is not a general history
+qualification.
+
+A new regression reproduces an exact velocity-1 failure: after Undo, open the
+selected note's numeric editor, leave its text blank and invoke REDO MIDI.
+Committing that field used JUCE's numeric coercion/clamp, creating a new edit to
+1 and clearing the redo entry before it could be applied. The regression failed
+against the previous implementation with actual velocity=1. This is a proven
+input path matching the saved result, not proof that an empty field caused the
+user's native interaction.
+
+Velocity text parsing now accepts a trimmed decimal integer of at most three
+digits in the range 1..127. Blank, malformed, fractional, out-of-range or oversized
+input retains the current value without adding history or invalidating redo.
+The expanded regression passes invalid inputs through the real numeric editor
+and redo-button callback, and verifies valid boundary, padded and trimmed values
+with undo/redo. MidiVelocityTests, PianoRollCloseTests and MidiLengthTests pass
+locally under MSVC /W4 /WX.
+
+Parent #234 macOS CI failed its windowless native Return-key dispatch test at
+"numeric entry did not commit". Windows keeps that queued key-event test; other
+platforms now exercise JUCE Label's actual protected Return-listener callback
+through a test-owned Label subclass, without a native application loop. Both
+test paths pass locally on Windows; macOS CI and native macOS key delivery are
+not claimed verified. This changes the unit-test boundary, not production key
+routing. Full CI and physical validation of the input fix are pending. The
+installed beta, running #233 test executable and all diagnostic copies are left
+intact.
