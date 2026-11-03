@@ -616,3 +616,32 @@ Full application builds and physical AudioBox unplug/restart/reconnect behavior
 remain pending. No installed beta, separate #223 test application, active device
 settings or user projects/audio were changed by this test-only step. The pending
 AudioBox listening check remains unconfirmed.
+
+## Show when the saved interface is not active
+
+The recording-readiness strip now shows amber AUDIO FALLBACK with the actual
+output name if the current driver or explicitly saved input/output identity
+differs from the remembered choice. Its tooltip, the recording button and the
+input selector include saved-versus-active setup details and direct the user to
+AUDIO DEVICES. NO AUDIO DEVICE appears when no device is open, including a
+device object that still exists but reports itself closed. Empty projects also
+show the status without requiring a selected track.
+
+Matched/default setups retain the normal readiness display; reconnection or an
+explicit new selection clears the fallback message. The red RECORDING indicator
+retains priority during capture. Status computation runs at startup and on
+device-change notifications, not in the audio callback. It does not select a
+device, arm tracks, alter volume, block recording or rewrite preferences.
+This diagnosis compares interface identities; it is not a physical audibility
+check or a promise that every saved rate/buffer value was accepted by a driver.
+
+AudioDeviceRecallStatusTests checks backend/input/output mismatches, unavailable
+and default cases, explicit replacement, JUCE legacy-name precedence, Unicode,
+bounded single-line display and unchanged supplied XML. The existing real-JUCE
+simulated-device integration test now verifies status across restoration,
+fallback, reconnection, explicit choice, no devices, open failure and a closed
+device object. Both regressions pass strict local MSVC /W4 /WX compilation. No
+real audio drivers are opened. The status test is registered in CTest and the
+Windows/macOS foundation workflow. Full app builds, the actual readiness-strip
+interaction and physical AudioBox behavior remain pending. Installed beta,
+separate #223 test app, active settings and user projects/audio are unchanged.

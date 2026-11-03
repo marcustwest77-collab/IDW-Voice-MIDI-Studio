@@ -1,4 +1,5 @@
 #include "AudioDevicePreferences.h"
+#include "AudioDeviceRecallStatus.h"
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <iostream>
 #include <stdexcept>
@@ -84,6 +85,12 @@ static void preferredSetup(juce::AudioDeviceManager& manager){
     require(device->getCurrentSampleRate()==48000 && device->getCurrentBufferSizeSamples()==128 &&
         device->getActiveInputChannels().toString(2)=="10" && device->getActiveOutputChannels().toString(2)=="11","restored rate/buffer/masks differ");
 }
+static AudioDeviceRecallStatus recallStatus(juce::AudioDeviceManager& manager){
+    const auto state=manager.createStateXml();const auto setup=manager.getAudioDeviceSetup();
+    auto* device=manager.getCurrentAudioDevice();
+    return describeAudioDeviceRecall(state.get(),manager.getCurrentAudioDeviceType(),setup.inputDeviceName,
+                                    setup.outputDeviceName,device && device->isOpen());
+}
 int main(){try{
     juce::ScopedJuceInitialiser_GUI init;
     const auto root=juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("idw-device-recall-integration","",false);
@@ -92,6 +99,7 @@ int main(){try{
     {
         Hardware hardware;SimulatedManager manager(hardware);
         require(manager.initialise(8,2,nullptr,true).isEmpty(),"default startup");
+        require(!recallStatus(manager).needsAttention(),"default device mislabeled fallback");
         require(!manager.createStateXml() && prefs.save(nullptr)==AudioDevicePreferences::Result::unchanged && !file.exists(),"default startup persisted an unchosen interface");
         manager.setCurrentAudioDeviceType("ASIO",false);auto setup=manager.getAudioDeviceSetup();
         setup.inputDeviceName=preferredName;setup.outputDeviceName=preferredName;
@@ -104,17 +112,22 @@ int main(){try{
     {
         Hardware hardware;SimulatedManager manager(hardware);const auto saved=prefs.load();
         require(manager.initialise(8,2,saved.get(),true).isEmpty(),"saved startup");preferredSetup(manager);
+        require(!recallStatus(manager).needsAttention(),"restored manager mislabeled fallback");
         Probe probe;manager.addAudioCallback(&probe);
         require(probe.starts==1 && probe.rate==48000 && probe.block==128 && probe.inputs.toString(2)=="10","saved setup did not reach callback preparation");
         manager.removeAudioCallback(&probe);require(probe.stops==1,"callback lifecycle");
         auto state=manager.createStateXml();require(state && state->isEquivalentTo(chosen.get(),true),"JUCE changed chosen state on restart");
         require(prefs.save(state.get())==AudioDevicePreferences::Result::unchanged && bytes(file)==original,"restart rewrote preferences");
+        manager.getCurrentAudioDevice()->close();
+        require(manager.getCurrentAudioDevice()!=nullptr && recallStatus(manager).kind==AudioDeviceRecallStatus::Kind::unavailable,"closed device object reported as open");
         manager.closeAudioDevice();state=manager.createStateXml();require(state && prefs.save(state.get())==AudioDevicePreferences::Result::unchanged,"shutdown lost chosen setup");
     }
     {
         Hardware hardware;hardware.preferred=false;SimulatedManager manager(hardware);const auto saved=prefs.load();
         require(manager.initialise(8,2,saved.get(),true).isEmpty(),"missing preferred interface fallback failed");
         const auto* device=manager.getCurrentAudioDevice();require(device && device->getName()==fallbackName && manager.getCurrentAudioDeviceType()==fallbackType,"did not open simulated fallback");
+        const auto status=recallStatus(manager);
+        require(status.kind==AudioDeviceRecallStatus::Kind::fallback && status.line.contains(fallbackName) && status.detail.contains(preferredName),"real manager fallback not reported");
         auto state=manager.createStateXml();require(state && state->isEquivalentTo(chosen.get(),true),"fallback replaced JUCE chosen state");
         require(prefs.save(state.get())==AudioDevicePreferences::Result::unchanged && bytes(file)==original,"fallback overwrote remembered interface");
         require(hardware.preferredOpens==0 && hardware.fallbackOpens>0,"unavailable interface unexpectedly opened");
@@ -122,9 +135,11 @@ int main(){try{
     {
         Hardware hardware;SimulatedManager manager(hardware);const auto saved=prefs.load();
         require(manager.initialise(8,2,saved.get(),true).isEmpty(),"reconnected startup");preferredSetup(manager);
+        require(!recallStatus(manager).needsAttention(),"reconnection did not clear fallback status");
         // An explicit new user choice must replace the remembered preference.
         manager.setCurrentAudioDeviceType(fallbackType,true);auto state=manager.createStateXml();
         require(state && state->getStringAttribute("deviceType")==fallbackType && prefs.save(state.get())==AudioDevicePreferences::Result::saved,"explicit new choice not saved");
+        require(!recallStatus(manager).needsAttention(),"explicit choice retained fallback warning");
     }
     {
         Hardware hardware;SimulatedManager manager(hardware);const auto saved=prefs.load();
@@ -134,6 +149,7 @@ int main(){try{
     {
         Hardware hardware;hardware.preferred=false;hardware.fallback=false;SimulatedManager manager(hardware);const auto saved=prefs.load();
         manager.initialise(8,2,saved.get(),true);require(manager.getCurrentAudioDevice()==nullptr,"device exists when all simulated hardware absent");
+        require(recallStatus(manager).kind==AudioDeviceRecallStatus::Kind::unavailable,"missing all hardware not reported");
         const auto state=manager.createStateXml();require(state && state->isEquivalentTo(chosen.get(),true) && prefs.save(state.get())==AudioDevicePreferences::Result::unchanged,"no-device startup erased preference");
         require(bytes(file)==original,"no-device startup changed saved bytes");
     }
@@ -141,6 +157,7 @@ int main(){try{
         Hardware hardware;hardware.failPreferred=true;SimulatedManager manager(hardware);const auto saved=prefs.load();
         manager.initialise(8,2,saved.get(),true);
         require(hardware.preferredOpens>0,"open failure not exercised");
+        require(recallStatus(manager).needsAttention(),"failed preferred-device open reported healthy");
         const auto state=manager.createStateXml();require(state && state->isEquivalentTo(chosen.get(),true) && prefs.save(state.get())==AudioDevicePreferences::Result::unchanged && bytes(file)==original,"open failure erased preference");
     }
     {
