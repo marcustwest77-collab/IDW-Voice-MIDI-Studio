@@ -22,6 +22,12 @@ public:
         closeEditor.setTooltip("Close the piano roll without changing notes.");
         closeEditor.onClick=[this]{setVisible(false);};
         addAndMakeVisible(closeEditor);
+        undoEdit.setButtonText("UNDO MIDI");redoEdit.setButtonText("REDO MIDI");
+        for(auto* button:{&undoEdit,&redoEdit}){button->setWantsKeyboardFocus(false);addAndMakeVisible(*button);button->setEnabled(false);}
+        undoEdit.setTooltip("Undo a MIDI note edit. Reselect a note to inspect its restored value.");
+        redoEdit.setTooltip("Redo a MIDI note edit. Reselect a note to inspect its restored value.");
+        undoEdit.onClick=[this]{restoreFromButton(true);};
+        redoEdit.onClick=[this]{restoreFromButton(false);};
         velocityLabel.setText("NOTE VELOCITY",juce::dontSendNotification);addAndMakeVisible(velocityLabel);
         velocity.setRange(1,127,1);velocity.setValue(100,juce::dontSendNotification);
         velocity.setTextBoxStyle(juce::Slider::TextBoxRight,false,50,24);
@@ -62,6 +68,9 @@ public:
     void resized() override {
         finishGesture();constrainView();
         closeEditor.setBounds(juce::jmax(0,getWidth()-114),2,juce::jmin(110,getWidth()),20);
+        const bool showHistory=getWidth()>=340;
+        undoEdit.setVisible(showHistory);redoEdit.setVisible(showHistory);
+        undoEdit.setBounds(4,2,90,20);redoEdit.setBounds(98,2,90,20);
         velocityLabel.setBounds(4,getHeight()-28,104,24);
         const bool showDuplicate=getWidth()>=480,showLength=getWidth()>=760;
         duplicate.setVisible(showDuplicate);halfLength.setVisible(showLength);doubleLength.setVisible(showLength);
@@ -157,7 +166,8 @@ public:
             if(pitch%12==0)g.drawText("C"+juce::String(pitch/12-1),2,y,48,rowHeight,juce::Justification::centredLeft);
         }
         g.setColour(juce::Colours::lightgrey);g.setFont(juce::Font(juce::FontOptions(10.0f)));
-        g.drawText("Arrows: move | Shift: beat/octave | [ ]: length | Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",2,0,juce::jmax(0,closeEditor.getX()-6),12,juce::Justification::centredLeft);
+        const int helpLeft=undoEdit.isVisible()?194:2;
+        g.drawText("Arrows: move | Shift: beat/octave | [ ]: length | Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",helpLeft,0,juce::jmax(0,closeEditor.getX()-helpLeft-6),12,juce::Justification::centredLeft);
         const double first=std::ceil(view.firstBeat);
         const int lines=(int)std::ceil(gridWidth()/view.pixelsPerBeat())+1;
         for(int i=0;i<lines;++i){
@@ -266,6 +276,15 @@ public:
     }
 private:
     juce::TextButton closeEditor;
+    juce::TextButton undoEdit,redoEdit;
+    void restoreFromButton(bool undo){
+        if(dragging || !editingAllowed())return;
+        // Commit an active number editor before applying history. Do not route
+        // the keystroke through a text field or the voice command console.
+        velocity.hideTextBox(false);
+        restoreHistory(undo);
+        if(isShowing())grabKeyboardFocus();
+    }
     juce::Label velocityLabel;
     juce::Slider velocity;
     juce::TextButton duplicate;
@@ -295,6 +314,9 @@ private:
     }
     void refreshVelocity(){
         const bool valid=selectionMatches();
+        const bool historyAllowed=editingAllowed() && !dragging;
+        undoEdit.setEnabled(historyAllowed && history.canUndo());
+        redoEdit.setEnabled(historyAllowed && history.canRedo());
         velocity.setEnabled(valid && editingAllowed());
         duplicate.setEnabled(valid && editingAllowed() && !dragging);
         halfLength.setEnabled(valid && editingAllowed() && !dragging);

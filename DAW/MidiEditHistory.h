@@ -22,6 +22,8 @@ public:
     }
     Result undo(Session& s){return restore(s,undoEntries,redoEntries,true);}
     Result redo(Session& s){return restore(s,redoEntries,undoEntries,false);}
+    bool canUndo() const {return !undoEntries.empty();}
+    bool canRedo() const {return !redoEntries.empty();}
     void clear(){undoEntries.clear();redoEntries.clear();}
 private:
     struct Entry {size_t track;std::string name;std::vector<MidiNote> before,after;};

@@ -739,3 +739,34 @@ Windows player. The generated MIDI fixture played both notes with the second
 louder, and the user confirmed velocity 110 -> 40 -> undo 110 -> redo 40.
 MIDI edited-project save/reopen is still pending; no physical eight-input,
 calibrated-latency or live two-computer qualification is inferred.
+
+### Explicit MIDI history controls and numeric-entry regression
+
+Further user validation confirmed that double-clicking NOTE VELOCITY's number,
+selecting its text, entering 40 and pressing Enter commits the edit. The live
+Ctrl+Z/Ctrl+Y retry did not restore 110 even after note reselection. The earlier
+reported shortcut pass is therefore under recheck. Accessibility observations
+continued to report the voice-command field as focused; this is evidence to
+investigate, not proof of the root cause. The current live shortcut failure is
+not claimed fixed or physically qualified.
+
+Piano-roll UNDO MIDI and REDO MIDI header buttons now invoke note history directly,
+without requiring the grid to receive a keyboard shortcut. They reflect undo/
+redo availability, refuse changes during a gesture or when editing is blocked,
+commit an active numeric editor before restoring history and preserve existing
+stale-history conflict checks. Restoring history still clears note selection;
+tooltips tell the user to reselect a note to inspect its restored value. Narrow
+editors hide the history buttons to keep BACK TO TRACKS accessible.
+
+MidiVelocityTests now exercises JUCE's real slider number editor using
+showTextBox, the child TextEditor and hideTextBox(false), rather than only
+hand-invoked drag callbacks. The unchanged history model passes the numeric
+110 -> 40 -> undo 110 -> redo 40 path locally. New checks exercise the actual
+history button callbacks, availability, a still-pending numeric edit, busy/drag
+guards, conflicts, reset and header bounds. Rebuilt MidiVelocityTests,
+PianoRollCloseTests and MidiLengthTests pass with MSVC /W4 /WX. A rendered 1000px
+editor preview was inspected for button/footer overlap. Existing CI targets run
+the expanded regression; full app CI and physical verification remain pending.
+Parent #232 Windows CI was still running and two macOS jobs were cancelled at
+the time of this change, so those checks are not reported as passed. This source
+change does not replace the installed beta or the running #231 test app.
