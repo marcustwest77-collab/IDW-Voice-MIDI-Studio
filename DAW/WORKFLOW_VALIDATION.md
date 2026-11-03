@@ -705,3 +705,37 @@ not physical eight-input qualification. The new test is registered in CTest and
 Windows/macOS foundation CI. Full application builds and physical multitrack
 preflight remain pending. Installed beta, separate #223 app, active settings and
 user projects/audio are unchanged; AudioBox listening is still unconfirmed.
+
+### Piano-roll exit after track/project changes
+
+User validation of the #231 test app exposed a visible but empty piano roll
+with Audio 1 selected. STOP followed by PIANO ROLL did not close it. Inspection
+confirmed that the toolbar validated the selected track as MIDI before deciding
+whether to close an already-visible editor. Project restore reset the note
+selection/history but left the overlay visible. The user regained the main view
+by selecting MIDI 1 and toggling PIANO ROLL; no take needed to be cleared.
+
+The editor now owns its tested toggle operation: closing works even when the
+current selection is audio, out of range or unavailable; opening still requires
+a valid MIDI track. The toolbar retains its existing playback/record/export
+guards. A BACK TO TRACKS button provides an explicit exit inside the editor.
+Project reset hides the overlay while discarding the old selection/gesture/
+history state. Ordinary close retains note edits and finalizes pending velocity
+gestures using the existing grouped undo behavior.
+
+PianoRollCloseTests exercises the production component toggle and back-button
+callback, audio/invalid/missing-session close paths, refusal to open invalid
+destinations, unchanged projects for view-only operations, pending final velocity
+and undo/redo, header bounds and project replacement/reset. It and rebuilt
+MidiVelocityTests and MidiLengthTests pass locally under MSVC /W4 /WX. The new
+regression is registered in CTest and Windows/macOS foundation CI. Full app CI
+and physical verification of the fixed build remain pending. The installed beta,
+running #231 test executable and original user projects/audio are not replaced.
+
+Separately, user-reported #231 AudioBox ASIO validation passed initial preflight,
+short recording/waveform/clean playback, occupied and duplicate input diagnostics,
+save/reopen after restarting the app, and WAV export playback in an external
+Windows player. The generated MIDI fixture played both notes with the second
+louder, and the user confirmed velocity 110 -> 40 -> undo 110 -> redo 40.
+MIDI edited-project save/reopen is still pending; no physical eight-input,
+calibrated-latency or live two-computer qualification is inferred.

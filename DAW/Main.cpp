@@ -624,10 +624,7 @@ public:
             "MIDI undo/redo unavailable: affected notes changed; newer work was preserved",juce::dontSendNotification);};
         pianoButton.onClick=[this]{
             if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
-            if(selectedTrack>=session.tracks.size() ||
-               session.tracks[selectedTrack].type!=idw::daw::TrackType::midi)return;
-            pianoRoll.setTrackIndex(selectedTrack);
-            pianoRoll.setVisible(!pianoRoll.isVisible());
+            if(!pianoRoll.toggleForTrack(selectedTrack))return;
             if(pianoRoll.isVisible()){
                 aiPanel.setVisible(false);connectPanel.setVisible(false);
                 pianoRoll.toFront(false);pianoRoll.repaint();
