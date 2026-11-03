@@ -6,6 +6,17 @@
 #include <stdexcept>
 using namespace idw::daw;
 static void require(bool ok,const char* why){if(!ok)throw std::runtime_error(why);}
+class ReturnLabel final : public juce::Label {
+public:
+    void commitReturn(){
+        auto* entry=getCurrentTextEditor();require(entry!=nullptr,"Return editor missing");
+        textEditorReturnKeyPressed(*entry);
+    }
+};
+class ReturnLookAndFeel final : public juce::LookAndFeel_V4 {
+public:
+    juce::Label* createSliderTextBox(juce::Slider&) override {return new ReturnLabel;}
+};
 static juce::MouseEvent mouse(IDWPianoRoll& e,int x,int y){
     const auto now=juce::Time::getCurrentTime();y+=PianoRollViewport::headerHeight;
     return {juce::Desktop::getInstance().getMainMouseSource(),{(float)x,(float)y},
@@ -21,6 +32,7 @@ int main(int argc,char** argv){try{
     juce::ScopedJuceInitialiser_GUI init;
     Session s;s.bpm=60;s.addTrack(TrackType::midi);s.addTrack(TrackType::audio);
     require(s.addMidiNote(0,{60,0,0.25,100}),"note fixture");
+    ReturnLookAndFeel numericLookAndFeel;
     IDWPianoRoll editor;editor.session=&s;editor.setSize(1000,480);
     bool allowed=true;int conflicts=0,changes=0;
     editor.canEdit=[&]{return allowed;};editor.onHistoryConflict=[&]{++conflicts;};editor.onChanged=[&]{++changes;};
@@ -34,6 +46,7 @@ int main(int argc,char** argv){try{
         }
     require(undoButton && redoButton && !undoButton->isEnabled() && !redoButton->isEnabled(),"initial history buttons");
     require(slider && !slider->isEnabled() && !slider->getWantsKeyboardFocus(),"unselected control or slider focus policy");
+    slider->setLookAndFeel(&numericLookAndFeel);
     select(editor);require(slider->isEnabled() && slider->getValue()==100,"selected velocity not displayed");
     // Exercise the production slider callbacks, including a queued final value.
     slider->onDragStart();slider->setValue(80,juce::sendNotificationSync);
@@ -99,9 +112,16 @@ int main(int argc,char** argv){try{
     slider->showTextBox();auto* entry=number->getCurrentTextEditor();
     require(entry!=nullptr,"numeric entry not created");
     entry->setText("40",false);
+   #if JUCE_WINDOWS && !defined(IDW_TEST_DIRECT_RETURN_CALLBACK)
     require(entry->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)),"Enter not accepted by numeric editor");
     juce::Timer::callAfterDelay(50,[]{juce::MessageManager::getInstance()->stopDispatchLoop();});
     juce::MessageManager::getInstance()->runDispatchLoop();
+   #else
+    // Exercise JUCE's actual Return listener for a detached editor without
+    // starting a native application loop. Native key delivery is a separate check.
+    auto* returnLabel=dynamic_cast<ReturnLabel*>(number);
+    require(returnLabel!=nullptr,"Return label missing");returnLabel->commitReturn();
+   #endif
     require(s.tracks[0].notes[0].velocity==40 && slider->getValue()==40,"numeric entry did not commit");
     require(editor.restoreHistory(true) && s.tracks[0].notes[0].velocity==110,"numeric entry undo missing");
     require(editor.restoreHistory(false) && s.tracks[0].notes[0].velocity==40,"numeric entry redo missing");
@@ -110,6 +130,24 @@ int main(int argc,char** argv){try{
     require(s.tracks[0].notes[0].velocity==110 && !undoButton->isEnabled() && redoButton->isEnabled(),"numeric edit button undo");
     redoButton->onClick();
     require(s.tracks[0].notes[0].velocity==40 && undoButton->isEnabled() && !redoButton->isEnabled(),"numeric edit button redo");
+    // Redo commits an open numeric editor first. Invalid/blank input must not
+    // silently become velocity 1 and clear the redo entry we are about to use.
+    for(const auto* text:{""," ","0","128","oops","4.0","99999999999999999999"}){
+        undoButton->onClick();require(s.tracks[0].notes[0].velocity==110,"invalid entry fixture undo");
+        select(editor);slider->showTextBox();entry=number->getCurrentTextEditor();
+        require(entry!=nullptr,"invalid entry editor missing");entry->setText(text,false);
+        redoButton->onClick();
+        if(s.tracks[0].notes[0].velocity!=40)
+            throw std::runtime_error("invalid pending number changed velocity or destroyed redo; actual velocity="+std::to_string(s.tracks[0].notes[0].velocity));
+    }
+    for(const auto& value:std::initializer_list<std::pair<const char*,int>>{{"1",1},{"127",127},{"070",70},{" 40 ",40}}){
+        const int previous=s.tracks[0].notes[0].velocity;
+        select(editor);slider->showTextBox();entry=number->getCurrentTextEditor();
+        require(entry!=nullptr,"valid entry editor missing");entry->setText(value.first,false);slider->hideTextBox(false);
+        require(s.tracks[0].notes[0].velocity==value.second,"valid velocity text rejected");
+        undoButton->onClick();require(s.tracks[0].notes[0].velocity==previous,"valid entry undo");
+        redoButton->onClick();require(s.tracks[0].notes[0].velocity==value.second,"valid entry redo");
+    }
     // Button operation must be safe even when a number edit has not yet committed.
     select(editor);slider->showTextBox();entry=number->getCurrentTextEditor();
     require(entry!=nullptr,"pending numeric editor missing");entry->setText("70",false);
