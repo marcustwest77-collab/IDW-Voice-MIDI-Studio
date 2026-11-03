@@ -18,6 +18,10 @@ public:
     static constexpr int velocityFooterHeight=30;
     IDWPianoRoll(){
         setWantsKeyboardFocus(true);
+        closeEditor.setButtonText("BACK TO TRACKS");
+        closeEditor.setTooltip("Close the piano roll without changing notes.");
+        closeEditor.onClick=[this]{setVisible(false);};
+        addAndMakeVisible(closeEditor);
         velocityLabel.setText("NOTE VELOCITY",juce::dontSendNotification);addAndMakeVisible(velocityLabel);
         velocity.setRange(1,127,1);velocity.setValue(100,juce::dontSendNotification);
         velocity.setTextBoxStyle(juce::Slider::TextBoxRight,false,50,24);
@@ -46,10 +50,18 @@ public:
         velocity.onValueChange=[this]{setSelectionVelocity((int)velocity.getValue());};
         velocity.onDragEnd=[this]{finishGesture();};
     }
-    void resetEditor(){history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};constrainView();refreshVelocity();repaint();}
+    void resetEditor(){history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};setVisible(false);constrainView();refreshVelocity();repaint();}
+    // Closing must work after track selection changes, including an audio track
+    // or an unavailable index. Only opening requires a valid MIDI destination.
+    bool toggleForTrack(size_t index){
+        if(isVisible()){setVisible(false);return true;}
+        if(!session || index>=session->tracks.size() || session->tracks[index].type!=idw::daw::TrackType::midi)return false;
+        setTrackIndex(index);setVisible(true);return true;
+    }
     void setTrackIndex(size_t index){finishGesture();trackIndex=index;selectedValid=false;constrainView();refreshVelocity();repaint();}
     void resized() override {
         finishGesture();constrainView();
+        closeEditor.setBounds(juce::jmax(0,getWidth()-114),2,juce::jmin(110,getWidth()),20);
         velocityLabel.setBounds(4,getHeight()-28,104,24);
         const bool showDuplicate=getWidth()>=480,showLength=getWidth()>=760;
         duplicate.setVisible(showDuplicate);halfLength.setVisible(showLength);doubleLength.setVisible(showLength);
@@ -145,7 +157,7 @@ public:
             if(pitch%12==0)g.drawText("C"+juce::String(pitch/12-1),2,y,48,rowHeight,juce::Justification::centredLeft);
         }
         g.setColour(juce::Colours::lightgrey);g.setFont(juce::Font(juce::FontOptions(10.0f)));
-        g.drawText("Arrows: move | Shift: beat/octave | [ ]: length | Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",2,0,bounds.getWidth()-4,12,juce::Justification::centredLeft);
+        g.drawText("Arrows: move | Shift: beat/octave | [ ]: length | Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",2,0,juce::jmax(0,closeEditor.getX()-6),12,juce::Justification::centredLeft);
         const double first=std::ceil(view.firstBeat);
         const int lines=(int)std::ceil(gridWidth()/view.pixelsPerBeat())+1;
         for(int i=0;i<lines;++i){
@@ -253,6 +265,7 @@ public:
         return deleteSelection();
     }
 private:
+    juce::TextButton closeEditor;
     juce::Label velocityLabel;
     juce::Slider velocity;
     juce::TextButton duplicate;
