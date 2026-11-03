@@ -1,5 +1,6 @@
 #include "AudioDevicePreferences.h"
 #include "AudioDeviceRecallStatus.h"
+#include "RecordingPreflight.h"
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <iostream>
 #include <stdexcept>
@@ -112,6 +113,8 @@ int main(){try{
     {
         Hardware hardware;SimulatedManager manager(hardware);const auto saved=prefs.load();
         require(manager.initialise(8,2,saved.get(),true).isEmpty(),"saved startup");preferredSetup(manager);
+        require(inspectRecordingDevice(manager.getCurrentAudioDevice(),48000).captureReady() &&
+            !inspectRecordingDevice(manager.getCurrentAudioDevice(),44100).captureReady(),"capture live-rate check differs from real manager");
         require(!recallStatus(manager).needsAttention(),"restored manager mislabeled fallback");
         Probe probe;manager.addAudioCallback(&probe);
         require(probe.starts==1 && probe.rate==48000 && probe.block==128 && probe.inputs.toString(2)=="10","saved setup did not reach callback preparation");
@@ -120,6 +123,7 @@ int main(){try{
         require(prefs.save(state.get())==AudioDevicePreferences::Result::unchanged && bytes(file)==original,"restart rewrote preferences");
         manager.getCurrentAudioDevice()->close();
         require(manager.getCurrentAudioDevice()!=nullptr && recallStatus(manager).kind==AudioDeviceRecallStatus::Kind::unavailable,"closed device object reported as open");
+        require(!inspectRecordingDevice(manager.getCurrentAudioDevice(),48000).captureReady(),"closed object passed recording preflight");
         manager.closeAudioDevice();state=manager.createStateXml();require(state && prefs.save(state.get())==AudioDevicePreferences::Result::unchanged,"shutdown lost chosen setup");
     }
     {

@@ -25,6 +25,7 @@
 #include "StandardMidiExport.h"
 #include "AudioDevicePreferences.h"
 #include "AudioDeviceRecallStatus.h"
+#include "RecordingPreflight.h"
 #include "IDWConnectPanel.h"
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
@@ -1835,7 +1836,7 @@ private:
         const int physical=track.inputChannel;
         const bool audioTrack=track.type==idw::daw::TrackType::audio;
         const auto names=device ? device->getInputChannelNames() : juce::StringArray{};
-        const bool validInput=audioTrack && device && physical>=0 &&
+        const bool validInput=audioTrack && idw::daw::inspectRecordingDevice(device,deviceRate).captureReady() && physical>=0 &&
             physical<names.size() && device->getActiveInputChannels()[physical];
         const auto route="Device: "+(device ? device->getName() : juce::String("none"))+
             "\nTrack: "+juce::String(track.name)+
@@ -2925,37 +2926,47 @@ private:
             ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physical)
             : -1;
         const bool occupied=audioTrack && !session.isEmptyAudioTrack(selectedTrack);
-        const bool rateOk=std::isfinite(deviceRate) && deviceRate>0.0;
-        const bool inputOk=device && callbackIndex>=0 && physical<inputNames.size() && rateOk;
-        const bool outputOk=device && device->getActiveOutputChannels().countNumberOfSetBits()>0;
+        const auto deviceCheck=idw::daw::inspectRecordingDevice(device,deviceRate);
+        const bool rateOk=deviceCheck.rateMatches;
+        const bool inputOk=deviceCheck.captureReady() && callbackIndex>=0 && physical<inputNames.size();
+        const bool outputOk=deviceCheck.outputActive;
         const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
             .getChildFile("IDW DAW").getChildFile("Recordings");
-        const auto folderResult=folder.createDirectory();
-        const bool folderOk=folderResult.wasOk() && folder.isDirectory();
+        const auto folderProbe=idw::daw::probeRecordingFolder(folder);
+        const bool folderOk=folderProbe.writable;
         const auto freeBytes=folderOk ? folder.getBytesFreeOnVolume() : juce::int64{-1};
         // 100 MiB is a conservative warning threshold, not a recording guarantee.
         const bool spaceOk=folderOk && freeBytes>=100LL*1024LL*1024LL;
-        const bool ok=audioTrack && armed && !occupied && inputOk && outputOk && spaceOk;
+        idw::daw::RecordingPreflightChecks checks;
+        checks.audioTrack=audioTrack;checks.armed=armed;checks.emptyTrack=audioTrack && !occupied;
+        checks.inputReady=inputOk;checks.folderWritable=folderOk;checks.device=deviceCheck;checks.freeBytes=freeBytes;
+        const bool ok=checks.passes();
         const auto result=ok ? juce::String("PASS - ready to record") :
                                juce::String("ACTION NEEDED before recording");
-        const auto details=
-            "Overall: "+result+
-            "\\nTrack: "+(validTrack ? juce::String(session.tracks[selectedTrack].name) : juce::String("none"))+
-            "\\nAudio track: "+(audioTrack ? juce::String("PASS") : juce::String("FAIL - select audio track"))+
-            "\\nArmed: "+(armed ? juce::String("PASS") : juce::String("FAIL - ARM INPUT"))+
-            "\\nEmpty destination: "+(!occupied ? juce::String("PASS") : juce::String("FAIL - select empty track"))+
-            "\\nAudio device: "+(device ? device->getName() : juce::String("none"))+
-            "\\nInput: "+(inputOk ? inputNames[physical]+juce::String(" (PASS)") : juce::String("FAIL - enable/select mic input"))+
-            "\\nOutput: "+(outputOk ? juce::String("PASS") : juce::String("FAIL - enable audio output"))+
-            "\\nSample rate: "+(rateOk ? juce::String(deviceRate,0)+juce::String(" Hz") : juce::String("invalid"))+
-            "\\nRecording folder: "+folder.getFullPathName()+
-            "\\nFolder writable location: "+(folderOk ? juce::String("exists (write not tested)") : juce::String("FAIL - cannot create folder"))+
-            "\\nFree disk space: "+(freeBytes>=0 ? juce::String((double)freeBytes/(1024.0*1024.0),0)+juce::String(" MiB") : juce::String("unknown"))+
-            "\\nDisk capacity: "+(spaceOk ? juce::String("PASS") : juce::String("WARNING - 100 MiB minimum recommended"))+
-            "\\n\\nThis checks configuration, not live mic audio or audible playback.";
+        const auto liveRateText=std::isfinite(deviceCheck.sampleRate) && deviceCheck.sampleRate>0 ? juce::String(deviceCheck.sampleRate,0)+" Hz" : juce::String("invalid");
+        const auto engineRateText=std::isfinite(deviceRate) && deviceRate>0 ? juce::String(deviceRate,0)+" Hz" : juce::String("invalid");
+        const juce::StringArray details{
+            "Overall: "+result,
+            "Track: "+(validTrack ? juce::String(session.tracks[selectedTrack].name) : juce::String("none")),
+            "Audio track: "+(audioTrack ? juce::String("PASS") : juce::String("FAIL - select audio track")),
+            "Armed: "+(armed ? juce::String("PASS") : juce::String("FAIL - ARM INPUT")),
+            "Empty destination: "+(checks.emptyTrack ? juce::String("PASS") : juce::String("FAIL - select empty audio track")),
+            "Audio device: "+(device ? device->getName() : juce::String("none")),
+            "Device open: "+(deviceCheck.open ? juce::String("PASS") : juce::String("FAIL - select/reopen interface")),
+            "Input: "+(inputOk ? inputNames[physical]+juce::String(" (PASS)") : juce::String("FAIL - enable/select mic input")),
+            "Output: "+(outputOk ? juce::String("PASS") : juce::String("FAIL - enable audio output")),
+            "Rate agreement: "+(rateOk ? juce::String("PASS") : juce::String("FAIL - reselect interface")),
+            "Device rate: "+liveRateText+" | prepared engine: "+engineRateText,
+            "Recording folder: "+folder.getFullPathName(),
+            "Folder write test: "+juce::String(folderOk ? "PASS - " : "FAIL - ")+folderProbe.detail,
+            "Free disk space: "+(freeBytes>=0 ? juce::String((double)freeBytes/(1024.0*1024.0),0)+" MiB" : juce::String("unknown")),
+            "Disk capacity: "+(spaceOk ? juce::String("PASS") : juce::String("WARNING - 100 MiB minimum recommended")),
+            "",
+            "This checks configuration and a small temporary write, not live mic audio, audible playback or sustained recording."
+        };
         juce::AlertWindow::showMessageBoxAsync(
             ok ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon,
-            "IDW Recording Preflight",details);
+            "IDW Recording Preflight",details.joinIntoString("\n"));
     }
     void toggleRecording(){
         // Calibration owns a physical input/output while active. Do not let
@@ -3116,6 +3127,15 @@ private:
             }
             return;
         }
+        const auto captureDevice=idw::daw::inspectRecordingDevice(deviceManager.getCurrentAudioDevice(),deviceRate);
+        if(!captureDevice.captureReady()){
+            refreshAudioRecallStatus();refreshMixer();
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Audio interface unavailable",!captureDevice.open ?
+                "The audio device is not open. Connect/select an interface in AUDIO DEVICES and run PREFLIGHT." :
+                "The live device rate does not match the prepared recording engine. Reselect the interface in AUDIO DEVICES and run PREFLIGHT.");
+            return;
+        }
         std::vector<std::size_t> selectedInputs;
         for(std::size_t i=0;i<session.tracks.size() && i<armedTracks.size();++i)
             if(session.tracks[i].type==idw::daw::TrackType::audio && armedTracks[i])
@@ -3219,7 +3239,7 @@ private:
                     }
             auto* device=deviceManager.getCurrentAudioDevice();
             const auto active=device ? device->getActiveInputChannels() : juce::BigInteger();
-            bool validInputs=device!=nullptr;
+            bool validInputs=idw::daw::inspectRecordingDevice(device,deviceRate).captureReady();
             for(std::size_t i=0;i<selectedInputs.size();++i){
                 const int channel=session.tracks[selectedInputs[i]].inputChannel;
                 if(channel<0 || (device && channel>=device->getInputChannelNames().size()) ||
@@ -3277,7 +3297,7 @@ private:
             // If the previously configured input is no longer enabled (USB
             // interface unplugged/repaired), use the only enabled input when
             // unambiguous. Never silently redirect between multiple inputs.
-            if(device && callbackInput<0){
+            if(idw::daw::inspectRecordingDevice(device,deviceRate).captureReady() && callbackInput<0){
                 const auto active=device->getActiveInputChannels();
                 const int first=active.findNextSetBit(0);
                 const int second=first>=0 ? active.findNextSetBit(first+1) : -1;
@@ -3290,7 +3310,7 @@ private:
                         juce::String(first+1)+" on "+device->getName());
                 }
             }
-            if(!device || physicalInput<0 ||
+            if(!idw::daw::inspectRecordingDevice(device,deviceRate).captureReady() || physicalInput<0 ||
                physicalInput>=device->getInputChannelNames().size() || callbackInput<0 ||
                !std::isfinite(deviceRate) || deviceRate<=0.0){
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
