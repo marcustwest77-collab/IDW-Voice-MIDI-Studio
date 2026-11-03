@@ -25,8 +25,14 @@ int main(int argc,char** argv){try{
     bool allowed=true;int conflicts=0,changes=0;
     editor.canEdit=[&]{return allowed;};editor.onHistoryConflict=[&]{++conflicts;};editor.onChanged=[&]{++changes;};
     juce::Slider* slider=nullptr;
+    juce::TextButton* undoButton=nullptr;juce::TextButton* redoButton=nullptr;
     for(int i=0;i<editor.getNumChildComponents();++i)
         if(auto* found=dynamic_cast<juce::Slider*>(editor.getChildComponent(i)))slider=found;
+        else if(auto* button=dynamic_cast<juce::TextButton*>(editor.getChildComponent(i))){
+            if(button->getButtonText()=="UNDO MIDI")undoButton=button;
+            if(button->getButtonText()=="REDO MIDI")redoButton=button;
+        }
+    require(undoButton && redoButton && !undoButton->isEnabled() && !redoButton->isEnabled(),"initial history buttons");
     require(slider && !slider->isEnabled() && !slider->getWantsKeyboardFocus(),"unselected control or slider focus policy");
     select(editor);require(slider->isEnabled() && slider->getValue()==100,"selected velocity not displayed");
     // Exercise the production slider callbacks, including a queued final value.
@@ -83,6 +89,43 @@ int main(int argc,char** argv){try{
     require(editor.restoreHistory(true) && s.tracks[0].notes[0].velocity==1,"maximum velocity undo");
     require(editor.restoreHistory(false) && s.tracks[0].notes[0].velocity==127,"maximum velocity redo");
     require(root.deleteRecursively(),"fixture cleanup");require(changes>=6,"velocity changes not reported");
-    std::cout<<"PASS velocity inspector callbacks, grouped undo/redo, pending final value, busy/conflict/reset guards, save/reopen, MIDI and WAV dynamics\n";
+    // Use JUCE's real numeric text-entry path, not hand-invoked drag callbacks.
+    s=Session{};s.addTrack(TrackType::midi);s.addMidiNote(0,{60,0,1,110});
+    editor.resetEditor();select(editor);
+    juce::Label* number=nullptr;
+    for(int i=0;i<slider->getNumChildComponents();++i)
+        if(auto* label=dynamic_cast<juce::Label*>(slider->getChildComponent(i)))number=label;
+    require(number!=nullptr,"numeric label missing");
+    slider->showTextBox();auto* entry=number->getCurrentTextEditor();
+    require(entry!=nullptr,"numeric entry not created");
+    entry->setText("40",false);slider->hideTextBox(false);
+    require(s.tracks[0].notes[0].velocity==40 && slider->getValue()==40,"numeric entry did not commit");
+    require(editor.restoreHistory(true) && s.tracks[0].notes[0].velocity==110,"numeric entry undo missing");
+    require(editor.restoreHistory(false) && s.tracks[0].notes[0].velocity==40,"numeric entry redo missing");
+    require(undoButton->isEnabled() && !redoButton->isEnabled(),"button history availability after numeric edit");
+    undoButton->onClick();
+    require(s.tracks[0].notes[0].velocity==110 && !undoButton->isEnabled() && redoButton->isEnabled(),"numeric edit button undo");
+    redoButton->onClick();
+    require(s.tracks[0].notes[0].velocity==40 && undoButton->isEnabled() && !redoButton->isEnabled(),"numeric edit button redo");
+    // Button operation must be safe even when a number edit has not yet committed.
+    select(editor);slider->showTextBox();entry=number->getCurrentTextEditor();
+    require(entry!=nullptr,"pending numeric editor missing");entry->setText("70",false);
+    undoButton->onClick();require(s.tracks[0].notes[0].velocity==40,"button lost or failed to undo pending numeric entry");
+    redoButton->onClick();require(s.tracks[0].notes[0].velocity==70,"pending numeric edit redo");
+    select(editor);allowed=false;undoButton->onClick();
+    require(s.tracks[0].notes[0].velocity==70,"busy history button edited notes");allowed=true;
+    slider->onDragStart();undoButton->onClick();redoButton->onClick();
+    require(s.tracks[0].notes[0].velocity==70 && !undoButton->isEnabled() && !redoButton->isEnabled(),"history buttons edited during gesture");slider->onDragEnd();
+    const auto externalVelocity=12;s.tracks[0].notes[0].velocity=externalVelocity;
+    const int previousConflicts=conflicts;undoButton->onClick();
+    require(s.tracks[0].notes[0].velocity==externalVelocity && conflicts==previousConflicts+1,"history button overwrote conflicting notes");
+    editor.resetEditor();require(!undoButton->isEnabled() && !redoButton->isEnabled(),"reset retained history buttons");
+    for(int width:{100,339,340,480,1000}){
+        editor.setSize(width,480);
+        require(undoButton->isVisible()==(width>=340) && redoButton->isVisible()==(width>=340),"history controls visibility at narrow widths");
+        if(width>=340)require(undoButton->getX()>=0 && undoButton->getRight()<redoButton->getX() &&
+            redoButton->getRight()<width-114 && undoButton->getBottom()<=PianoRollViewport::headerHeight,"history header overlap");
+    }
+    std::cout<<"PASS velocity inspector callbacks, numeric entry, grouped undo/redo, pending final value, busy/conflict/reset guards, save/reopen, MIDI and WAV dynamics\n";
     return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<"\n";return 1;}}
