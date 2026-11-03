@@ -23,6 +23,7 @@
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
 #include "StandardMidiExport.h"
+#include "StandardMidiImport.h"
 #include "AudioDevicePreferences.h"
 #include "AudioDeviceRecallStatus.h"
 #include "RecordingPreflight.h"
@@ -2491,6 +2492,7 @@ private:
         juce::PopupMenu menu;menu.addItem(1,"Open saved project...");
         menu.addItem(3,"Relink missing audio...");
         menu.addItem(4,"Export audible MIDI tracks...");
+        menu.addItem(5,"Import MIDI notes...");
         juce::PopupMenu recoverMenu;
         for(size_t i=0;i<copies.size() && i<20;++i){
             idw::daw::Session ignored;juce::File origin;
@@ -2506,6 +2508,7 @@ private:
             if(result==1){safe->openProjectFile();return;}
             if(result==3){safe->showMissingAudioMenu();return;}
             if(result==4){safe->exportMidiFile();return;}
+            if(result==5){safe->importMidiFile();return;}
             if(result==2){
                 if(safe->recovery.directory().createDirectory().wasOk())
                     safe->recovery.directory().revealToUser();
@@ -2637,6 +2640,45 @@ private:
                             ok?"WAV export complete":"WAV bounce unavailable",ok?"Stereo WAV written successfully.":error);
                     });
                 });
+            });
+    }
+    void importMidiFile(){
+        if(!recoveryIdle())return;
+        projectChooser=std::make_unique<juce::FileChooser>("Import MIDI notes",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*.mid;*.midi");
+        projectChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+            [safe=juce::Component::SafePointer<Workstation>(this)](const juce::FileChooser& picker){
+                if(safe==nullptr || !safe->recoveryIdle() || picker.getResult()==juce::File{})return;
+                safe->pianoRoll.setVisible(false); // Finalize an existing edit before taking the preview snapshot.
+                idw::daw::ImportedMidiFile imported;juce::String error;
+                if(!idw::daw::readStandardMidi(picker.getResult(),imported,error)){
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"MIDI import unavailable",error);return;
+                }
+                auto plan=idw::daw::MidiImportPlan::prepare(safe->session,imported,error);
+                if(!plan){juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"MIDI import unavailable",error);return;}
+                auto prepared=std::make_shared<idw::daw::MidiImportPlan>(std::move(*plan));
+                auto message="Add "+juce::String((int)prepared->trackCount())+" MIDI track(s), "+
+                    juce::String((int)prepared->noteCount())+" notes.\n\nFile tempo: "+juce::String(imported.bpm,2)+
+                    " BPM, "+juce::String(imported.numerator)+"/"+juce::String(imported.denominator)+
+                    ".\nImport follows this project's "+juce::String(safe->session.bpm,2)+" BPM and "+
+                    juce::String(safe->session.numerator)+"/"+juce::String(safe->session.denominator)+
+                    " meter. Imported tracks start with the Keys instrument.";
+                if(std::any_of(safe->session.tracks.begin(),safe->session.tracks.end(),[](const auto& t){return t.solo;}))
+                    message+="\n\nProject solo is active; clear solo to hear the new tracks.";
+                auto* prompt=new juce::AlertWindow("Import MIDI notes",message,juce::MessageBoxIconType::QuestionIcon);
+                prompt->addButton("Add tracks",1,juce::KeyPress(juce::KeyPress::returnKey));
+                prompt->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
+                prompt->enterModalState(true,juce::ModalCallbackFunction::create([safe,prepared](int accepted){
+                    if(accepted!=1 || safe==nullptr || !safe->recoveryIdle())return;
+                    juce::String commitError;
+                    if(!prepared->commit(safe->session,commitError)){
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"MIDI import unavailable",commitError);return;
+                    }
+                    safe->selectedTrack=prepared->firstTrack();safe->selectedClipValid=false;
+                    safe->pianoRoll.setTrackIndex(safe->selectedTrack);
+                    safe->refreshMixer();safe->ensureSelectedTrackVisible();safe->repaint();
+                    safe->commandStatus.setText("Imported "+juce::String((int)prepared->noteCount())+" MIDI notes",juce::dontSendNotification);
+                }),true);
             });
     }
     void exportMidiFile(){
