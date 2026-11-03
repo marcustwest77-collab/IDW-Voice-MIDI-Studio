@@ -2916,19 +2916,11 @@ private:
         }
         auto* device=deviceManager.getCurrentAudioDevice();
         const bool validTrack=selectedTrack<session.tracks.size();
-        const bool audioTrack=validTrack &&
-            session.tracks[selectedTrack].type==idw::daw::TrackType::audio;
-        const bool armed=audioTrack && selectedTrack<armedTracks.size() &&
-            armedTracks[selectedTrack];
-        const int physical=audioTrack ? session.tracks[selectedTrack].inputChannel : -1;
-        const auto inputNames=device ? device->getInputChannelNames() : juce::StringArray{};
-        const int callbackIndex=device && physical>=0
-            ? IDWLoopbackCapture::callbackIndexForChannel(device->getActiveInputChannels(),physical)
-            : -1;
-        const bool occupied=audioTrack && !session.isEmptyAudioTrack(selectedTrack);
         const auto deviceCheck=idw::daw::inspectRecordingDevice(device,deviceRate);
+        const auto inputNames=deviceCheck.open ? device->getInputChannelNames() : juce::StringArray{};
+        const auto activeInputs=deviceCheck.open ? device->getActiveInputChannels() : juce::BigInteger{};
+        const auto targets=idw::daw::inspectArmedRecordingTargets(session,armedTracks,inputNames,activeInputs,IDWMultiTakeRecorder::maxTracks);
         const bool rateOk=deviceCheck.rateMatches;
-        const bool inputOk=deviceCheck.captureReady() && callbackIndex>=0 && physical<inputNames.size();
         const bool outputOk=deviceCheck.outputActive;
         const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
             .getChildFile("IDW DAW").getChildFile("Recordings");
@@ -2937,33 +2929,33 @@ private:
         const auto freeBytes=folderOk ? folder.getBytesFreeOnVolume() : juce::int64{-1};
         // 100 MiB is a conservative warning threshold, not a recording guarantee.
         const bool spaceOk=folderOk && freeBytes>=100LL*1024LL*1024LL;
-        idw::daw::RecordingPreflightChecks checks;
-        checks.audioTrack=audioTrack;checks.armed=armed;checks.emptyTrack=audioTrack && !occupied;
-        checks.inputReady=inputOk;checks.folderWritable=folderOk;checks.device=deviceCheck;checks.freeBytes=freeBytes;
+        const auto checks=idw::daw::recordingPreflightForTargets(targets,deviceCheck,folderOk,freeBytes);
         const bool ok=checks.passes();
         const auto result=ok ? juce::String("PASS - ready to record") :
                                juce::String("ACTION NEEDED before recording");
         const auto liveRateText=std::isfinite(deviceCheck.sampleRate) && deviceCheck.sampleRate>0 ? juce::String(deviceCheck.sampleRate,0)+" Hz" : juce::String("invalid");
         const auto engineRateText=std::isfinite(deviceRate) && deviceRate>0 ? juce::String(deviceRate,0)+" Hz" : juce::String("invalid");
-        const juce::StringArray details{
+        juce::StringArray details{
             "Overall: "+result,
-            "Track: "+(validTrack ? juce::String(session.tracks[selectedTrack].name) : juce::String("none")),
-            "Audio track: "+(audioTrack ? juce::String("PASS") : juce::String("FAIL - select audio track")),
-            "Armed: "+(armed ? juce::String("PASS") : juce::String("FAIL - ARM INPUT")),
-            "Empty destination: "+(checks.emptyTrack ? juce::String("PASS") : juce::String("FAIL - select empty audio track")),
+            "Selected track (informational): "+(validTrack ? juce::String(session.tracks[selectedTrack].name).substring(0,80).replaceCharacters("\r\n\t","   ") : juce::String("none")),
+            "Armed audio destinations: "+juce::String((int)targets.tracks.size()),
+            "Simultaneous-track capacity: "+(targets.withinCapacity ? juce::String("PASS") : juce::String("FAIL - maximum ")+juce::String((int)IDWMultiTakeRecorder::maxTracks)),
+            "All destinations empty: "+(checks.emptyTrack ? juce::String("PASS") : juce::String("FAIL - arm empty audio tracks")),
+            "Distinct enabled inputs: "+(!targets.tracks.empty() && targets.routesValid && targets.distinctInputs ? juce::String("PASS") : juce::String("FAIL - enable/select a different input per armed track")),
             "Audio device: "+(device ? device->getName() : juce::String("none")),
             "Device open: "+(deviceCheck.open ? juce::String("PASS") : juce::String("FAIL - select/reopen interface")),
-            "Input: "+(inputOk ? inputNames[physical]+juce::String(" (PASS)") : juce::String("FAIL - enable/select mic input")),
             "Output: "+(outputOk ? juce::String("PASS") : juce::String("FAIL - enable audio output")),
             "Rate agreement: "+(rateOk ? juce::String("PASS") : juce::String("FAIL - reselect interface")),
             "Device rate: "+liveRateText+" | prepared engine: "+engineRateText,
-            "Recording folder: "+folder.getFullPathName(),
-            "Folder write test: "+juce::String(folderOk ? "PASS - " : "FAIL - ")+folderProbe.detail,
-            "Free disk space: "+(freeBytes>=0 ? juce::String((double)freeBytes/(1024.0*1024.0),0)+" MiB" : juce::String("unknown")),
-            "Disk capacity: "+(spaceOk ? juce::String("PASS") : juce::String("WARNING - 100 MiB minimum recommended")),
             "",
-            "This checks configuration and a small temporary write, not live mic audio, audible playback or sustained recording."
+            "Armed destination checks:"
         };
+        details.addArray(idw::daw::describeArmedRecordingTargets(targets));
+        details.add("");details.add("Recording folder: "+folder.getFullPathName());
+        details.add("Folder write test: "+juce::String(folderOk ? "PASS - " : "FAIL - ")+folderProbe.detail);
+        details.add("Free disk space: "+(freeBytes>=0 ? juce::String((double)freeBytes/(1024.0*1024.0),0)+" MiB" : juce::String("unknown")));
+        details.add("Disk capacity: "+(spaceOk ? juce::String("PASS") : juce::String("WARNING - 100 MiB minimum recommended")));
+        details.add("");details.add("This checks all explicitly armed audio tracks and a small temporary write, not live mic audio, audible playback or sustained recording. No tracks were armed or rerouted by preflight.");
         juce::AlertWindow::showMessageBoxAsync(
             ok ? juce::MessageBoxIconType::InfoIcon : juce::MessageBoxIconType::WarningIcon,
             "IDW Recording Preflight",details.joinIntoString("\n"));

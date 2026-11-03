@@ -676,3 +676,32 @@ Both regressions pass strict local MSVC /W4 /WX compilation; no real audio
 drivers are opened. The target is registered in CTest and Windows/macOS
 foundation CI. Full app builds, physical PREFLIGHT and AudioBox recording remain
 pending. Installed beta, separate #223 app and user projects/audio are unchanged.
+
+## Preflight covers every armed audio destination
+
+PREFLIGHT previously evaluated only the selected track, while RECORD can capture
+all armed audio tracks. An occupied, duplicate-routed or disabled second armed
+track could therefore be missed. It now inspects the complete explicitly armed
+audio-track set, independent of the selected editor/mixer track, and requires
+every destination to be empty with a distinct enabled input within the recorder's
+simultaneous-track capacity. Device, rate, output, folder-probe and disk-space
+checks remain shared requirements.
+
+The report lists each armed destination and identifies occupied tracks, disabled
+or out-of-range inputs and every affected duplicate route. Large arm sets have
+bounded detail rows and show an omitted-row count. Inspection is read-only: no
+tracks are armed, rerouted or cleared. RECORD's existing unambiguous auto-arm and
+sole-active-input recovery behavior is unchanged; PREFLIGHT itself still expects
+explicit arm/input configuration and reports ACTION NEEDED when none is armed.
+
+ArmedRecordingPreflightTests checks independent selection scope, second-track
+failures, duplicate routes, disabled/out-of-range channels, sparse physical-to-
+callback mapping against the recording path, empty/MIDI/stale arm flags, eight-
+track capacity, bounded/sanitized reports, unchanged session/arm state and the
+shared device/rate/folder/space requirements. Strict local MSVC /W4 /WX builds
+and both this regression and the prior recording-preflight regression pass.
+No real drivers are opened; eight-route validation is simulated configuration,
+not physical eight-input qualification. The new test is registered in CTest and
+Windows/macOS foundation CI. Full application builds and physical multitrack
+preflight remain pending. Installed beta, separate #223 app, active settings and
+user projects/audio are unchanged; AudioBox listening is still unconfirmed.
