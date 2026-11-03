@@ -837,3 +837,41 @@ not claimed verified. This changes the unit-test boundary, not production key
 routing. Full CI and physical validation of the input fix are pending. The
 installed beta, running #233 test executable and all diagnostic copies are left
 intact.
+
+### Notes-only standard MIDI import
+
+OPEN / RECOVER now offers Import MIDI notes. The file is decoded and staged
+before an Add tracks / Cancel preview. The preview reports track/note counts,
+file tempo/meter, current project tempo/meter and the initial Keys instrument.
+Imports add separate MIDI tracks per source track/channel and follow the current
+project's musical tempo/meter; existing timing, audio references, instruments,
+mix settings and notes are preserved. An active project solo is reported in the
+preview. A changed project or busy transport prevents the staged commit.
+
+The strict SMF reader accepts formats 0/1 with PPQ timing, running status,
+velocity-zero note-offs and FIFO pairing of overlapping same-pitch notes. It
+requires complete chunks, matched positive-duration notes and end-of-track
+markers. Limits are 1 MiB, 100000 events, 50000 notes, 128 imported destination
+tracks and four hours at both file and destination tempos. Tempo and meter must
+be constant. SMPTE timing/offsets, SysEx, controllers, program changes and
+expression events are rejected with no partial import. This initial import is
+for note data, with track names bounded/sanitized and new instruments set to Keys;
+it does not reproduce an external synth's patches, controllers or release-velocity
+response. Note-off velocities are validated but not represented in the model.
+
+The model plan owns a private staged session. Merely preparing or cancelling a
+preview cannot change the destination; commit checks its complete current JSON
+against the captured state before replacing the model. A second commit or a
+changed project fails without overwriting newer work. Audio player indices are
+preserved because only new tracks are appended, and MIDI history is retained.
+
+StandardMidiImportTests passes under local MSVC /W4 /WX. It covers native export/
+import roundtrip, metadata, channel splitting, running status, FIFO overlaps,
+all truncated prefixes, invalid chunks/status/notes/tempo/meter, file/event/note/
+track limits, 1500 deterministic mutations, stale/double commits, unchanged
+existing project JSON and imported-note save/reopen. It also imported the user's
+already-exported two-note .mid read-only with tempo 120 and velocities 30/70;
+that file's bytes are unchanged. The test opens no audio drivers. The new target
+is registered in CTest and Windows/macOS foundation CI. Full application CI and
+physical import UI/playback qualification are pending; no external-DAW import
+demonstration is inferred. Installed beta and the #235 test app are not replaced.
