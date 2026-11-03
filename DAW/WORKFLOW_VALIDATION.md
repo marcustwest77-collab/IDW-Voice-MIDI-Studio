@@ -770,3 +770,35 @@ the expanded regression; full app CI and physical verification remain pending.
 Parent #232 Windows CI was still running and two macOS jobs were cancelled at
 the time of this change, so those checks are not reported as passed. This source
 change does not replace the installed beta or the running #231 test app.
+
+### Recover history controls after a released gesture
+
+The #233 Windows artifact passed all five CI jobs and 68 DAW regressions on each
+application platform, and was downloaded, checksum-verified and launched as a
+separate test copy. The user saw the new controls, but reported that UNDO MIDI
+did not restore 110. Accessibility inspection showed velocity 40 enabled while
+UNDO MIDI, REDO MIDI, duration and duplicate controls were disabled. This matches
+an unfinished gesture's control state. The exact native event sequence producing
+that live state remains unconfirmed; the physical history-button check is failed,
+not qualified by the green unit tests.
+
+The regression now commits numeric entry using the actual TextEditor Return-key
+path and dispatches its queued GUI event, in addition to the existing pending
+entry test. This path passes locally. A separate regression recreates the
+observed disabled state by withholding mouseUp after selecting an edited note.
+History remains unavailable until that pending gesture is finalized.
+
+The piano roll now checks physical mouse-button state at 20 Hz while visible,
+on the message thread. Once no button is held, an unfinished gesture is finalized
+using its existing final-value, history-grouping and conflict checks. A held
+button still blocks history; hiding the editor stops the timer. This recovers a
+missing release without discarding an existing edit or requiring an editor
+close/reopen. It does not assert that the native release failure was reproduced.
+
+Expanded MidiVelocityTests verifies the held/released distinction, unchanged
+notes during a no-op recovery, velocity undo/redo after recovery, a lost slider
+release with a pending final value, one-step grouping, repeated idle recovery and
+conflicting newer notes. It, PianoRollCloseTests and MidiLengthTests pass locally
+under MSVC /W4 /WX. The velocity CTest now has a 30-second timeout around the GUI
+dispatch test. Full application CI and physical qualification of this recovery
+are pending. Installed beta and the running #233 test app are not replaced.

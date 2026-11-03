@@ -98,7 +98,10 @@ int main(int argc,char** argv){try{
     require(number!=nullptr,"numeric label missing");
     slider->showTextBox();auto* entry=number->getCurrentTextEditor();
     require(entry!=nullptr,"numeric entry not created");
-    entry->setText("40",false);slider->hideTextBox(false);
+    entry->setText("40",false);
+    require(entry->keyPressed(juce::KeyPress(juce::KeyPress::returnKey)),"Enter not accepted by numeric editor");
+    juce::Timer::callAfterDelay(50,[]{juce::MessageManager::getInstance()->stopDispatchLoop();});
+    juce::MessageManager::getInstance()->runDispatchLoop();
     require(s.tracks[0].notes[0].velocity==40 && slider->getValue()==40,"numeric entry did not commit");
     require(editor.restoreHistory(true) && s.tracks[0].notes[0].velocity==110,"numeric entry undo missing");
     require(editor.restoreHistory(false) && s.tracks[0].notes[0].velocity==40,"numeric entry redo missing");
@@ -126,6 +129,30 @@ int main(int argc,char** argv){try{
         if(width>=340)require(undoButton->getX()>=0 && undoButton->getRight()<redoButton->getX() &&
             redoButton->getRight()<width-114 && undoButton->getBottom()<=PianoRollViewport::headerHeight,"history header overlap");
     }
-    std::cout<<"PASS velocity inspector callbacks, numeric entry, grouped undo/redo, pending final value, busy/conflict/reset guards, save/reopen, MIDI and WAV dynamics\n";
+    // Reproduce a committed velocity edit followed by a note click whose
+    // mouseUp is not delivered: both history controls remain blocked.
+    s=Session{};s.addTrack(TrackType::midi);s.addMidiNote(0,{60,0,1,110});
+    editor.resetEditor();select(editor);require(editor.setSelectionVelocity(40),"release fixture edit");
+    editor.mouseDown(mouse(editor,55,312));
+    require(!undoButton->isEnabled() && !redoButton->isEnabled(),"unfinished gesture not blocked");
+    editor.finishReleasedGesture(true);undoButton->onClick();
+    require(s.tracks[0].notes[0].velocity==40 && !undoButton->isEnabled(),"held-button gesture ended early");
+    const auto held=s.tracks[0].notes;editor.finishReleasedGesture(false);
+    require(sameMidiNotes(held,s.tracks[0].notes) && undoButton->isEnabled(),"release recovery changed notes or left undo blocked");
+    undoButton->onClick();require(s.tracks[0].notes[0].velocity==110,"release recovery lost velocity undo");
+    redoButton->onClick();require(s.tracks[0].notes[0].velocity==40,"release recovery lost velocity redo");
+    // A lost slider release must retain its pending final value and one history entry.
+    editor.resetEditor();select(editor);slider->onDragStart();slider->setValue(70,juce::sendNotificationAsync);
+    editor.finishReleasedGesture(true);require(!undoButton->isEnabled(),"held slider was finalized");
+    editor.finishReleasedGesture(false);
+    require(s.tracks[0].notes[0].velocity==70 && undoButton->isEnabled(),"lost slider release lost final value");
+    undoButton->onClick();require(s.tracks[0].notes[0].velocity==40 && !undoButton->isEnabled(),"slider release not one history entry");
+    redoButton->onClick();require(s.tracks[0].notes[0].velocity==70,"slider release redo");
+    // Repeated idle ticks are harmless and retain conflict protection.
+    editor.finishReleasedGesture(false);select(editor);slider->onDragStart();
+    s.tracks[0].notes[0].velocity=13;const int releaseConflicts=conflicts;
+    editor.finishReleasedGesture(false);
+    require(s.tracks[0].notes[0].velocity==13 && conflicts==releaseConflicts+1,"release recovery overwrote newer notes");
+    std::cout<<"PASS velocity inspector callbacks, numeric Enter, released-gesture recovery, grouped undo/redo, pending final value, busy/conflict/reset guards, save/reopen, MIDI and WAV dynamics\n";
     return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<"\n";return 1;}}
