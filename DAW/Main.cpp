@@ -24,6 +24,7 @@
 #include "OfflineBounce.h"
 #include "StandardMidiExport.h"
 #include "AudioDevicePreferences.h"
+#include "AudioDeviceRecallStatus.h"
 #include "IDWConnectPanel.h"
 #include "AIApprovalPanel.h"
 #include "AIStatusSnapshot.h"
@@ -117,6 +118,7 @@ public:
         formats.registerBasicFormats();
         const auto savedAudioSetup=audioDevicePreferences.load();
         setAudioChannels(8,2,savedAudioSetup.get()); // JUCE falls back if a saved device is unavailable.
+        refreshAudioRecallStatus();
         deviceManager.addChangeListener(this);
         deviceManager.addAudioCallback(&recorderCallback);
         deviceManager.addAudioCallback(&multiRecorderCallback);
@@ -1756,6 +1758,7 @@ private:
             if(entry.second.get()==source){repaint();return;}
         }
         if(source==&deviceManager){
+            refreshAudioRecallStatus();
             // Device selector changes are delivered on the message thread.
             // Do not rewrite routes while audio recording is in progress.
             if(!recorder.isRecording() && !multiRecorder.isRecording()){
@@ -1765,6 +1768,13 @@ private:
             }
         }
     }
+    void refreshAudioRecallStatus(){
+        const auto chosen=deviceManager.createStateXml();
+        const auto setup=deviceManager.getAudioDeviceSetup();
+        auto* device=deviceManager.getCurrentAudioDevice();
+        audioRecallStatus=idw::daw::describeAudioDeviceRecall(chosen.get(),deviceManager.getCurrentAudioDeviceType(),
+            setup.inputDeviceName,setup.outputDeviceName,device && device->isOpen());
+    }
     void saveAudioDevicePreferences(bool reportFailure){
         const auto state=deviceManager.createStateXml();
         if(audioDevicePreferences.save(state.get())==idw::daw::AudioDevicePreferences::Result::failed){
@@ -1773,7 +1783,11 @@ private:
         }
     }
     void refreshMixer(){
-        if(session.tracks.empty())return;
+        if(session.tracks.empty()){
+            recordReadiness.setText(audioRecallStatus.needsAttention()?audioRecallStatus.line:juce::String("NO TRACK SELECTED"),juce::dontSendNotification);
+            recordReadiness.setTooltip(audioRecallStatus.detail);
+            recordReadiness.setColour(juce::Label::textColourId,juce::Colour(0xffffc857));return;
+        }
         if(selectedTrack>=session.tracks.size())selectedTrack=0;
         const auto& track=session.tracks[selectedTrack];
         synthPreset.setEnabled(track.type==idw::daw::TrackType::midi &&
@@ -1830,11 +1844,12 @@ private:
                 juce::String("not selected or disabled"))+
             "\n"+(validInput ? juce::String("Ready to capture when RECORD VOCAL is pressed.") :
                 juce::String("Open AUDIO DEVICES, enable an input, and select it on an audio track."));
-        record.setTooltip(route);
-        inputChannel.setTooltip(route);
+        const auto routeDetail=audioRecallStatus.needsAttention()?audioRecallStatus.detail+"\n\n"+route:route;
+        record.setTooltip(routeDetail);
+        inputChannel.setTooltip(routeDetail);
         const auto ready=audioTrack && trackArmed && validInput;
         const bool recordingNow=recorder.isRecording() || multiRecorder.isRecording();
-        recordReadiness.setText(recordingNow ?
+        const auto readiness=recordingNow ?
             ("RECORDING  |  "+(device ? device->getName() : juce::String("No device"))+
              "  |  "+juce::String(track.name)) :
             ready ?
@@ -1843,11 +1858,12 @@ private:
             ("NOT READY  |  "+(device ? device->getName() : juce::String("No device"))+
              "  |  "+juce::String(track.name)+
              (trackArmed ? "  |  Armed" : "  |  Disarmed")+
-             (validInput ? "  |  Input ON" : "  |  Input unavailable")),
-            juce::dontSendNotification);
+             (validInput ? "  |  Input ON" : "  |  Input unavailable"));
+        recordReadiness.setText(!recordingNow && audioRecallStatus.needsAttention()?audioRecallStatus.line:readiness,juce::dontSendNotification);
+        recordReadiness.setTooltip(routeDetail);
         recordReadiness.setColour(juce::Label::textColourId,
             recordingNow ? juce::Colour(0xfff44368) :
-            ready ? juce::Colour(0xff73f9ae) : juce::Colour(0xffffc857));
+            ready && !audioRecallStatus.needsAttention() ? juce::Colour(0xff73f9ae) : juce::Colour(0xffffc857));
     }
     void ensureSelectedTrackVisible(){
         const int mixerHeight=neoMixerExpanded ? 190 : 112;
@@ -3375,6 +3391,7 @@ public:
     idw::daw::AudioDevicePreferences audioDevicePreferences{
         juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
             .getChildFile("IDW Neo Studio").getChildFile("AudioDeviceSettings.xml")};
+    idw::daw::AudioDeviceRecallStatus audioRecallStatus;
     idw::daw::SessionRecovery recovery{
         juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
             .getChildFile("IDW Neo Studio").getChildFile("Recovery")};
