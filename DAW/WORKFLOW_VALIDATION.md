@@ -645,3 +645,34 @@ real audio drivers are opened. The status test is registered in CTest and the
 Windows/macOS foundation workflow. Full app builds, the actual readiness-strip
 interaction and physical AudioBox behavior remain pending. Installed beta,
 separate #223 test app, active settings and user projects/audio are unchanged.
+
+## Preflight verifies an open device and an actual folder write
+
+PREFLIGHT previously accepted a device pointer with a cached positive sample
+rate even if the device was closed, and a directory's existence without testing
+write access. The shared recording check now requires an open device and a
+finite positive live rate matching the prepared engine. Readiness, preflight
+and single/multitrack start guards use that check. Start is rejected before
+automatic arming or writer creation when the device/rate check fails; the stop
+and existing take-finalization path remains available after device failure.
+
+An explicit PREFLIGHT run now writes and flushes a tiny uniquely named temporary
+marker in the recording folder, verifies exact readback, and cleans it up. It
+never uses a take filename or overwrites existing media. A failed write,
+readback or cleanup prevents PASS. The existing 100 MiB free-space threshold
+still applies to preflight, without guaranteeing sustained recording capacity.
+The dialog now uses real line breaks, shows open/rate agreement and the actual
+write-probe result, and explains that neither mic audio nor audible playback
+has been tested. Record-start writers retain their own error checks; the folder
+probe runs only during explicit PREFLIGHT, outside audio callbacks.
+
+RecordingPreflightTests checks closed/missing/stale/nonfinite device cases,
+every required preflight flag, free-space bounds, new and existing folders,
+successful write/flush/readback/cleanup, failed/partial/same-size-wrong writes,
+exceptions and blocked destinations, with existing take bytes unchanged. The
+real-JUCE simulated-device integration test also verifies live/prepared rate
+agreement and a closed device object against the same production helper.
+Both regressions pass strict local MSVC /W4 /WX compilation; no real audio
+drivers are opened. The target is registered in CTest and Windows/macOS
+foundation CI. Full app builds, physical PREFLIGHT and AudioBox recording remain
+pending. Installed beta, separate #223 app and user projects/audio are unchanged.
