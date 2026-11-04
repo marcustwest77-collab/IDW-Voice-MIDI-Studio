@@ -928,3 +928,28 @@ field/collection edits; non-persisted track properties; and a change to the last
 of 50000 notes. CTest and foundation CI targets registered. Application CI and
 physical header/window-title checks are pending. Installed beta and user project
 and audio files are unchanged. The parent #237 physical workflow remains pending.
+
+### Project save destination (2026-11-04)
+
+SAVE PROJECT suggests the current project's folder and filename, or IDW Session
+for an untitled document. A dedicated normalizer collapses repeated .idwproj
+suffixes and separator dots: Song.v2.idwproj..idwproj becomes Song.v2.idwproj.
+It preserves dotted stems and Unicode names, appends the project extension to
+other typed names, and rejects an empty stem. Existing oddly named files are
+not renamed or deleted.
+
+Replacement is confirmed against the final normalized full path, independently
+of the native picker. Cancel/Return/Escape keeps the target. No existing final
+destination is written without explicit replacement consent, including a file
+that appears after selection. A model snapshot and originating project path
+guard against changes during the picker or replacement prompt; busy or reused
+save requests are rejected. Write failure leaves the current filename/status
+and recovery state unchanged; only a successful validated save updates them.
+
+ProjectSaveDestinationTests passed under local MSVC /W4 /WX: normalization and
+idempotence, Unicode/dotted stems, current-project suggestion, final-path
+replacement consent, stale/busy/double requests, a newly appeared target,
+directory rejection, blocked-parent failure/retry, saved MIDI/tempo data and
+unchanged source audio. CTest and Windows/macOS foundation targets added. Full
+application CI and physical save-dialog checks remain pending. User projects,
+the running #238 test app and installed beta remain unchanged.

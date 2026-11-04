@@ -21,6 +21,7 @@
 #include "SessionRecovery.h"
 #include "NewProject.h"
 #include "ProjectDocumentStatus.h"
+#include "ProjectSaveDestination.h"
 #include "AudioRelink.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
@@ -2787,22 +2788,42 @@ private:
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Export failed",error);
             });
     }
+    void finishProjectSave(const std::shared_ptr<idw::daw::ProjectSavePlan>& plan,bool replaceApproved){
+        juce::String error;
+        if(!plan->commit(session,currentProject,recoveryIdle(),replaceApproved,error)){
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save failed",error);return;
+        }
+        currentProject=plan->target();
+        documentStatus.begin(session,currentProject);refreshProjectStatus();
+        if(!recovery.markSaved(session))
+            commandStatus.setText("Project saved; older recovery copies retained",juce::dontSendNotification);
+    }
     void saveProjectFile(){
-        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
-        projectChooser=std::make_unique<juce::FileChooser>("Save IDW DAW Project",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("IDW Session.idwproj"),"*.idwproj");
-        projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
-            [this](const juce::FileChooser& picker){
-                const auto file=picker.getResult();
-                if(file==juce::File{} || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
-                const auto destination=file.withFileExtension(".idwproj");
-                if(!idw::daw::saveProjectSession(session,destination))
-                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save failed","Could not write IDW project.");
-                else{
-                    currentProject=destination;
-                    documentStatus.begin(session,currentProject);refreshProjectStatus();
-                    if(!recovery.markSaved(session))
-                        commandStatus.setText("Project saved; older recovery copies retained",juce::dontSendNotification);
+        if(!recoveryIdle())return;
+        pianoRoll.setVisible(false); // Finalize pending note edits before the save workflow.
+        const auto expectedProject=currentProject;
+        const auto expectedState=juce::JSON::toString(idw::daw::sessionToJson(session),true);
+        const auto initial=idw::daw::suggestedProjectSaveDestination(currentProject,
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory));
+        projectChooser=std::make_unique<juce::FileChooser>("Save IDW DAW Project",initial,"*.idwproj");
+        // Confirm the normalized final path ourselves, rather than a picker alias.
+        projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+            [safe=juce::Component::SafePointer<Workstation>(this),expectedProject,expectedState](const juce::FileChooser& picker){
+                if(safe==nullptr || picker.getResult()==juce::File{} || !safe->recoveryIdle())return;
+                if(safe->currentProject!=expectedProject || juce::JSON::toString(idw::daw::sessionToJson(safe->session),true)!=expectedState){
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save cancelled",
+                        "The project changed while the file picker was open. Choose SAVE PROJECT again.");return;
                 }
+                auto plan=std::make_shared<idw::daw::ProjectSavePlan>(safe->session,safe->currentProject,picker.getResult());
+                if(!plan->target().exists()){safe->finishProjectSave(plan,false);return;}
+                auto* prompt=new juce::AlertWindow("Replace saved project?",
+                    "Replace this existing file?\n\n"+plan->target().getFullPathName()+
+                    "\n\nChoose Cancel to keep it and select another filename.",juce::MessageBoxIconType::QuestionIcon);
+                prompt->addButton("Replace project",1);
+                prompt->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey),juce::KeyPress(juce::KeyPress::returnKey));
+                prompt->enterModalState(true,juce::ModalCallbackFunction::create([safe,plan](int result){
+                    if(safe!=nullptr && result==1)safe->finishProjectSave(plan,true);
+                }),true);
             });
     }
     void removeDuplicateSourceReaders(AudioSlot* active){
