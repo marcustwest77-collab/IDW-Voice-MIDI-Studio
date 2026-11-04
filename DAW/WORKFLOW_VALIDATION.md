@@ -953,3 +953,30 @@ directory rejection, blocked-parent failure/retry, saved MIDI/tempo data and
 unchanged source audio. CTest and Windows/macOS foundation targets added. Full
 application CI and physical save-dialog checks remain pending. User projects,
 the running #238 test app and installed beta remain unchanged.
+
+### Rename selected track (2026-11-04)
+
+OPEN / RECOVER > Rename selected track opens a prefilled single-line name
+editor for the selected track. Rename applies a trimmed 1–64 character name;
+Cancel leaves it unchanged. Unicode and duplicate display names are supported;
+control characters and line separators are rejected. A complete session/path
+snapshot rejects stale, busy, invalid-track and reused dialogs. Pending note
+gestures are finalized before the dialog is prepared. Successful renames refresh
+the track/mixer display and project dirty status without changing audio paths,
+notes, clips, input routing, instruments or mix.
+
+MIDI history entries use track names as an identity guard. Explicit rename
+retargets matching entries in both undo and redo stacks, preserving note edits
+while keeping the guard against unrelated track replacement. Clip undo/redo
+already restores clips only and retains the renamed metadata. Renaming itself
+is a metadata edit and is not a MIDI-note or clip-history entry.
+
+TrackRenameTests passed under local MSVC /W4 /WX, covering Unicode/trim/bounds,
+invalid names, no-op/duplicate names, stale/busy/path/track/double-submit guards,
+save/reopen, exact preservation of other session JSON, dirty status, multiple
+note undo/redo entries across tracks, retained identity conflicts, audio clip
+undo/redo and unchanged original project/audio fixtures. CTest and foundation
+CI targets registered. Application CI and physical rename UI/playback checks
+are pending. Parent #239 Windows physical save tests passed, while its macOS
+application job remains cancelled/unqualified. Installed beta and user files
+are unchanged; no live two-computer collaboration claim is made.

@@ -25,6 +25,12 @@ public:
     bool canUndo() const {return !undoEntries.empty();}
     bool canRedo() const {return !redoEntries.empty();}
     void clear(){undoEntries.clear();redoEntries.clear();}
+    // An explicit metadata rename preserves note undo/redo identity. Do not
+    // remove the name guard from restore: unrelated track replacement must fail.
+    void trackRenamed(size_t track,const std::string& previous,const std::string& current){
+        for(auto* entries:{&undoEntries,&redoEntries})for(auto& entry:*entries)
+            if(entry.track==track && entry.name==previous)entry.name=current;
+    }
 private:
     struct Entry {size_t track;std::string name;std::vector<MidiNote> before,after;};
     std::vector<Entry> undoEntries,redoEntries;
