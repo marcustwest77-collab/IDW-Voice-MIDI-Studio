@@ -63,6 +63,11 @@ public:
         velocity.onDragEnd=[this]{finishGesture();};
     }
     void resetEditor(){history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};setVisible(false);constrainView();refreshVelocity();repaint();}
+    void trackRenamed(size_t index,const std::string& previous){
+        if(!session || index>=session->tracks.size())return;
+        history.trackRenamed(index,previous,session->tracks[index].name);
+        if(index==trackIndex){selectedValid=false;selectedSnapshot.clear();refreshVelocity();repaint();}
+    }
     // Closing must work after track selection changes, including an audio track
     // or an unavailable index. Only opening requires a valid MIDI destination.
     bool toggleForTrack(size_t index){

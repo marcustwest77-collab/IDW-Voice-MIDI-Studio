@@ -22,6 +22,7 @@
 #include "NewProject.h"
 #include "ProjectDocumentStatus.h"
 #include "ProjectSaveDestination.h"
+#include "TrackRename.h"
 #include "AudioRelink.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
@@ -2503,6 +2504,7 @@ private:
         menu.addItem(3,"Relink missing audio...");
         menu.addItem(4,"Export audible MIDI tracks...");
         menu.addItem(5,"Import MIDI notes...");
+        menu.addItem(7,"Rename selected track...",selectedTrack<session.tracks.size());
         juce::PopupMenu recoverMenu;
         for(size_t i=0;i<copies.size() && i<20;++i){
             idw::daw::Session ignored;juce::File origin;
@@ -2520,6 +2522,7 @@ private:
             if(result==3){safe->showMissingAudioMenu();return;}
             if(result==4){safe->exportMidiFile();return;}
             if(result==5){safe->importMidiFile();return;}
+            if(result==7){safe->renameSelectedTrack();return;}
             if(result==2){
                 if(safe->recovery.directory().createDirectory().wasOk())
                     safe->recovery.directory().revealToUser();
@@ -2530,6 +2533,28 @@ private:
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "Recovery unavailable","The copy could not be opened, or the current work could not be protected. Your current project is unchanged.");
         });
+    }
+    void renameSelectedTrack(){
+        if(!recoveryIdle() || selectedTrack>=session.tracks.size())return;
+        pianoRoll.setVisible(false); // Finalize the current note gesture before capturing track identity.
+        auto plan=std::make_shared<idw::daw::TrackRenamePlan>(session,currentProject,selectedTrack);
+        auto* dialog=new juce::AlertWindow("Rename selected track",
+            "Track "+juce::String((int)selectedTrack+1)+": "+juce::String(plan->previousName())+
+            "\nEnter a name of 1 to 64 characters.",juce::MessageBoxIconType::NoIcon);
+        dialog->addTextEditor("name",juce::String(plan->previousName()),"Track name");
+        dialog->addButton("Rename",1,juce::KeyPress(juce::KeyPress::returnKey));
+        dialog->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
+        dialog->enterModalState(true,juce::ModalCallbackFunction::create(
+            [safe=juce::Component::SafePointer<Workstation>(this),dialog,plan](int result){
+                if(result!=1 || safe==nullptr)return;
+                juce::String error;
+                if(!plan->commit(safe->session,safe->currentProject,safe->recoveryIdle(),dialog->getTextEditorContents("name"),error)){
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Rename unavailable",error);return;
+                }
+                safe->pianoRoll.trackRenamed(plan->trackIndex(),plan->previousName());
+                safe->refreshMixer();safe->refreshProjectStatus();safe->repaint();
+                safe->commandStatus.setText("Track renamed",juce::dontSendNotification);
+            }),true);
     }
     void refreshProjectStatus(){
         const auto summary=documentStatus.summary(session);
