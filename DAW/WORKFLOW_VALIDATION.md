@@ -875,3 +875,30 @@ that file's bytes are unchanged. The test opens no audio drivers. The new target
 is registered in CTest and Windows/macOS foundation CI. Full application CI and
 physical import UI/playback qualification are pending; no external-DAW import
 demonstration is inferred. Installed beta and the #235 test app are not replaced.
+
+### New empty project (2026-11-03)
+
+OPEN / RECOVER > New empty project now offers a confirmation before switching
+to empty Audio 1 and MIDI 2 tracks at 120 BPM, 4/4 with default mix settings.
+Cancel (also Escape or Return) keeps the document. Unsaved changes must pass
+the existing validated recovery checkpoint before replacement; failure keeps
+the current work open. The prompt advises SAVE PROJECT for a named copy and
+points to Recover unsaved work. Saved projects and source audio are not deleted
+or overwritten. Clean documents need no redundant recovery write.
+
+Confirmation captures the complete session JSON and project path. A changed
+document, busy transport/recording/export/edit or reused confirmation is rejected.
+The new document has a fresh recovery owner so saving it cannot remove the
+previous document's recovery copy. The workstation stages its empty audio slot,
+then clears old sources, waveforms and audio/MIDI edit histories, resets the
+playhead and scroll, restores default mix, disarms inputs and turns monitoring off.
+Audio device preferences remain available for the next recording.
+
+NewProjectTests passes locally with MSVC /W4 /WX. It exercises Cancel, busy and
+stale confirmation, changed project path, checkpoint failure/retry, named and
+untitled work recovery, retained notes/mix/media paths, one-use commit, fresh
+defaults, and byte-preserved original project/audio. It also verifies that saving
+the new document leaves the prior recovery copy available. CTest and Windows/macOS
+foundation build registration added. Full application CI and physical new-project
+UI/recovery checks are pending; the installed beta and running #236 test app are
+unchanged. No external DAW or live two-computer qualification is inferred.

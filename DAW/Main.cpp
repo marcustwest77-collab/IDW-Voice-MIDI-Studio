@@ -19,6 +19,7 @@
 #include "IsolatedAudioCallback.h"
 #include "SessionPersistence.h"
 #include "SessionRecovery.h"
+#include "NewProject.h"
 #include "AudioRelink.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
@@ -2490,6 +2491,7 @@ private:
         if(!recoveryIdle())return;
         const auto copies=recovery.copies();
         juce::PopupMenu menu;menu.addItem(1,"Open saved project...");
+        menu.addItem(6,"New empty project...");
         menu.addItem(3,"Relink missing audio...");
         menu.addItem(4,"Export audible MIDI tracks...");
         menu.addItem(5,"Import MIDI notes...");
@@ -2506,6 +2508,7 @@ private:
         menu.showMenuAsync(juce::PopupMenu::Options(),[safe=juce::Component::SafePointer<Workstation>(this),copies](int result){
             if(safe==nullptr || !safe->recoveryIdle())return;
             if(result==1){safe->openProjectFile();return;}
+            if(result==6){safe->newEmptyProject();return;}
             if(result==3){safe->showMissingAudioMenu();return;}
             if(result==4){safe->exportMidiFile();return;}
             if(result==5){safe->importMidiFile();return;}
@@ -2519,6 +2522,48 @@ private:
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "Recovery unavailable","The copy could not be opened, or the current work could not be protected. Your current project is unchanged.");
         });
+    }
+    void newEmptyProject(){
+        if(!recoveryIdle())return;
+        pianoRoll.setVisible(false); // Commit a pending note edit before capturing confirmation.
+        auto plan=std::make_shared<idw::daw::NewProjectPlan>(session,currentProject);
+        auto* prompt=new juce::AlertWindow("New empty project",
+            "Start with empty Audio 1 and MIDI 2 tracks at 120 BPM, 4/4?\n\n"
+            "Unsaved edits will be kept under OPEN / RECOVER > Recover unsaved work. "
+            "Saved projects and source audio stay on disk. Use SAVE PROJECT first if you want a named copy.",
+            juce::MessageBoxIconType::QuestionIcon);
+        prompt->addButton("Start new project",1);
+        prompt->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey),juce::KeyPress(juce::KeyPress::returnKey));
+        prompt->enterModalState(true,juce::ModalCallbackFunction::create(
+            [safe=juce::Component::SafePointer<Workstation>(this),plan](int accepted){
+                if(safe==nullptr || accepted!=1)return;
+                // Prepare the empty audio destination before committing the model switch.
+                std::vector<std::unique_ptr<AudioSlot>> staged;
+                auto slot=std::make_unique<AudioSlot>();slot->trackIndex=0;
+                if(safe->preparedBlockSize>0){
+                    slot->scratch.setSize(2,safe->preparedBlockSize,false,true,false);
+                    slot->transport.prepareToPlay(safe->preparedBlockSize,safe->deviceRate);
+                }
+                staged.push_back(std::move(slot));
+                juce::String error;
+                if(!plan->commit(safe->session,safe->currentProject,safe->recovery,true,safe->recoveryIdle(),error)){
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"New project unavailable",error);return;
+                }
+                for(auto& old:safe->sources){old->transport.stop();old->transport.setSource(nullptr);}
+                safe->sources=std::move(staged);safe->waveformThumbnails.clear();
+                safe->clipHistory.clear();safe->dragHistorySnapshot.reset();safe->pianoRoll.resetEditor();
+                safe->draggingClip=false;safe->selectedClipValid=false;
+                safe->draggingMixerFader=false;safe->draggingMixerPan=false;
+                safe->armedTracks.fill(false);safe->selectedTrack=0;
+                safe->multiRecorder.setHeadphoneMonitor(false);
+                safe->monitorControl.setToggleState(false,juce::dontSendNotification);
+                safe->monitorControl.setEnabled(false);
+                safe->sessionFrames.store(0);safe->playheadBeats=0;
+                safe->arrangementScrollTrack=0;safe->timelineScrollBeats=0;
+                safe->restoreMasterMix();safe->tempo.setValue(safe->session.bpm,juce::dontSendNotification);
+                safe->refreshMixer();safe->repaint();
+                safe->commandStatus.setText("New empty project — recording inputs are disarmed",juce::dontSendNotification);
+            }),true);
     }
     bool restoreProject(const juce::File& project,bool fromRecovery=false){
         if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return false;
