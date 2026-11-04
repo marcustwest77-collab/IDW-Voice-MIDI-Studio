@@ -20,6 +20,7 @@
 #include "SessionPersistence.h"
 #include "SessionRecovery.h"
 #include "NewProject.h"
+#include "ProjectDocumentStatus.h"
 #include "AudioRelink.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
@@ -130,6 +131,9 @@ public:
         title.setColour(juce::Label::textColourId,juce::Colour(0xff4adfff));
         title.setFont(juce::Font(juce::FontOptions(22.0f,juce::Font::bold)));
         addAndMakeVisible(title);
+        projectStatus.setFont(juce::Font(juce::FontOptions(13.0f)));
+        projectStatus.setColour(juce::Label::textColourId,juce::Colours::white);
+        addAndMakeVisible(projectStatus);
         addAndMakeVisible(remoteReviewButton);
         remoteReviewButton.setButtonText("REMOTE REVIEW");
         addChildComponent(remoteReviewPanel);
@@ -814,6 +818,8 @@ public:
         ceilingControl.onValueChange=[this]{session.masterMix.ceilingDb=ceilingControl.getValue();ceilingDb.store((float)session.masterMix.ceilingDb,std::memory_order_relaxed);};
         refreshMixer();
         recovery.begin(session);
+        documentStatus.begin(session,currentProject);
+        refreshProjectStatus();projectStatusTimer.startTimerHz(2);
         recoveryTimer.startTimer(30000);
         if(!recovery.copies().empty())
             juce::MessageManager::callAsync([safe=juce::Component::SafePointer<Workstation>(this)]{
@@ -829,7 +835,8 @@ public:
         skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
         remoteReviewButton.setBounds(header.removeFromRight(125).reduced(3));
         skinSelector.setBounds(header.removeFromRight(165).reduced(3));
-        title.setBounds(header);
+        title.setBounds(header.removeFromTop(24));
+        projectStatus.setBounds(header);
         auto controls=area.removeFromTop(44);
         play.setBounds(controls.removeFromLeft(110).reduced(4));
         stop.setBounds(controls.removeFromLeft(100).reduced(4));
@@ -2523,6 +2530,15 @@ private:
                     "Recovery unavailable","The copy could not be opened, or the current work could not be protected. Your current project is unchanged.");
         });
     }
+    void refreshProjectStatus(){
+        const auto summary=documentStatus.summary(session);
+        projectStatus.setText(summary,juce::dontSendNotification);
+        projectStatus.setTooltip(documentStatus.location()+"\n"+summary);
+        if(auto* window=dynamic_cast<juce::DocumentWindow*>(getTopLevelComponent())){
+            const auto name="IDW Voice MIDI Studio | "+summary;
+            if(window->getName()!=name)window->setName(name);
+        }
+    }
     void newEmptyProject(){
         if(!recoveryIdle())return;
         pianoRoll.setVisible(false); // Commit a pending note edit before capturing confirmation.
@@ -2555,6 +2571,8 @@ private:
                 safe->draggingClip=false;safe->selectedClipValid=false;
                 safe->draggingMixerFader=false;safe->draggingMixerPan=false;
                 safe->armedTracks.fill(false);safe->selectedTrack=0;
+                safe->documentStatus.begin(safe->session,safe->currentProject);
+                safe->refreshProjectStatus();
                 safe->multiRecorder.setHeadphoneMonitor(false);
                 safe->monitorControl.setToggleState(false,juce::dontSendNotification);
                 safe->monitorControl.setEnabled(false);
@@ -2625,6 +2643,7 @@ private:
         restoreMasterMix();
         currentProject=origin;
         recovery.begin(session,fromRecovery);
+        documentStatus.begin(session,currentProject,fromRecovery);refreshProjectStatus();
         // Undo snapshots refer to the prior project; never restore them into a new one.
         clipHistory.clear();dragHistorySnapshot.reset();
         pianoRoll.resetEditor();
@@ -2780,6 +2799,7 @@ private:
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save failed","Could not write IDW project.");
                 else{
                     currentProject=destination;
+                    documentStatus.begin(session,currentProject);refreshProjectStatus();
                     if(!recovery.markSaved(session))
                         commandStatus.setText("Project saved; older recovery copies retained",juce::dontSendNotification);
                 }
@@ -3459,6 +3479,7 @@ public:
         return false;
     }
     ~Workstation() override {
+        projectStatusTimer.stopTimer();
         saveAudioDevicePreferences(false); // Capture the chosen setup before shutting the device down.
         remoteOfferController.stop();
         remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCallback);deviceManager.removeAudioCallback(&multiRecorderCallback);deviceManager.removeAudioCallback(&recorderCallback);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
@@ -3492,6 +3513,13 @@ public:
         juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
             .getChildFile("IDW Neo Studio").getChildFile("Recovery")};
     juce::File currentProject;
+    idw::daw::ProjectDocumentStatus documentStatus;
+    juce::Label projectStatus;
+    struct ProjectStatusTimer final : juce::Timer {
+        Workstation& owner;
+        explicit ProjectStatusTimer(Workstation& w):owner(w){}
+        void timerCallback() override {owner.refreshProjectStatus();}
+    } projectStatusTimer{*this};
     RecoveryTimer recoveryTimer{*this};
     idw::daw::Session session;
     std::atomic<bool> playing{false};

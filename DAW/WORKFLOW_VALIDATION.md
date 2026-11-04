@@ -902,3 +902,29 @@ the new document leaves the prior recovery copy available. CTest and Windows/mac
 foundation build registration added. Full application CI and physical new-project
 UI/recovery checks are pending; the installed beta and running #236 test app are
 unchanged. No external DAW or live two-computer qualification is inferred.
+
+### Project name and save status (2026-11-03)
+
+The header now shows the current project filename and Saved, Unsaved changes,
+Not saved yet, or Recovered - save required. The native window title repeats
+this information, including while another editor covers the main view. Hover
+over the header status for the complete path; untitled projects explain that
+SAVE PROJECT chooses a filename. Long names can be clipped in the header;
+the tooltip retains the full path and status.
+
+A message-thread timer refreshes status twice a second independently of transport
+and recovery polling. Dirty detection directly compares persisted session fields
+against the last successful save/open baseline without JSON serialization or
+disk access. Reverting to the saved state clears the dirty indicator. Recovery
+opens remain marked save-required until a successful manual save. Recovery
+autosave never updates the saved baseline. New empty projects reset to Untitled
+project / Not saved yet; successful save-as changes the displayed filename.
+Failed/cancelled opens, saves and new-project requests do not establish a baseline.
+
+ProjectDocumentStatusTests passed under local MSVC /W4 /WX. Tests cover fresh,
+edited, saved, reverted, reopened, recovered, saved-as and new-project states;
+real save/load and recovery checkpoint/read; full path display; all 35 persisted
+field/collection edits; non-persisted track properties; and a change to the last
+of 50000 notes. CTest and foundation CI targets registered. Application CI and
+physical header/window-title checks are pending. Installed beta and user project
+and audio files are unchanged. The parent #237 physical workflow remains pending.
