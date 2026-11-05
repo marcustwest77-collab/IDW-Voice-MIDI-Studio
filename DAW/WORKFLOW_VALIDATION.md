@@ -980,3 +980,30 @@ CI targets registered. Application CI and physical rename UI/playback checks
 are pending. Parent #239 Windows physical save tests passed, while its macOS
 application job remains cancelled/unqualified. Installed beta and user files
 are unchanged; no live two-computer collaboration claim is made.
+
+### Open recent projects (2026-11-04)
+
+OPEN / RECOVER > Open recent projects lists up to eight successfully saved or
+ordinarily opened project paths, most recent first. Entries show a numbered
+filename and folder (long menu text is clipped). Selecting one uses the existing
+validated/recovery-protected project open. A missing or invalid selection reports
+its path without changing the current session. No project opens automatically.
+Recovery restores and new untitled projects are not added; manually saving a
+recovered project adds the resulting saved file.
+
+The per-user RecentProjects.json contains only versioned absolute paths. Loading
+the metadata does not probe or open its listed files. Bounds: eight unique paths,
+4096 characters per path, 256 KiB input and flat JSON depth checked before parsing.
+Relative paths, controls, invalid schema, duplicates and oversized data are
+rejected without replacing an in-memory list. Writes stage/read back exact bytes
+and validated contents before atomic replacement. A storage failure retains the
+in-memory recent list and reports the preference failure without failing the
+successful project save/open or changing its saved status.
+
+RecentProjectsTests passed locally with MSVC /W4 /WX. Tests cover ordering,
+duplicate removal, recency limits, Unicode, missing project metadata, real
+preference roundtrip, partial/wrong staged writes, corrupt/deep/oversized schema,
+invalid paths, failure/retry and unchanged saved project bytes. CTest and Windows/
+macOS foundation targets registered. Application CI and physical recent-menu/
+restart/missing-file checks pending. Installed beta, current #240 test app and
+original user projects/audio remain unchanged.
