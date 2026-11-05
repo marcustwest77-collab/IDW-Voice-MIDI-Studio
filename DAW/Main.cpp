@@ -23,6 +23,7 @@
 #include "ProjectDocumentStatus.h"
 #include "ProjectSaveDestination.h"
 #include "TrackRename.h"
+#include "RecentProjects.h"
 #include "AudioRelink.h"
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
@@ -820,6 +821,7 @@ public:
         ceilingControl.onValueChange=[this]{session.masterMix.ceilingDb=ceilingControl.getValue();ceilingDb.store((float)session.masterMix.ceilingDb,std::memory_order_relaxed);};
         refreshMixer();
         recovery.begin(session);
+        recentProjects.load(); // Metadata only; never restore or open a project automatically.
         documentStatus.begin(session,currentProject);
         refreshProjectStatus();projectStatusTimer.startTimerHz(2);
         recoveryTimer.startTimer(30000);
@@ -2505,6 +2507,13 @@ private:
         menu.addItem(4,"Export audible MIDI tracks...");
         menu.addItem(5,"Import MIDI notes...");
         menu.addItem(7,"Rename selected track...",selectedTrack<session.tracks.size());
+        const auto recent=recentProjects.entries();
+        juce::PopupMenu recentMenu;
+        for(size_t i=0;i<recent.size();++i){
+            const auto label=juce::String((int)i+1)+". "+recent[i].getFileName()+" — "+recent[i].getParentDirectory().getFullPathName();
+            recentMenu.addItem(200+(int)i,label.substring(0,180));
+        }
+        menu.addSubMenu("Open recent projects",recentMenu,!recent.empty());
         juce::PopupMenu recoverMenu;
         for(size_t i=0;i<copies.size() && i<20;++i){
             idw::daw::Session ignored;juce::File origin;
@@ -2515,7 +2524,7 @@ private:
         }
         menu.addSubMenu("Recover unsaved work",recoverMenu,!copies.empty());
         menu.addItem(2,"Show recovery folder");
-        menu.showMenuAsync(juce::PopupMenu::Options(),[safe=juce::Component::SafePointer<Workstation>(this),copies](int result){
+        menu.showMenuAsync(juce::PopupMenu::Options(),[safe=juce::Component::SafePointer<Workstation>(this),copies,recent](int result){
             if(safe==nullptr || !safe->recoveryIdle())return;
             if(result==1){safe->openProjectFile();return;}
             if(result==6){safe->newEmptyProject();return;}
@@ -2523,6 +2532,13 @@ private:
             if(result==4){safe->exportMidiFile();return;}
             if(result==5){safe->importMidiFile();return;}
             if(result==7){safe->renameSelectedTrack();return;}
+            if(result>=200 && (size_t)(result-200)<recent.size()){
+                if(!safe->restoreProject(recent[(size_t)(result-200)]))
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Recent project unavailable",
+                        "The project is missing, invalid or cannot be opened. Your current project is unchanged.\n\n"+
+                        recent[(size_t)(result-200)].getFullPathName());
+                return;
+            }
             if(result==2){
                 if(safe->recovery.directory().createDirectory().wasOk())
                     safe->recovery.directory().revealToUser();
@@ -2683,6 +2699,7 @@ private:
         refreshMixer();repaint();
         if(missing>0)juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
             "Missing audio",juce::String(missing)+" audio file(s) could not be located. Their clip references remain in the project. Use OPEN / RECOVER > Relink missing audio to locate replacements.");
+        if(!fromRecovery)rememberRecentProject();
         return true;
     }
     void openProjectFile(){
@@ -2813,6 +2830,10 @@ private:
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Export failed",error);
             });
     }
+    void rememberRecentProject(){
+        if(!recentProjects.remember(currentProject))
+            commandStatus.setText("Project ready; recent-list preference could not be saved",juce::dontSendNotification);
+    }
     void finishProjectSave(const std::shared_ptr<idw::daw::ProjectSavePlan>& plan,bool replaceApproved){
         juce::String error;
         if(!plan->commit(session,currentProject,recoveryIdle(),replaceApproved,error)){
@@ -2822,6 +2843,7 @@ private:
         documentStatus.begin(session,currentProject);refreshProjectStatus();
         if(!recovery.markSaved(session))
             commandStatus.setText("Project saved; older recovery copies retained",juce::dontSendNotification);
+        rememberRecentProject();
     }
     void saveProjectFile(){
         if(!recoveryIdle())return;
@@ -3559,6 +3581,9 @@ public:
         juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
             .getChildFile("IDW Neo Studio").getChildFile("Recovery")};
     juce::File currentProject;
+    idw::daw::RecentProjects recentProjects{
+        juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+            .getChildFile("IDW Neo Studio").getChildFile("RecentProjects.json")};
     idw::daw::ProjectDocumentStatus documentStatus;
     juce::Label projectStatus;
     struct ProjectStatusTimer final : juce::Timer {
