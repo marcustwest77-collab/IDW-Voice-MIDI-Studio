@@ -1034,3 +1034,31 @@ unchanged other session JSON and saved/reopened quantized notes. CTest and
 foundation CI targets registered. Full application CI and physical grid-menu/
 timing/playback checks are pending. Installed beta and current #241 test app are
 unchanged; no live two-computer qualification is inferred.
+
+### MIDI action feedback and button/save regression (2026-11-05)
+
+The #242 Windows physical test verified quarter quantize saved starts 0/3 and
+one Undo saved 0.49/2.51, preserving C4, lengths 1 and velocities 30/40. However,
+two files reported as Redo saves also contained 0.49/2.51. This is not counted
+as a physical Redo pass. Closing/reopening the app reset history between early
+attempts; a later same-session report still disagreed with the saved file.
+The exact live cause remains unresolved.
+
+Extended MidiQuantizeTests to invoke the actual UNDO MIDI, REDO MIDI and BACK
+TO TRACKS button callbacks, including the velocity-text finalization path, editor
+hide/show and intermediate save boundaries. Locally this sequence restores
+0.49/2.51 then 0/3 and writes/reloads 0/3 successfully; it has not reproduced
+the Windows live mismatch. No underlying history fix is claimed.
+
+The piano-roll header now reports Quantize applied, Undo applied, Redo applied,
+unavailable/no-op history or conflict, plus the first two note starts in zero-based
+beats rounded to three decimals. Additional notes are indicated with an ellipsis.
+Feedback clears on project reset, updates for a different track, and hides in
+narrow headers. It is view-only and is not written into project files. This
+lets the next physical check establish the actual action and numeric result
+before saving, rather than relying on small visual note movements.
+
+Extended tests passed locally with MSVC /W4 /WX: actual history button/save
+roundtrip, feedback agreement with model, reset and narrow/wide layout. Full
+application CI and native feedback/Redo/save qualification remain pending.
+Installed beta and original projects/audio remain unchanged.

@@ -33,6 +33,11 @@ public:
         quantize.setTooltip("Snap every note start on this track to a chosen grid. Length, pitch and velocity stay unchanged; one MIDI undo step.");
         addAndMakeVisible(quantize);quantize.setEnabled(false);
         quantize.onClick=[this]{showQuantizeMenu();};
+        editFeedback.setFont(juce::Font(juce::FontOptions(12.0f)));
+        editFeedback.setComponentID("midi-edit-feedback");
+        editFeedback.setColour(juce::Label::textColourId,juce::Colours::white);
+        editFeedback.setTooltip("Result of the last MIDI action, including the first two note starts in zero-based beats (rounded to three decimals).");
+        addAndMakeVisible(editFeedback);
         velocityLabel.setText("NOTE VELOCITY",juce::dontSendNotification);addAndMakeVisible(velocityLabel);
         velocity.setRange(1,127,1);velocity.setValue(100,juce::dontSendNotification);
         velocity.setTextBoxStyle(juce::Slider::TextBoxRight,false,50,24);
@@ -67,7 +72,7 @@ public:
         velocity.onValueChange=[this]{setSelectionVelocity((int)velocity.getValue());};
         velocity.onDragEnd=[this]{finishGesture();};
     }
-    void resetEditor(){++editGeneration;history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};setVisible(false);constrainView();refreshVelocity();repaint();}
+    void resetEditor(){++editGeneration;history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};setVisible(false);constrainView();refreshVelocity();showEditFeedback("No MIDI edits yet");repaint();}
     void trackRenamed(size_t index,const std::string& previous){
         if(!session || index>=session->tracks.size())return;
         history.trackRenamed(index,previous,session->tracks[index].name);
@@ -80,7 +85,7 @@ public:
         if(!session || index>=session->tracks.size() || session->tracks[index].type!=idw::daw::TrackType::midi)return false;
         setTrackIndex(index);setVisible(true);return true;
     }
-    void setTrackIndex(size_t index){++editGeneration;finishGesture();trackIndex=index;selectedValid=false;constrainView();refreshVelocity();repaint();}
+    void setTrackIndex(size_t index){const bool changed=index!=trackIndex;++editGeneration;finishGesture();trackIndex=index;selectedValid=false;constrainView();refreshVelocity();if(changed)showEditFeedback("Track selected");repaint();}
     void resized() override {
         finishGesture();constrainView();
         closeEditor.setBounds(juce::jmax(0,getWidth()-114),2,juce::jmin(110,getWidth()),20);
@@ -88,6 +93,7 @@ public:
         undoEdit.setVisible(showHistory);redoEdit.setVisible(showHistory);
         undoEdit.setBounds(4,2,90,20);redoEdit.setBounds(98,2,90,20);
         quantize.setVisible(getWidth()>=450);quantize.setBounds(192,2,132,20);
+        editFeedback.setVisible(getWidth()>=800);editFeedback.setBounds(328,2,std::max(1,getWidth()-446),20);
         velocityLabel.setBounds(4,getHeight()-28,104,24);
         const bool showDuplicate=getWidth()>=480,showLength=getWidth()>=760;
         duplicate.setVisible(showDuplicate);halfLength.setVisible(showLength);doubleLength.setVisible(showLength);
@@ -107,19 +113,24 @@ public:
         if(dragging && !mouseButtonDown)finishGesture();
     }
     bool restoreHistory(bool undo){
-        if(dragging || !editingAllowed())return false;
+        if(dragging || !editingAllowed()){showEditFeedback("MIDI history unavailable while busy");return false;}
         const auto result=undo?history.undo(*session):history.redo(*session);
         if(result==idw::daw::MidiEditHistory::Result::conflict){if(onHistoryConflict)onHistoryConflict();}
-        if(result!=idw::daw::MidiEditHistory::Result::applied)return false;
-        selectedValid=false;refreshVelocity();if(onChanged)onChanged();repaint();return true;
+        if(result!=idw::daw::MidiEditHistory::Result::applied){
+            showEditFeedback(result==idw::daw::MidiEditHistory::Result::conflict?"MIDI history conflict":undo?"No MIDI Undo available":"No MIDI Redo available");return false;
+        }
+        selectedValid=false;refreshVelocity();if(onChanged)onChanged();showEditFeedback(undo?"Undo applied":"Redo applied");repaint();return true;
     }
     bool quantizeTrack(int divisions){
-        if(dragging || !editingAllowed() || session->tracks[trackIndex].type!=idw::daw::TrackType::midi)return false;
+        if(dragging || !editingAllowed()){showEditFeedback("Quantize unavailable while busy");return false;}
         const auto before=session->tracks[trackIndex].notes;
         std::vector<idw::daw::MidiNote> next;
-        if(idw::daw::quantizeMidiNotes(before,divisions,next)!=idw::daw::MidiQuantizeResult::changed)return false;
+        const auto result=idw::daw::quantizeMidiNotes(before,divisions,next);
+        if(result!=idw::daw::MidiQuantizeResult::changed){
+            showEditFeedback(result==idw::daw::MidiQuantizeResult::unchanged?"Already on grid":"Quantize unavailable");return false;
+        }
         session->tracks[trackIndex].notes.swap(next);history.record(*session,trackIndex,before);
-        selectedValid=false;constrainView();refreshVelocity();if(onChanged)onChanged();repaint();return true;
+        selectedValid=false;constrainView();refreshVelocity();if(onChanged)onChanged();showEditFeedback("Quantize applied");repaint();return true;
     }
     bool setSelectionVelocity(int value){
         if((dragging && !velocityDragging) || !editingAllowed() || value<1 || value>127){refreshVelocity();return false;}
@@ -314,6 +325,20 @@ private:
     juce::TextButton closeEditor;
     juce::TextButton undoEdit,redoEdit;
     juce::TextButton quantize;
+    juce::Label editFeedback;
+    void showEditFeedback(const juce::String& action){
+        auto text=action;
+        if(session && trackIndex<session->tracks.size() && session->tracks[trackIndex].type==idw::daw::TrackType::midi){
+            const auto& notes=session->tracks[trackIndex].notes;
+            if(!notes.empty()){
+                text+=" | starts: "+juce::String(notes[0].startBeat,3);
+                if(notes.size()>1)text+=", "+juce::String(notes[1].startBeat,3);
+                if(notes.size()>2)text+=" ...";
+                text+=" beats";
+            }
+        }
+        editFeedback.setText(text,juce::dontSendNotification);
+    }
     std::uint64_t editGeneration=0;
     void showQuantizeMenu(){
         if(dragging || !editingAllowed())return;
@@ -335,7 +360,7 @@ private:
             });
     }
     void restoreFromButton(bool undo){
-        if(dragging || !editingAllowed())return;
+        if(dragging || !editingAllowed()){showEditFeedback("MIDI history unavailable while busy");return;}
         // Commit an active number editor before applying history. Do not route
         // the keystroke through a text field or the voice command console.
         velocity.hideTextBox(false);
