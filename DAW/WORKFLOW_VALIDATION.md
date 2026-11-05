@@ -1087,3 +1087,28 @@ The expanded MidiQuantizeTests also passed after the shared header change.
 CTest and foundation build targets registered. Full application CI and physical
 transpose/pitch/history/save-reopen/playback checks are pending. Installed beta,
 current #243 test app and original user project/audio files remain unchanged.
+
+### MIDI track velocity (2026-11-05)
+
+PIANO ROLL adds VELOCITY TRACK: increase/decrease by 10 or 20, or set all note
+velocities to 64, 100 or 127. Relative adjustments retain the differences between
+notes. Fixed values intentionally make an even part. Pitch, start, duration,
+ordering and other session data remain unchanged. Any velocity outside 1–127
+rejects the entire operation without clamping or creating velocity-zero note-offs.
+Successful changes form one MIDI Undo/Redo step; rejected and no-op edits retain
+redo. Feedback names the applied amount or fixed value.
+
+The bounded helper validates all input before publishing output, including note
+count, enum/value, pitch, velocity and finite representable timing. The editor
+blocks busy/audio/invalid destinations and active note/velocity gestures. Pending
+velocity text commits before the asynchronous menu captures track name, notes,
+index and editor generation; changed, hidden or reset destinations cannot receive
+the deferred action. Header buttons hide at narrow widths and avoid overlap.
+
+MidiTrackVelocityTests cover relative inverses, fixed values, both endpoints,
+invalid enum/offset/data, atomic range rejection, aliases, no-op output retention,
+100000 notes, real Undo/Redo button callbacks, redo after rejection, gesture/busy/
+target guards, other JSON unchanged, save/reopen and layout. CTest and foundation
+build targets registered. Local strict tests and application CI are recorded in
+the PR validation; physical menu/dynamics/history/save-reopen checks are pending.
+Installed beta, running #244 test app and original user projects/audio unchanged.
