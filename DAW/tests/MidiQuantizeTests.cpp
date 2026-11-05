@@ -77,6 +77,40 @@ int main(){
         require(!editor.quantizeTrack(1) && sameMidiNotes(session.tracks[0].notes,snapped),"quantize during velocity gesture");
         velocity->onDragEnd();
         require(root.createDirectory().wasOk(),"fixture folder");
+        // Exercise the actual button callbacks (including velocity text-box
+        // finalization) and the hide/save/reopen-editor boundaries used on Windows.
+        Session buttonSession;buttonSession.addTrack(TrackType::midi);
+        buttonSession.tracks[0].notes={{60,0.49,1,30},{60,2.51,1,40}};
+        IDWPianoRoll buttons;buttons.session=&buttonSession;buttons.setSize(1000,480);buttons.setTrackIndex(0);buttons.setVisible(true);
+        juce::TextButton* undoButton=nullptr;juce::TextButton* redoButton=nullptr;juce::TextButton* closeButton=nullptr;
+        juce::Label* feedback=nullptr;
+        for(int i=0;i<buttons.getNumChildComponents();++i){
+            if(auto* b=dynamic_cast<juce::TextButton*>(buttons.getChildComponent(i))){
+                if(b->getButtonText()=="UNDO MIDI")undoButton=b;
+                if(b->getButtonText()=="REDO MIDI")redoButton=b;
+                if(b->getButtonText()=="BACK TO TRACKS")closeButton=b;
+            }
+            if(buttons.getChildComponent(i)->getComponentID()=="midi-edit-feedback")feedback=dynamic_cast<juce::Label*>(buttons.getChildComponent(i));
+        }
+        require(undoButton && redoButton && closeButton && feedback,"history controls missing");
+        require(buttons.quantizeTrack(1),"button sequence quantize");
+        require(feedback->getText().contains("Quantize applied") && feedback->getText().contains("0.000, 3.000"),"quantize feedback disagrees with model");
+        closeButton->onClick();require(saveSession(buttonSession,root.getChildFile("First.idwproj")),"first button save");
+        buttons.setTrackIndex(0);buttons.setVisible(true);require(undoButton->isEnabled(),"undo disabled after save");undoButton->onClick();
+        require(buttonSession.tracks[0].notes[0].startBeat==0.49 && buttonSession.tracks[0].notes[1].startBeat==2.51,"actual Undo button");
+        require(feedback->getText().contains("Undo applied") && feedback->getText().contains("0.490, 2.510"),"undo feedback disagrees with model");
+        closeButton->onClick();require(saveSession(buttonSession,root.getChildFile("Undo.idwproj")),"undo button save");
+        buttons.setTrackIndex(0);buttons.setVisible(true);require(redoButton->isEnabled(),"redo disabled after save");redoButton->onClick();
+        require(buttonSession.tracks[0].notes[0].startBeat==0 && buttonSession.tracks[0].notes[1].startBeat==3,"actual Redo button");
+        require(feedback->getText().contains("Redo applied") && feedback->getText().contains("0.000, 3.000"),"redo feedback disagrees with model");
+        closeButton->onClick();require(buttonSession.tracks[0].notes[0].startBeat==0 && buttonSession.tracks[0].notes[1].startBeat==3,"hide reversed Redo");
+        require(saveSession(buttonSession,root.getChildFile("Redo.idwproj")),"redo button save");
+        Session buttonRead;require(loadSession(root.getChildFile("Redo.idwproj"),buttonRead) &&
+            buttonRead.tracks[0].notes[0].startBeat==0 && buttonRead.tracks[0].notes[1].startBeat==3,"saved button Redo");
+        require(feedback->getRight()<=closeButton->getX() && feedback->getX()>=324,"feedback header overlap");
+        buttons.setSize(700,480);require(!feedback->isVisible(),"narrow feedback overlaps controls");
+        buttons.setSize(1000,480);require(feedback->isVisible(),"wide feedback missing");
+        buttons.resetEditor();require(feedback->getText().contains("No MIDI edits yet"),"reset retained old edit feedback");
         const auto file=root.getChildFile("Quantized.idwproj");require(saveSession(session,file),"save quantized notes");
         Session reopened;require(loadSession(file,reopened) && sameMidiNotes(reopened.tracks[0].notes,snapped),"reopen quantized notes");
         editor.resetEditor();require(!editor.restoreHistory(true),"project reset retained quantize undo");
