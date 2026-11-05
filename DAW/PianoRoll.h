@@ -3,6 +3,7 @@
 #include "SessionModel.h"
 #include "MidiEditHistory.h"
 #include "MidiQuantize.h"
+#include "MidiTranspose.h"
 #include "PianoRollViewport.h"
 #include "PianoRollKeyCommands.h"
 #include <functional>
@@ -33,6 +34,10 @@ public:
         quantize.setTooltip("Snap every note start on this track to a chosen grid. Length, pitch and velocity stay unchanged; one MIDI undo step.");
         addAndMakeVisible(quantize);quantize.setEnabled(false);
         quantize.onClick=[this]{showQuantizeMenu();};
+        transpose.setButtonText("TRANSPOSE TRACK");transpose.setWantsKeyboardFocus(false);
+        transpose.setTooltip("Move every note on this track by semitones or an octave. Timing and velocity stay unchanged; one MIDI undo step. Out-of-range requests leave all notes unchanged.");
+        addAndMakeVisible(transpose);transpose.setEnabled(false);
+        transpose.onClick=[this]{showTransposeMenu();};
         editFeedback.setFont(juce::Font(juce::FontOptions(12.0f)));
         editFeedback.setComponentID("midi-edit-feedback");
         editFeedback.setColour(juce::Label::textColourId,juce::Colours::white);
@@ -93,7 +98,8 @@ public:
         undoEdit.setVisible(showHistory);redoEdit.setVisible(showHistory);
         undoEdit.setBounds(4,2,90,20);redoEdit.setBounds(98,2,90,20);
         quantize.setVisible(getWidth()>=450);quantize.setBounds(192,2,132,20);
-        editFeedback.setVisible(getWidth()>=800);editFeedback.setBounds(328,2,std::max(1,getWidth()-446),20);
+        transpose.setVisible(getWidth()>=600);transpose.setBounds(328,2,142,20);
+        editFeedback.setVisible(getWidth()>=1000);editFeedback.setBounds(474,2,std::max(1,getWidth()-592),20);
         velocityLabel.setBounds(4,getHeight()-28,104,24);
         const bool showDuplicate=getWidth()>=480,showLength=getWidth()>=760;
         duplicate.setVisible(showDuplicate);halfLength.setVisible(showLength);doubleLength.setVisible(showLength);
@@ -131,6 +137,18 @@ public:
         }
         session->tracks[trackIndex].notes.swap(next);history.record(*session,trackIndex,before);
         selectedValid=false;constrainView();refreshVelocity();if(onChanged)onChanged();showEditFeedback("Quantize applied");repaint();return true;
+    }
+    bool transposeTrack(int semitones){
+        if(dragging || !editingAllowed()){showEditFeedback("Transpose unavailable while busy");return false;}
+        const auto before=session->tracks[trackIndex].notes;
+        std::vector<idw::daw::MidiNote> next;
+        const auto result=idw::daw::transposeMidiNotes(before,semitones,next);
+        if(result!=idw::daw::MidiTransposeResult::changed){
+            showEditFeedback(result==idw::daw::MidiTransposeResult::unchanged?"Transpose unchanged":"Transpose outside valid note range");return false;
+        }
+        session->tracks[trackIndex].notes.swap(next);history.record(*session,trackIndex,before);
+        selectedValid=false;constrainView();refreshVelocity();if(onChanged)onChanged();
+        showEditFeedback("Transpose "+(semitones>0?juce::String("+"):juce::String{})+juce::String(semitones)+" applied");repaint();return true;
     }
     bool setSelectionVelocity(int value){
         if((dragging && !velocityDragging) || !editingAllowed() || value<1 || value>127){refreshVelocity();return false;}
@@ -325,6 +343,7 @@ private:
     juce::TextButton closeEditor;
     juce::TextButton undoEdit,redoEdit;
     juce::TextButton quantize;
+    juce::TextButton transpose;
     juce::Label editFeedback;
     void showEditFeedback(const juce::String& action){
         auto text=action;
@@ -340,6 +359,25 @@ private:
         editFeedback.setText(text,juce::dontSendNotification);
     }
     std::uint64_t editGeneration=0;
+    void showTransposeMenu(){
+        if(dragging || !editingAllowed())return;
+        velocity.hideTextBox(false);
+        const auto index=trackIndex;const auto generation=editGeneration;
+        const auto name=session->tracks[index].name;const auto notes=session->tracks[index].notes;
+        juce::PopupMenu menu;
+        menu.addItem(1,"Up 1 semitone");menu.addItem(2,"Down 1 semitone");
+        menu.addItem(3,"Up 2 semitones");menu.addItem(4,"Down 2 semitones");
+        menu.addItem(5,"Up 1 octave (+12)");menu.addItem(6,"Down 1 octave (-12)");
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&transpose),
+            [safe=juce::Component::SafePointer<IDWPianoRoll>(this),index,generation,name,notes](int result){
+                if(result<1 || result>6 || safe==nullptr || !safe->isVisible() || safe->editGeneration!=generation ||
+                   safe->dragging || !safe->editingAllowed() || safe->trackIndex!=index)return;
+                if(safe->session->tracks[index].name!=name || !idw::daw::sameMidiNotes(safe->session->tracks[index].notes,notes)){
+                    if(safe->onHistoryConflict)safe->onHistoryConflict();return;
+                }
+                constexpr int offsets[]{1,-1,2,-2,12,-12};safe->transposeTrack(offsets[result-1]);
+            });
+    }
     void showQuantizeMenu(){
         if(dragging || !editingAllowed())return;
         velocity.hideTextBox(false); // Commit pending velocity entry before capturing the menu state.
@@ -400,6 +438,7 @@ private:
         undoEdit.setEnabled(historyAllowed && history.canUndo());
         redoEdit.setEnabled(historyAllowed && history.canRedo());
         quantize.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
+        transpose.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
         velocity.setEnabled(valid && editingAllowed());
         duplicate.setEnabled(valid && editingAllowed() && !dragging);
         halfLength.setEnabled(valid && editingAllowed() && !dragging);

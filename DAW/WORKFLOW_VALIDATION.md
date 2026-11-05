@@ -1062,3 +1062,28 @@ Extended tests passed locally with MSVC /W4 /WX: actual history button/save
 roundtrip, feedback agreement with model, reset and narrow/wide layout. Full
 application CI and native feedback/Redo/save qualification remain pending.
 Installed beta and original projects/audio remain unchanged.
+
+### MIDI track transpose (2026-11-05)
+
+PIANO ROLL adds TRANSPOSE TRACK with up/down one semitone, two semitones or one
+octave. It moves every note pitch on the current MIDI track and preserves start,
+duration, velocity and order. An edit that would exceed MIDI pitch 0–127 is
+rejected for the entire track without clamping or dropping notes. Each successful
+operation is one MIDI Undo/Redo step; zero/invalid changes preserve redo. The
+action feedback reports the applied semitone offset.
+
+The helper validates up to 100000 notes, bounded integer offset, valid pitch/
+velocity and finite representable note timing before replacing output. The
+editor blocks busy, audio/invalid targets and active note/velocity gestures.
+The asynchronous menu validates captured track/name/notes and generation before
+applying, and finalizes pending velocity text first. Header controls hide at
+narrow widths; result feedback has reserved space at widths of at least 1000.
+
+MidiTransposeTests passed locally under MSVC /W4 /WX: all menu offsets and
+inverse operations, pitch endpoints and all-or-nothing rejection, invalid data/
+offsets/counts, 100000 notes, real history-button callbacks, no-op redo retention,
+busy/drag/target guards, unchanged other session JSON, save/reopen and layout.
+The expanded MidiQuantizeTests also passed after the shared header change.
+CTest and foundation build targets registered. Full application CI and physical
+transpose/pitch/history/save-reopen/playback checks are pending. Installed beta,
+current #243 test app and original user project/audio files remain unchanged.
