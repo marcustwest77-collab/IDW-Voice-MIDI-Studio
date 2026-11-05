@@ -2,6 +2,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "SessionModel.h"
 #include "MidiEditHistory.h"
+#include "MidiQuantize.h"
 #include "PianoRollViewport.h"
 #include "PianoRollKeyCommands.h"
 #include <functional>
@@ -28,6 +29,10 @@ public:
         redoEdit.setTooltip("Redo a MIDI note edit. Reselect a note to inspect its restored value.");
         undoEdit.onClick=[this]{restoreFromButton(true);};
         redoEdit.onClick=[this]{restoreFromButton(false);};
+        quantize.setButtonText("QUANTIZE TRACK");quantize.setWantsKeyboardFocus(false);
+        quantize.setTooltip("Snap every note start on this track to a chosen grid. Length, pitch and velocity stay unchanged; one MIDI undo step.");
+        addAndMakeVisible(quantize);quantize.setEnabled(false);
+        quantize.onClick=[this]{showQuantizeMenu();};
         velocityLabel.setText("NOTE VELOCITY",juce::dontSendNotification);addAndMakeVisible(velocityLabel);
         velocity.setRange(1,127,1);velocity.setValue(100,juce::dontSendNotification);
         velocity.setTextBoxStyle(juce::Slider::TextBoxRight,false,50,24);
@@ -62,7 +67,7 @@ public:
         velocity.onValueChange=[this]{setSelectionVelocity((int)velocity.getValue());};
         velocity.onDragEnd=[this]{finishGesture();};
     }
-    void resetEditor(){history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};setVisible(false);constrainView();refreshVelocity();repaint();}
+    void resetEditor(){++editGeneration;history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};setVisible(false);constrainView();refreshVelocity();repaint();}
     void trackRenamed(size_t index,const std::string& previous){
         if(!session || index>=session->tracks.size())return;
         history.trackRenamed(index,previous,session->tracks[index].name);
@@ -75,13 +80,14 @@ public:
         if(!session || index>=session->tracks.size() || session->tracks[index].type!=idw::daw::TrackType::midi)return false;
         setTrackIndex(index);setVisible(true);return true;
     }
-    void setTrackIndex(size_t index){finishGesture();trackIndex=index;selectedValid=false;constrainView();refreshVelocity();repaint();}
+    void setTrackIndex(size_t index){++editGeneration;finishGesture();trackIndex=index;selectedValid=false;constrainView();refreshVelocity();repaint();}
     void resized() override {
         finishGesture();constrainView();
         closeEditor.setBounds(juce::jmax(0,getWidth()-114),2,juce::jmin(110,getWidth()),20);
         const bool showHistory=getWidth()>=340;
         undoEdit.setVisible(showHistory);redoEdit.setVisible(showHistory);
         undoEdit.setBounds(4,2,90,20);redoEdit.setBounds(98,2,90,20);
+        quantize.setVisible(getWidth()>=450);quantize.setBounds(192,2,132,20);
         velocityLabel.setBounds(4,getHeight()-28,104,24);
         const bool showDuplicate=getWidth()>=480,showLength=getWidth()>=760;
         duplicate.setVisible(showDuplicate);halfLength.setVisible(showLength);doubleLength.setVisible(showLength);
@@ -106,6 +112,14 @@ public:
         if(result==idw::daw::MidiEditHistory::Result::conflict){if(onHistoryConflict)onHistoryConflict();}
         if(result!=idw::daw::MidiEditHistory::Result::applied)return false;
         selectedValid=false;refreshVelocity();if(onChanged)onChanged();repaint();return true;
+    }
+    bool quantizeTrack(int divisions){
+        if(dragging || !editingAllowed() || session->tracks[trackIndex].type!=idw::daw::TrackType::midi)return false;
+        const auto before=session->tracks[trackIndex].notes;
+        std::vector<idw::daw::MidiNote> next;
+        if(idw::daw::quantizeMidiNotes(before,divisions,next)!=idw::daw::MidiQuantizeResult::changed)return false;
+        session->tracks[trackIndex].notes.swap(next);history.record(*session,trackIndex,before);
+        selectedValid=false;constrainView();refreshVelocity();if(onChanged)onChanged();repaint();return true;
     }
     bool setSelectionVelocity(int value){
         if((dragging && !velocityDragging) || !editingAllowed() || value<1 || value>127){refreshVelocity();return false;}
@@ -299,6 +313,27 @@ private:
     }
     juce::TextButton closeEditor;
     juce::TextButton undoEdit,redoEdit;
+    juce::TextButton quantize;
+    std::uint64_t editGeneration=0;
+    void showQuantizeMenu(){
+        if(dragging || !editingAllowed())return;
+        velocity.hideTextBox(false); // Commit pending velocity entry before capturing the menu state.
+        const auto index=trackIndex;const auto generation=editGeneration;
+        const auto name=session->tracks[index].name;const auto notes=session->tracks[index].notes;
+        juce::PopupMenu menu;
+        menu.addItem(1,"Quarter notes (1/4)");menu.addItem(2,"Eighth notes (1/8)");
+        menu.addItem(4,"Sixteenth notes (1/16)");menu.addItem(8,"Thirty-second notes (1/32)");
+        menu.addItem(3,"Eighth-note triplets");menu.addItem(6,"Sixteenth-note triplets");
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&quantize),
+            [safe=juce::Component::SafePointer<IDWPianoRoll>(this),index,generation,name,notes](int result){
+                if(result==0 || safe==nullptr || !safe->isVisible() || safe->editGeneration!=generation ||
+                   safe->dragging || !safe->editingAllowed() || safe->trackIndex!=index)return;
+                if(safe->session->tracks[index].name!=name || !idw::daw::sameMidiNotes(safe->session->tracks[index].notes,notes)){
+                    if(safe->onHistoryConflict)safe->onHistoryConflict();return;
+                }
+                safe->quantizeTrack(result);
+            });
+    }
     void restoreFromButton(bool undo){
         if(dragging || !editingAllowed())return;
         // Commit an active number editor before applying history. Do not route
@@ -339,6 +374,7 @@ private:
         const bool historyAllowed=editingAllowed() && !dragging;
         undoEdit.setEnabled(historyAllowed && history.canUndo());
         redoEdit.setEnabled(historyAllowed && history.canRedo());
+        quantize.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
         velocity.setEnabled(valid && editingAllowed());
         duplicate.setEnabled(valid && editingAllowed() && !dragging);
         halfLength.setEnabled(valid && editingAllowed() && !dragging);

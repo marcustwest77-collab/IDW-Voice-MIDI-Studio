@@ -1007,3 +1007,30 @@ invalid paths, failure/retry and unchanged saved project bytes. CTest and Window
 macOS foundation targets registered. Application CI and physical recent-menu/
 restart/missing-file checks pending. Installed beta, current #240 test app and
 original user projects/audio remain unchanged.
+
+### MIDI track quantize (2026-11-05)
+
+PIANO ROLL adds QUANTIZE TRACK with quarter, eighth, sixteenth, thirty-second,
+eighth-triplet and sixteenth-triplet grids. It moves every note start on the
+current MIDI track to the nearest grid boundary; exact half-grid ties move
+forward. Pitch, velocity, duration and note ordering are preserved. Colliding or
+overlapping notes are retained. The operation is one MIDI Undo/Redo step; already
+aligned or invalid input creates no history entry and preserves redo.
+
+The bounded helper validates all notes before replacing any output: at most
+100000 notes, finite nonnegative starts, positive finite representable durations/
+endpoints, pitch/velocity bounds, supported grid and representable scaled timing.
+The editor guards busy, invalid/audio targets and active note/velocity gestures.
+The async menu captures track/name/notes and editor generation, rejects a changed
+target, and cannot apply after project reset or editor/track replacement. A text
+velocity edit is committed before opening the grid menu. The new button hides
+in narrow headers to preserve existing history/close controls.
+
+MidiQuantizeTests passed locally under MSVC /W4 /WX. It covers straight/triplet
+grids and ties, preserved note fields and overlaps, idempotence, invalid numeric
+data/counts/grids with no partial output, a 100000-note track, real piano-roll
+control wiring and busy/drag/track guards, grouped history, no-op redo retention,
+unchanged other session JSON and saved/reopened quantized notes. CTest and
+foundation CI targets registered. Full application CI and physical grid-menu/
+timing/playback checks are pending. Installed beta and current #241 test app are
+unchanged; no live two-computer qualification is inferred.
