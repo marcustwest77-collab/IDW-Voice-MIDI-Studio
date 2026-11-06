@@ -19,6 +19,7 @@ public:
     std::function<bool()> canEdit;
     std::function<void()> onHistoryConflict;
     static constexpr int velocityFooterHeight=30;
+    static constexpr int noteDragThresholdPixels=4;
     IDWPianoRoll(){
         setWantsKeyboardFocus(true);
         closeEditor.setButtonText("BACK TO TRACKS");
@@ -289,6 +290,7 @@ public:
                 activeNote=i-1;selectedIndex=activeNote;selectedValid=true;
                 grabKeyboardFocus();dragging=true;resizing=rect->rightEdgeVisible && e.x>=x+rect->width-6;
                 originX=e.x;originY=e.y;original=notes[activeNote];
+                noteDragStarted=false;
                 gestureTrack=trackIndex;gestureBefore=notes;gestureExpected=notes;
                 gestureTrackName=session->tracks[trackIndex].name;
                 rememberSelection();refreshVelocity();
@@ -312,6 +314,13 @@ public:
             gestureBefore.reset();dragging=false;selectedValid=false;
             refreshVelocity();
             if(onHistoryConflict)onHistoryConflict();return;
+        }
+        // A selection click may contain small mouse movements. Do not let the
+        // quarter-beat rounding turn that jitter into a timing/length edit.
+        // Once a drag starts, keep tracking it even when it returns to origin.
+        if(!noteDragStarted){
+            if(std::abs(e.x-originX)<noteDragThresholdPixels && std::abs(e.y-originY)<noteDragThresholdPixels)return;
+            noteDragStarted=true;
         }
         const double delta=std::round((e.x-originX)/view.pixelsPerBeat()*4.0)/4.0;
         bool changed=false;
@@ -514,7 +523,7 @@ private:
             if(gestureMatches())history.record(*session,gestureTrack,*gestureBefore);
             else if(onHistoryConflict)onHistoryConflict();
         }
-        gestureBefore.reset();dragging=false;velocityDragging=false;refreshVelocity();
+        gestureBefore.reset();dragging=false;velocityDragging=false;noteDragStarted=false;refreshVelocity();
     }
     bool gestureMatches() const {
         return session && gestureTrack<session->tracks.size() &&
@@ -525,6 +534,7 @@ private:
     bool selectedValid=false;
     size_t selectedIndex=0;
     bool dragging=false,resizing=false;
+    bool noteDragStarted=false;
     size_t activeNote=0;
     int originX=0,originY=0;
     idw::daw::MidiNote original;

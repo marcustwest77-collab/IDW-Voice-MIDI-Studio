@@ -1112,3 +1112,26 @@ target guards, other JSON unchanged, save/reopen and layout. CTest and foundatio
 build targets registered. Local strict tests and application CI are recorded in
 the PR validation; physical menu/dynamics/history/save-reopen checks are pending.
 Installed beta, running #244 test app and original user projects/audio unchanged.
+
+### Piano-roll selection drag threshold (2026-11-06)
+
+Small mouse movement while selecting an existing note previously entered the
+move/resize path immediately. At default 16 pixels per beat, two pixels round
+to a quarter-beat delta, so a selection click could accidentally shift a start
+or length and add a history step. This is a reproducible weakness, not proof of
+the cause of the earlier live timing mismatches. The fresh #245 physical sequence
+passed relative +10, Undo/Redo, save and reload with timing preserved.
+
+Existing-note move/resize now requires at least four pixels on either axis before
+applying changes. Selection and the velocity inspector still work immediately.
+Once the threshold is crossed, the drag stays active until release, allowing a
+return to the original position. Each new gesture resets the threshold. Existing
+busy/conflict guards, snap and grouped history remain in effect. Empty-grid note
+creation and velocity-slider gestures retain their existing behavior.
+
+PianoRollDragThresholdTests exercise actual mouse callbacks for selection jitter
+at note bodies and resize edges, preserved inspector and redo, intentional move/
+pitch/resize, return near origin, reset between gestures, busy guard, unchanged
+other session JSON and saved/reopened notes. CTest and foundation target added.
+Full application CI and physical selection/move/resize checks are pending.
+Installed beta, running #245 test app and original user project/audio unchanged.
