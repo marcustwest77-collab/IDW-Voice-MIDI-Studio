@@ -5,6 +5,7 @@
 #include "MidiQuantize.h"
 #include "MidiTranspose.h"
 #include "MidiTrackVelocity.h"
+#include "MidiTrackRepeat.h"
 #include "PianoRollViewport.h"
 #include "PianoRollKeyCommands.h"
 #include <functional>
@@ -65,6 +66,10 @@ public:
         duplicate.setTooltip("Repeat the selected note immediately after itself (Ctrl/Cmd+D).");
         addAndMakeVisible(duplicate);duplicate.setEnabled(false);
         duplicate.onClick=[this]{duplicateSelection();};
+        repeatTrackButton.setButtonText("REPEAT TRACK");repeatTrackButton.setWantsKeyboardFocus(false);
+        repeatTrackButton.setTooltip("Repeat this MIDI part for 2, 4 or 8 total plays, starting each copy on the next whole-bar boundary after the part. Preserves leading rests, pitch, lengths and velocities; one MIDI undo step.");
+        addAndMakeVisible(repeatTrackButton);repeatTrackButton.setEnabled(false);
+        repeatTrackButton.onClick=[this]{showRepeatTrackMenu();};
         halfLength.setButtonText("HALF LENGTH");doubleLength.setButtonText("2x LENGTH");
         for(auto* button:{&halfLength,&doubleLength}){
             button->setWantsKeyboardFocus(false);addAndMakeVisible(*button);button->setEnabled(false);
@@ -112,6 +117,8 @@ public:
         duplicate.setVisible(showDuplicate);halfLength.setVisible(showLength);doubleLength.setVisible(showLength);
         int right=getWidth()-4;
         duplicate.setBounds(right-130,getHeight()-28,130,24);if(showDuplicate)right-=136;
+        const bool showRepeat=getWidth()>=950;repeatTrackButton.setVisible(showRepeat);
+        repeatTrackButton.setBounds(right-126,getHeight()-28,126,24);if(showRepeat)right-=132;
         doubleLength.setBounds(right-96,getHeight()-28,96,24);
         halfLength.setBounds(right-202,getHeight()-28,100,24);if(showLength)right-=208;
         velocity.setBounds(110,getHeight()-28,std::max(1,right-110),24);
@@ -170,6 +177,18 @@ public:
         const auto amount=(mode==idw::daw::MidiTrackVelocityMode::fixed?juce::String("set "):
             value>0?juce::String("+"):juce::String{})+juce::String(value);
         showEditFeedback("Track velocity "+amount+" applied");repaint();return true;
+    }
+    bool repeatTrack(int totalPlays){
+        if(dragging || !editingAllowed()){showEditFeedback("Repeat unavailable while busy");return false;}
+        const auto before=session->tracks[trackIndex].notes;
+        std::vector<idw::daw::MidiNote> next;
+        const auto result=idw::daw::repeatMidiTrack(before,totalPlays,session->numerator,session->denominator,next);
+        if(result!=idw::daw::MidiTrackRepeatResult::changed){
+            showEditFeedback(result==idw::daw::MidiTrackRepeatResult::unchanged?"Repeat unchanged":"Repeat exceeds valid part limits");return false;
+        }
+        session->tracks[trackIndex].notes.swap(next);history.record(*session,trackIndex,before);
+        selectedValid=false;constrainView();refreshVelocity();if(onChanged)onChanged();
+        showEditFeedback("Repeat "+juce::String(totalPlays)+" plays applied");repaint();return true;
     }
     bool setSelectionVelocity(int value){
         if((dragging && !velocityDragging) || !editingAllowed() || value<1 || value>127){refreshVelocity();return false;}
@@ -389,6 +408,24 @@ private:
         editFeedback.setText(text,juce::dontSendNotification);
     }
     std::uint64_t editGeneration=0;
+    void showRepeatTrackMenu(){
+        if(dragging || !editingAllowed())return;
+        velocity.hideTextBox(false);
+        const auto index=trackIndex;const auto generation=editGeneration;
+        const auto name=session->tracks[index].name;const auto notes=session->tracks[index].notes;
+        const int numerator=session->numerator,denominator=session->denominator;
+        juce::PopupMenu menu;menu.addItem(2,"2 total plays");menu.addItem(4,"4 total plays");menu.addItem(8,"8 total plays");
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&repeatTrackButton),
+            [safe=juce::Component::SafePointer<IDWPianoRoll>(this),index,generation,name,notes,numerator,denominator](int result){
+                if((result!=2 && result!=4 && result!=8) || safe==nullptr || !safe->isVisible() || safe->editGeneration!=generation ||
+                   safe->dragging || !safe->editingAllowed() || safe->trackIndex!=index)return;
+                if(safe->session->tracks[index].name!=name || safe->session->numerator!=numerator || safe->session->denominator!=denominator ||
+                   !idw::daw::sameMidiNotes(safe->session->tracks[index].notes,notes)){
+                    if(safe->onHistoryConflict)safe->onHistoryConflict();return;
+                }
+                safe->repeatTrack(result);
+            });
+    }
     void showTrackVelocityMenu(){
         if(dragging || !editingAllowed())return;
         velocity.hideTextBox(false);
@@ -458,6 +495,7 @@ private:
     juce::Label velocityLabel;
     juce::Slider velocity;
     juce::TextButton duplicate;
+    juce::TextButton repeatTrackButton;
     juce::TextButton halfLength,doubleLength;
     bool velocityDragging=false;
     std::vector<idw::daw::MidiNote> selectedSnapshot;
@@ -490,6 +528,7 @@ private:
         quantize.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
         transpose.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
         trackVelocity.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
+        repeatTrackButton.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
         velocity.setEnabled(valid && editingAllowed());
         duplicate.setEnabled(valid && editingAllowed() && !dragging);
         halfLength.setEnabled(valid && editingAllowed() && !dragging);
