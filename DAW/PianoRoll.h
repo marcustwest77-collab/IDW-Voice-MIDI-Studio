@@ -6,6 +6,7 @@
 #include "MidiTranspose.h"
 #include "MidiTrackVelocity.h"
 #include "MidiTrackRepeat.h"
+#include "PianoRollSnap.h"
 #include "PianoRollViewport.h"
 #include "PianoRollKeyCommands.h"
 #include <functional>
@@ -70,6 +71,9 @@ public:
         repeatTrackButton.setTooltip("Repeat this MIDI part for 2, 4 or 8 total plays, starting each copy on the next whole-bar boundary after the part. Preserves leading rests, pitch, lengths and velocities; one MIDI undo step.");
         addAndMakeVisible(repeatTrackButton);repeatTrackButton.setEnabled(false);
         repeatTrackButton.onClick=[this]{showRepeatTrackMenu();};
+        snapGrid.setButtonText("SNAP 1/16");snapGrid.setWantsKeyboardFocus(false);
+        snapGrid.setTooltip("Grid for creating, moving and resizing notes with the mouse. Changing this view setting does not quantize existing notes or create a project edit. Keyboard nudges keep their existing step.");
+        addAndMakeVisible(snapGrid);snapGrid.onClick=[this]{showSnapGridMenu();};
         halfLength.setButtonText("HALF LENGTH");doubleLength.setButtonText("2x LENGTH");
         for(auto* button:{&halfLength,&doubleLength}){
             button->setWantsKeyboardFocus(false);addAndMakeVisible(*button);button->setEnabled(false);
@@ -88,7 +92,7 @@ public:
         velocity.onValueChange=[this]{setSelectionVelocity((int)velocity.getValue());};
         velocity.onDragEnd=[this]{finishGesture();};
     }
-    void resetEditor(){++editGeneration;history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};setVisible(false);constrainView();refreshVelocity();showEditFeedback("No MIDI edits yet");repaint();}
+    void resetEditor(){++editGeneration;history.clear();gestureBefore.reset();gestureExpected.clear();selectedSnapshot.clear();dragging=false;velocityDragging=false;selectedValid=false;view={};snapDivisions=4;snapGrid.setButtonText("SNAP 1/16");setVisible(false);constrainView();refreshVelocity();showEditFeedback("No MIDI edits yet");repaint();}
     void trackRenamed(size_t index,const std::string& previous){
         if(!session || index>=session->tracks.size())return;
         history.trackRenamed(index,previous,session->tracks[index].name);
@@ -119,6 +123,8 @@ public:
         duplicate.setBounds(right-130,getHeight()-28,130,24);if(showDuplicate)right-=136;
         const bool showRepeat=getWidth()>=950;repeatTrackButton.setVisible(showRepeat);
         repeatTrackButton.setBounds(right-126,getHeight()-28,126,24);if(showRepeat)right-=132;
+        const bool showSnap=getWidth()>=1100;snapGrid.setVisible(showSnap);
+        snapGrid.setBounds(right-106,getHeight()-28,106,24);if(showSnap)right-=112;
         doubleLength.setBounds(right-96,getHeight()-28,96,24);
         halfLength.setBounds(right-202,getHeight()-28,100,24);if(showLength)right-=208;
         velocity.setBounds(110,getHeight()-28,std::max(1,right-110),24);
@@ -189,6 +195,13 @@ public:
         session->tracks[trackIndex].notes.swap(next);history.record(*session,trackIndex,before);
         selectedValid=false;constrainView();refreshVelocity();if(onChanged)onChanged();
         showEditFeedback("Repeat "+juce::String(totalPlays)+" plays applied");repaint();return true;
+    }
+    int getSnapDivisions() const {return snapDivisions;}
+    bool setSnapDivisions(int divisions){
+        if(dragging || !editingAllowed() || !idw::daw::validPianoRollSnap(divisions))return false;
+        snapDivisions=divisions;
+        const juce::String label=divisions==1?"1/4":divisions==2?"1/8":divisions==4?"1/16":divisions==8?"1/32":divisions==3?"1/8T":"1/16T";
+        snapGrid.setButtonText("SNAP "+label);repaint();return true;
     }
     bool setSelectionVelocity(int value){
         if((dragging && !velocityDragging) || !editingAllowed() || value<1 || value>127){refreshVelocity();return false;}
@@ -271,6 +284,17 @@ public:
         const int helpLeft=undoEdit.isVisible()?194:2;
         g.drawText("Arrows: move | Shift: beat/octave | [ ]: length | Wheel: pitch | Shift+wheel: time | Ctrl/Cmd+wheel: zoom",helpLeft,0,juce::jmax(0,closeEditor.getX()-helpLeft-6),12,juce::Justification::centredLeft);
         const double first=std::ceil(view.firstBeat);
+        const double stepPixels=view.pixelsPerBeat()/snapDivisions;
+        if(stepPixels>=4){
+            const double firstGrid=std::ceil(view.firstBeat*snapDivisions);
+            const int count=static_cast<int>(std::min(9999.0,std::ceil(gridWidth()/stepPixels)))+1;
+            g.setColour(juce::Colour(0xff35404c));
+            for(int i=0;i<count;++i){const double unit=firstGrid+i;
+                if(std::fmod(unit,(double)snapDivisions)==0)continue;
+                const int x=keyWidth+juce::roundToInt((unit/snapDivisions-view.firstBeat)*view.pixelsPerBeat());
+                if(x<=getWidth())g.drawVerticalLine(x,(float)header,(float)(header+gridHeight()));
+            }
+        }
         const int lines=(int)std::ceil(gridWidth()/view.pixelsPerBeat())+1;
         for(int i=0;i<lines;++i){
             const double beat=first+i;
@@ -317,7 +341,9 @@ public:
                 return;
             }
         }
-        const double beat=std::round(view.beatAt(e.x-54)*4.0)/4.0;
+        const auto snapped=idw::daw::snapPianoRollBeats(view.beatAt(e.x-54),snapDivisions);
+        if(!snapped)return;
+        const double beat=*snapped;
         const auto before=notes;
         if(session->addMidiNote(trackIndex,{*pitch,beat,1.0,100})){
             history.record(*session,trackIndex,before);
@@ -341,10 +367,12 @@ public:
             if(std::abs(e.x-originX)<noteDragThresholdPixels && std::abs(e.y-originY)<noteDragThresholdPixels)return;
             noteDragStarted=true;
         }
-        const double delta=std::round((e.x-originX)/view.pixelsPerBeat()*4.0)/4.0;
+        const auto snapped=idw::daw::snapPianoRollBeats((e.x-originX)/view.pixelsPerBeat(),snapDivisions);
+        if(!snapped)return;
+        const double delta=*snapped;
         bool changed=false;
         if(resizing)
-            changed=session->resizeMidiNote(trackIndex,activeNote,std::max(0.25,original.lengthBeats+delta));
+            changed=session->resizeMidiNote(trackIndex,activeNote,std::max(1.0/snapDivisions,original.lengthBeats+delta));
         else
             changed=session->moveMidiNote(trackIndex,activeNote,
                 std::max(0.0,original.startBeat+delta),
@@ -408,6 +436,19 @@ private:
         editFeedback.setText(text,juce::dontSendNotification);
     }
     std::uint64_t editGeneration=0;
+    void showSnapGridMenu(){
+        if(dragging || !editingAllowed())return;
+        velocity.hideTextBox(false);const auto generation=editGeneration;const auto index=trackIndex;
+        juce::PopupMenu menu;
+        menu.addItem(1,"Quarter notes (1/4)",true,snapDivisions==1);menu.addItem(2,"Eighth notes (1/8)",true,snapDivisions==2);
+        menu.addItem(4,"Sixteenth notes (1/16)",true,snapDivisions==4);menu.addItem(8,"Thirty-second notes (1/32)",true,snapDivisions==8);
+        menu.addItem(3,"Eighth-note triplets",true,snapDivisions==3);menu.addItem(6,"Sixteenth-note triplets",true,snapDivisions==6);
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&snapGrid),
+            [safe=juce::Component::SafePointer<IDWPianoRoll>(this),generation,index](int result){
+                if(safe!=nullptr && safe->isVisible() && safe->editGeneration==generation && safe->trackIndex==index)
+                    safe->setSnapDivisions(result);
+            });
+    }
     void showRepeatTrackMenu(){
         if(dragging || !editingAllowed())return;
         velocity.hideTextBox(false);
@@ -496,6 +537,8 @@ private:
     juce::Slider velocity;
     juce::TextButton duplicate;
     juce::TextButton repeatTrackButton;
+    juce::TextButton snapGrid;
+    int snapDivisions=4;
     juce::TextButton halfLength,doubleLength;
     bool velocityDragging=false;
     std::vector<idw::daw::MidiNote> selectedSnapshot;
@@ -529,6 +572,7 @@ private:
         transpose.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
         trackVelocity.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
         repeatTrackButton.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
+        snapGrid.setEnabled(historyAllowed);
         velocity.setEnabled(valid && editingAllowed());
         duplicate.setEnabled(valid && editingAllowed() && !dragging);
         halfLength.setEnabled(valid && editingAllowed() && !dragging);

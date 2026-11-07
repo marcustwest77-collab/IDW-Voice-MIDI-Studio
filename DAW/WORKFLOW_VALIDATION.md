@@ -1160,3 +1160,28 @@ target guards, unchanged other JSON, save/reopen and footer layout. Registered
 CTest and foundation target. Full application CI and physical repeat/history/
 save-reopen/playback checks remain pending. Installed beta, running #246 test app
 and original user projects/audio remain unchanged.
+
+### Piano-roll pointer snap grid
+
+The footer adds SNAP 1/16 (visible from 1100 pixels) with quarter, eighth,
+sixteenth, thirty-second, eighth-triplet and sixteenth-triplet choices. This
+view-only setting controls mouse note placement and move/resize deltas; changing
+it does not quantize existing notes, mark the project dirty or change history.
+Keyboard nudge steps remain unchanged. New notes retain their one-beat initial
+length. Resize minimum is one selected grid unit. Moves preserve existing
+off-grid offsets. Signed half-grid ties round away from zero. Default/reset is
+sixteenths, preserving the prior quarter-beat pointer step. Fine grid lines show
+when spacing is at least four pixels; zoom in for denser subdivisions.
+
+The numeric helper rejects unsupported grids and nonfinite/unrepresentable beat
+values. Grid changes are blocked for busy/audio/invalid targets or active note/
+velocity gestures; asynchronous menus reject a hidden or reset/replaced editor.
+Project serialization is unchanged; changing/opening a project resets the grid.
+
+PianoRollSnapTests exercise all six grids and signed ties, invalid values,
+actual mouse note placement, coarse dragging, fine minimum resize, grouped
+Undo/Redo, unchanged session JSON and dirty callbacks, redo retained across a
+view change, busy/gesture/target guards, saved/reopened data, reset and layout.
+CTest/foundation target registered. Full application CI and physical grid/menu/
+placement/history/save-reload checks pending. Installed beta, running #247 test
+app and original user projects/audio unchanged.
