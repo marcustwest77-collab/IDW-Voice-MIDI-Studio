@@ -1135,3 +1135,28 @@ pitch/resize, return near origin, reset between gestures, busy guard, unchanged
 other session JSON and saved/reopened notes. CTest and foundation target added.
 Full application CI and physical selection/move/resize checks are pending.
 Installed beta, running #245 test app and original user project/audio unchanged.
+
+### Repeat MIDI track parts (2026-11-06)
+
+PIANO ROLL adds REPEAT TRACK in the footer at widths of at least 950 pixels.
+Choose 2, 4 or 8 total plays, including the original. Each copy starts after the
+latest note endpoint rounded up to a whole bar in the session's time signature.
+An exact bar endpoint adds no empty bar. The repeated part starts at beat zero,
+so leading rests repeat too. Original notes, ordering, overlaps, pitches, lengths
+and velocities stay intact; only the copied note starts are offset. Other tracks,
+mix, tempo and meter remain unchanged. One MIDI Undo/Redo step covers the action.
+
+The bounded helper validates input/meter/play count, caps the resulting part at
+100000 notes and rejects invalid or unrepresentable timing without publishing
+partial output. Empty/one-play requests create no history and preserve redo.
+The editor blocks busy/audio/invalid targets and active note/velocity gestures.
+Its asynchronous menu commits pending velocity text, captures track/index/name/
+notes/editor generation and time signature, and rejects stale or hidden targets.
+
+MidiTrackRepeatTests cover all menu counts, exact/rounded/fractional bars, 3/4 and
+6/8, leading rests, unsorted overlaps, aliases, invalid input, overflow, note cap,
+actual history-button callbacks, redo after rejected/no-op requests, busy/gesture/
+target guards, unchanged other JSON, save/reopen and footer layout. Registered
+CTest and foundation target. Full application CI and physical repeat/history/
+save-reopen/playback checks remain pending. Installed beta, running #246 test app
+and original user projects/audio remain unchanged.
