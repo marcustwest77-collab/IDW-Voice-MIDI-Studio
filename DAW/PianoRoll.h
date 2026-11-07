@@ -67,6 +67,13 @@ public:
         duplicate.setTooltip("Repeat the selected note immediately after itself (Ctrl/Cmd+D).");
         addAndMakeVisible(duplicate);duplicate.setEnabled(false);
         duplicate.onClick=[this]{duplicateSelection();};
+        deleteNote.setButtonText("DELETE NOTE");deleteNote.setWantsKeyboardFocus(false);
+        deleteNote.setTooltip("Delete only the selected note. UNDO MIDI restores it; other notes and tracks stay intact.");
+        addAndMakeVisible(deleteNote);deleteNote.setEnabled(false);
+        deleteNote.onClick=[this]{
+            if(dragging || !editingAllowed())return;
+            velocity.hideTextBox(false);deleteSelection();
+        };
         repeatTrackButton.setButtonText("REPEAT TRACK");repeatTrackButton.setWantsKeyboardFocus(false);
         repeatTrackButton.setTooltip("Repeat this MIDI part for 2, 4 or 8 total plays, starting each copy on the next whole-bar boundary after the part. Preserves leading rests, pitch, lengths and velocities; one MIDI undo step.");
         addAndMakeVisible(repeatTrackButton);repeatTrackButton.setEnabled(false);
@@ -120,6 +127,8 @@ public:
         const bool showDuplicate=getWidth()>=480,showLength=getWidth()>=760;
         duplicate.setVisible(showDuplicate);halfLength.setVisible(showLength);doubleLength.setVisible(showLength);
         int right=getWidth()-4;
+        const bool showDelete=getWidth()>=620;deleteNote.setVisible(showDelete);
+        deleteNote.setBounds(right-108,getHeight()-28,108,24);if(showDelete)right-=114;
         duplicate.setBounds(right-130,getHeight()-28,130,24);if(showDuplicate)right-=136;
         const bool showRepeat=getWidth()>=950;repeatTrackButton.setVisible(showRepeat);
         repeatTrackButton.setBounds(right-126,getHeight()-28,126,24);if(showRepeat)right-=132;
@@ -219,11 +228,16 @@ public:
         refreshVelocity();if(onChanged)onChanged();repaint();return true;
     }
     bool deleteSelection(){
-        if(dragging || !editingAllowed() || !selectionMatches())return false;
+        if(dragging || !editingAllowed()){showEditFeedback("Delete unavailable while busy");return false;}
+        if(!selectionMatches()){
+            if(selectedValid && onHistoryConflict)onHistoryConflict();
+            selectedValid=false;refreshVelocity();showEditFeedback("Select a note to delete");return false;
+        }
         const auto before=session->tracks[trackIndex].notes;
         const bool removed=session->removeMidiNote(trackIndex,selectedIndex);
-        selectedValid=false;refreshVelocity();
-        if(removed){history.record(*session,trackIndex,before);if(onChanged)onChanged();repaint();}
+        selectedValid=false;
+        if(removed){history.record(*session,trackIndex,before);refreshVelocity();if(onChanged)onChanged();showEditFeedback("Delete note applied");repaint();}
+        else refreshVelocity();
         return removed;
     }
     bool duplicateSelection(){
@@ -536,6 +550,7 @@ private:
     juce::Label velocityLabel;
     juce::Slider velocity;
     juce::TextButton duplicate;
+    juce::TextButton deleteNote;
     juce::TextButton repeatTrackButton;
     juce::TextButton snapGrid;
     int snapDivisions=4;
@@ -575,6 +590,7 @@ private:
         snapGrid.setEnabled(historyAllowed);
         velocity.setEnabled(valid && editingAllowed());
         duplicate.setEnabled(valid && editingAllowed() && !dragging);
+        deleteNote.setEnabled(valid && editingAllowed() && !dragging);
         halfLength.setEnabled(valid && editingAllowed() && !dragging);
         doubleLength.setEnabled(valid && editingAllowed() && !dragging);
         velocity.setValue(valid?session->tracks[trackIndex].notes[selectedIndex].velocity:100,juce::dontSendNotification);
