@@ -1163,6 +1163,7 @@ and original user projects/audio remain unchanged.
 
 ### Piano-roll pointer snap grid
 
+
 The footer adds SNAP 1/16 (visible from 1100 pixels) with quarter, eighth,
 sixteenth, thirty-second, eighth-triplet and sixteenth-triplet choices. This
 view-only setting controls mouse note placement and move/resize deltas; changing
@@ -1185,3 +1186,25 @@ view change, busy/gesture/target guards, saved/reopened data, reset and layout.
 CTest/foundation target registered. Full application CI and physical grid/menu/
 placement/history/save-reload checks pending. Installed beta, running #247 test
 app and original user projects/audio unchanged.
+
+### Visible MIDI note deletion
+
+PIANO ROLL adds DELETE NOTE alongside DUPLICATE NOTE in the footer (visible
+from 620 pixels). It is enabled only for a valid selected note while editing is
+available and no note/velocity gesture is active. The button commits pending
+velocity text before deleting. It removes only the selected note, clears the
+selection and reports Delete note applied. UNDO MIDI restores the exact original
+note fields and list position; REDO MIDI removes it again. Other notes/tracks,
+audio clips, mix and tempo are unchanged. The existing keyboard delete uses the
+same operation and now reports selection/busy feedback. Stale selections reject
+the action and report a history conflict; no-op/rejected deletion retains redo.
+
+MidiNoteDeleteTests exercise the actual button callback, disabled/no-selection
+state, overlapping-note selection, exact grouped Undo/Redo, no-op redo retention,
+busy/note/velocity gestures, stale rename/note snapshots, preserved other session
+JSON, save/reopen, last-note delete/Undo/Redo, target/reset guards and footer layout.
+History is recorded before refreshing controls so Undo enables immediately,
+including after deleting the final note. Registered CTest and
+foundation target. Application CI and physical selected-delete/history/save-
+reload/playback checks pending. Installed beta, running #248 test app and original
+user project/audio files unchanged.
