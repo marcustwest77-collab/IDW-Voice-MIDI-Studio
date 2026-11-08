@@ -7,6 +7,7 @@
 #include "MidiTrackVelocity.h"
 #include "MidiTrackRepeat.h"
 #include "PianoRollSnap.h"
+#include "MidiNoteSelection.h"
 #include "PianoRollViewport.h"
 #include "PianoRollKeyCommands.h"
 #include <functional>
@@ -20,7 +21,7 @@ public:
     std::function<void()> onChanged;
     std::function<bool()> canEdit;
     std::function<void()> onHistoryConflict;
-    static constexpr int velocityFooterHeight=30;
+    static constexpr int velocityFooterHeight=60;
     static constexpr int noteDragThresholdPixels=4;
     IDWPianoRoll(){
         setWantsKeyboardFocus(true);
@@ -74,6 +75,14 @@ public:
             if(dragging || !editingAllowed())return;
             velocity.hideTextBox(false);deleteSelection();
         };
+        previousNote.setButtonText("NOTE <");nextNote.setButtonText("NOTE >");
+        for(auto* button:{&previousNote,&nextNote}){button->setWantsKeyboardFocus(false);addAndMakeVisible(*button);button->setEnabled(false);}
+        previousNote.setTooltip("Select the previous note by start time and pitch; wraps at the beginning. Does not move notes.");
+        nextNote.setTooltip("Select the next note by start time and pitch; wraps at the end. Does not move notes.");
+        previousNote.onClick=[this]{selectFromButton(false);};nextNote.onClick=[this]{selectFromButton(true);};
+        noteSummary.setComponentID("midi-note-summary");noteSummary.setFont(juce::Font(juce::FontOptions(12.0f)));
+        noteSummary.setColour(juce::Label::textColourId,juce::Colours::white);
+        noteSummary.setText("No note selected",juce::dontSendNotification);addAndMakeVisible(noteSummary);
         repeatTrackButton.setButtonText("REPEAT TRACK");repeatTrackButton.setWantsKeyboardFocus(false);
         repeatTrackButton.setTooltip("Repeat this MIDI part for 2, 4 or 8 total plays, starting each copy on the next whole-bar boundary after the part. Preserves leading rests, pitch, lengths and velocities; one MIDI undo step.");
         addAndMakeVisible(repeatTrackButton);repeatTrackButton.setEnabled(false);
@@ -124,6 +133,10 @@ public:
         trackVelocity.setVisible(getWidth()>=750);trackVelocity.setBounds(474,2,138,20);
         editFeedback.setVisible(getWidth()>=1000);editFeedback.setBounds(616,2,std::max(1,getWidth()-734),20);
         velocityLabel.setBounds(4,getHeight()-28,104,24);
+        const bool showNavigation=getWidth()>=360;
+        previousNote.setVisible(showNavigation);nextNote.setVisible(showNavigation);
+        previousNote.setBounds(4,getHeight()-58,84,24);nextNote.setBounds(92,getHeight()-58,84,24);
+        noteSummary.setVisible(getWidth()>=620);noteSummary.setBounds(184,getHeight()-58,std::max(1,getWidth()-188),24);
         const bool showDuplicate=getWidth()>=480,showLength=getWidth()>=760;
         duplicate.setVisible(showDuplicate);halfLength.setVisible(showLength);doubleLength.setVisible(showLength);
         int right=getWidth()-4;
@@ -211,6 +224,16 @@ public:
         snapDivisions=divisions;
         const juce::String label=divisions==1?"1/4":divisions==2?"1/8":divisions==4?"1/16":divisions==8?"1/32":divisions==3?"1/8T":"1/16T";
         snapGrid.setButtonText("SNAP "+label);repaint();return true;
+    }
+    bool selectAdjacentNote(bool forward){
+        if(dragging || !editingAllowed())return false;
+        if(selectedValid && !selectionMatches()){
+            selectedValid=false;refreshVelocity();if(onHistoryConflict)onHistoryConflict();return false;
+        }
+        const auto index=idw::daw::adjacentMidiNote(session->tracks[trackIndex].notes,
+            selectedValid?std::optional<size_t>{selectedIndex}:std::nullopt,forward);
+        if(!index)return false;
+        selectedIndex=*index;selectedValid=true;rememberSelection();revealSelection();refreshVelocity();repaint();return true;
     }
     bool setSelectionVelocity(int value){
         if((dragging && !velocityDragging) || !editingAllowed() || value<1 || value>127){refreshVelocity();return false;}
@@ -450,6 +473,10 @@ private:
         editFeedback.setText(text,juce::dontSendNotification);
     }
     std::uint64_t editGeneration=0;
+    void selectFromButton(bool forward){
+        if(dragging || !editingAllowed())return;
+        velocity.hideTextBox(false);selectAdjacentNote(forward);
+    }
     void showSnapGridMenu(){
         if(dragging || !editingAllowed())return;
         velocity.hideTextBox(false);const auto generation=editGeneration;const auto index=trackIndex;
@@ -551,6 +578,8 @@ private:
     juce::Slider velocity;
     juce::TextButton duplicate;
     juce::TextButton deleteNote;
+    juce::TextButton previousNote,nextNote;
+    juce::Label noteSummary;
     juce::TextButton repeatTrackButton;
     juce::TextButton snapGrid;
     int snapDivisions=4;
@@ -588,6 +617,17 @@ private:
         trackVelocity.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
         repeatTrackButton.setEnabled(historyAllowed && !session->tracks[trackIndex].notes.empty());
         snapGrid.setEnabled(historyAllowed);
+        const bool navigable=historyAllowed && !session->tracks[trackIndex].notes.empty() && session->tracks[trackIndex].notes.size()<=100000;
+        previousNote.setEnabled(navigable);nextNote.setEnabled(navigable);
+        juce::String summary="No note selected";
+        if(valid){const auto& n=session->tracks[trackIndex].notes[selectedIndex];
+            if(n.pitch>=0 && n.pitch<=127){
+                static constexpr const char* names[]{"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+                summary="Pitch "+juce::String(names[n.pitch%12])+juce::String(n.pitch/12-1)+" ("+juce::String(n.pitch)+") | Start "+
+                    juce::String(n.startBeat,3)+" beats | Length "+juce::String(n.lengthBeats,3)+" beats | Velocity "+juce::String(n.velocity);
+            }else summary="Selected note unavailable";
+        }
+        noteSummary.setText(summary,juce::dontSendNotification);noteSummary.setTooltip(summary);
         velocity.setEnabled(valid && editingAllowed());
         duplicate.setEnabled(valid && editingAllowed() && !dragging);
         deleteNote.setEnabled(valid && editingAllowed() && !dragging);
