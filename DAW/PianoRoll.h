@@ -124,6 +124,7 @@ public:
     void setTrackIndex(size_t index){const bool changed=index!=trackIndex;++editGeneration;finishGesture();trackIndex=index;selectedValid=false;constrainView();refreshVelocity();if(changed)showEditFeedback("Track selected");repaint();}
     void resized() override {
         finishGesture();constrainView();
+        if(selectionMatches())revealSelection();
         closeEditor.setBounds(juce::jmax(0,getWidth()-114),2,juce::jmin(110,getWidth()),20);
         const bool showHistory=getWidth()>=340;
         undoEdit.setVisible(showHistory);redoEdit.setVisible(showHistory);
