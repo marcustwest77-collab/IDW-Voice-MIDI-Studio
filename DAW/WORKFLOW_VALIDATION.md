@@ -1309,3 +1309,36 @@ application CI; physical narrow-window open/close and save/bounce picker-cancel
 checks remain pending. This adds alternate access, not toolbar wrapping or a
 redesign of other clipped controls. Installed beta, running #251 test app and
 original user projects/audio remain unchanged.
+
+### Saved loop playback wired to PLAY (2026-11-08)
+
+OPEN / RECOVER adds Loop playback: Off/On. Its stopped-only dialog accepts
+zero-based start/end beats, with an exclusive end and minimum quarter-beat span.
+Cancel, invalid input, stale project identity/content and busy transport preserve
+settings. Valid changes participate in Saved/Unsaved changes and project recovery.
+Legacy projects default to looping off with a 0-to-4-beat region. A present JSON
+block must contain a real boolean and valid numeric boundaries; malformed loads
+and saves do not replace the existing session/file.
+
+PLAY prepares an immutable session and integer-frame loop on the message thread,
+starts at the loop start and splits output blocks at each exclusive end. The
+callback mixes existing audio/MIDI paths for each segment, then applies a short
+boundary fade after master processing. The playhead wraps and arrangement-end
+stopping is bypassed only for a prepared loop. STOP retains its normal stop/reset
+behavior; the saved loop preference remains for the next PLAY. Source seek caches
+are reset on PLAY and overdub starts. Recording/overdub snapshots stay linear;
+WAV bounce still renders the full arrangement once.
+
+LivePlaybackLoopTests cover strict inputs, stale/busy/no-op settings, legacy and
+strict persistence, failed-save preservation, dirty state, immutable snapshots,
+wrap, stopped-render gating and byte-identical exports with looping on/off.
+PlaybackLoopTests additionally exercise real WAV transports at 8 kHz source and
+11.025/16/44.1/48 kHz device rates, multiple block sizes, bounded finite output,
+zero seam endpoints, interior samples and exact cursor wrap. Resampling boundary
+transients are not compared to an ideal DC oracle. The deliberate short fade can
+produce an audible dip; this is not a crossfade or a demonstrated click-free
+hardware result. Local strict MSVC loop, save-state, clip transport, MIDI bounce
+and multitrack overdub regressions passed. Full application CI and a separate
+AudioBox check of repeated audio/MIDI, STOP, loop settings and save/reload remain
+pending. Installed beta, active #252 test app and original projects/audio remain
+unchanged. No live two-computer collaboration is claimed.

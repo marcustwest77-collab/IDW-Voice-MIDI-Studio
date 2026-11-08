@@ -16,24 +16,27 @@ static void makeWav(const juce::File& file){
     const float* channels[]{source.getReadPointer(0),source.getReadPointer(1)};
     require(writer->writeFromFloatArrays(channels,2,800),"fixture samples");
 }
-static void wavLoop(const juce::File& file,const PlaybackLoopFrames& loop,int block){
+static void wavLoop(const juce::File& file,const PlaybackLoopFrames& loop,int block,double rate=8000){
     juce::AudioFormatManager formats;formats.registerBasicFormats();
     auto reader=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(file));require(reader!=nullptr,"fixture reader");
     juce::AudioFormatReaderSource source(reader.release(),true);juce::AudioTransportSource transport;
-    transport.setSource(&source,0,nullptr,8000);transport.prepareToPlay(block,8000);transport.start();
-    juce::AudioBuffer<float> scratch(2,block),output(2,1279);output.clear();juce::int64 nextSource=-1;
+    transport.setSource(&source,0,nullptr,8000);transport.prepareToPlay(block,rate);transport.start();
+    const int total=static_cast<int>(loop.end-loop.start)*3+79;
+    juce::AudioBuffer<float> scratch(2,block),output(2,total);output.clear();juce::int64 nextSource=-1;
     Clip clip{file.getFullPathName().toStdString(),0,0.5,0};std::int64_t cursor=loop.start;
-    for(int pos=0;pos<1279;pos+=block){const int frames=std::min(block,1279-pos);
+    for(int pos=0;pos<total;pos+=block){const int frames=std::min(block,total-pos);
         const auto next=renderPlaybackSegments(cursor,frames,loop,[&](int offset,int count,std::int64_t frame){
-            const auto window=readClipWindow(transport,scratch,nextSource,clip,300,8000,frame,count);
+            const auto window=readClipWindow(transport,scratch,nextSource,clip,300,rate,frame,count);
             require(window.offset==0 && window.frames==count,"loop seek lost clip frames");
             for(int ch=0;ch<2;++ch)output.copyFrom(ch,pos+offset,scratch,ch,0,count);
             require(applyPlaybackLoopFade(output.getWritePointer(0,pos+offset),output.getWritePointer(1,pos+offset),count,frame,loop),"WAV boundary fade");
         });require(next.has_value(),"WAV loop planning");cursor=*next;
     }
-    for(int i=0;i<1279;++i){const auto frame=loop.start+i%(loop.end-loop.start);const float gain=playbackLoopGain(frame,loop);
-        require(std::abs(output.getSample(0,i)-0.25f*gain)<0.00001f && std::abs(output.getSample(1,i)+0.125f*gain)<0.00001f,"WAV loop samples/EOF/block boundary");}
-    require(cursor==loop.start+1279%(loop.end-loop.start),"WAV cursor drift");
+    for(int i=0;i<total;++i){const auto frame=loop.start+i%(loop.end-loop.start);const float gain=playbackLoopGain(frame,loop);
+        require(std::isfinite(output.getSample(0,i)) && std::isfinite(output.getSample(1,i)) && std::abs(output.getSample(0,i))<=0.4f,"resampled loop invalid output");
+        if(rate==8000 || gain==0 || (frame>=loop.start+128 && frame<loop.end-128))
+            require(std::abs(output.getSample(0,i)-0.25f*gain)<0.0001f && std::abs(output.getSample(1,i)+0.125f*gain)<0.0001f,"WAV loop samples/EOF/block boundary");}
+    require(cursor==loop.start+total%(loop.end-loop.start),"WAV cursor drift");
     transport.setSource(nullptr);transport.releaseResources();
 }
 int main(){
@@ -84,6 +87,8 @@ int main(){
         require(root.createDirectory().wasOk(),"fixture directory");const auto file=root.getChildFile("source.wav");makeWav(file);
         juce::MemoryBlock originalBytes;require(file.loadFileAsData(originalBytes),"fixture bytes");
         for(int block:{1,7,127,512,2048})wavLoop(file,loop,block);
+        for(double rate:{11025,16000,44100,48000})for(int block:{1,127,512})
+            wavLoop(file,*playbackLoopFrames({0.25,0.5},300,rate),block,rate);
         juce::MemoryBlock afterBytes;require(file.loadFileAsData(afterBytes) && afterBytes==originalBytes,"loop changed source WAV");
         Session session;session.bpm=300;session.addTrack(TrackType::midi);session.tracks[0].notes={{60,0.25,0.25,90}};
         const auto original=juce::JSON::toString(sessionToJson(session),true);
