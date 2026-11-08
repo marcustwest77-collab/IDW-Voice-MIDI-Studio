@@ -8,7 +8,7 @@ namespace idw::daw {
 struct PlaybackLoopRegion {double startBeat=0,endBeat=4;};
 inline bool validPlaybackLoop(const PlaybackLoopRegion& region){
     return std::isfinite(region.startBeat) && std::isfinite(region.endBeat) &&
-        region.startBeat>=0 && region.endBeat<=1000000 && region.endBeat-region.startBeat>=0.25;
+        region.startBeat>=0 && region.endBeat<=1000000 && region.endBeat>=region.startBeat+0.25;
 }
 struct PlaybackLoopFrames {
     std::int64_t start=0,end=0;

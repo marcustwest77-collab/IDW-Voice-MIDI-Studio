@@ -1,5 +1,7 @@
 #include "MidiSineSynth.h"
 #include "PlaybackTiming.h"
+#include "PreparedPlayback.h"
+#include "PlaybackLoopSettings.h"
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
 #include "LoopbackCapture.h" // experimental live capture engine; not wired to UI yet
@@ -688,9 +690,12 @@ public:
         addAndMakeVisible(overdubControl);
         audio.setButtonText("+ AUDIO TRACK"); midi.setButtonText("+ MIDI TRACK");
         play.onClick=[this]{if(playing.load() || loopbackCapture.isActive() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;if(loadedCount()>0 || std::any_of(session.tracks.begin(),session.tracks.end(),[](const auto& t){return !t.notes.empty();})){pianoRoll.setVisible(false);
+            auto prepared=idw::daw::preparePlayback(session,deviceRate,true);
+            if(!prepared){juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Playback unavailable","Check the loop region and audio device sample rate before playing.");return;}
+            const auto first=prepared->firstFrame;
             std::atomic_store_explicit(&playbackSession,
-                std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
-            sessionFrames.store(0);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->nextSourceFrame=-1;slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
+                std::make_shared<const idw::daw::PreparedPlayback>(std::move(*prepared)),std::memory_order_release);
+            sessionFrames.store(first);playheadBeats=idw::daw::playbackBeat(first,deviceRate,session.bpm);for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);slot->nextSourceFrame=-1;slot->transport.start();}playing=true;startTimerHz(30);repaint();}};
         stop.onClick=[this]{if(exportRunning.load())return;if(loopbackCapture.isActive() || loopbackCapture.isComplete()){loopbackCapture.cancel();liveCalibration.setEnabled(true);}else if(loopbackCapture.consumeFailed()){loopbackCapture.cancel();liveCalibration.setEnabled(true);}if((recorder.isRecording() || multiRecorder.isRecording()))toggleRecording();for(auto& slot:sources){slot->transport.stop();slot->transport.setPosition(slot->sourceOffsetSeconds);}sessionFrames.store(0);playing=false;stopTimer();playheadBeats=0;refreshMixer();repaint();};
         open.onClick=[this]{loadAudio();};
         record.onClick=[this]{toggleRecording();};
@@ -1671,16 +1676,37 @@ private:
         }
     }
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& info) override {
+        if(!info.buffer)return;
         info.clearActiveBufferRegion();
-        if(!playing.load(std::memory_order_relaxed) || deviceRate<=0)return;
-        // Never resize heap buffers in the real-time audio callback.
-        if(info.numSamples>preparedBlockSize || info.buffer->getNumChannels()>2)return;
-        // Read a single session revision for the entire audio block.
+        if(!playing.load(std::memory_order_relaxed) || !std::isfinite(deviceRate) || deviceRate<=0)return;
+        if(info.numSamples>preparedBlockSize || info.numSamples>65536 || info.buffer->getNumChannels()>2)return;
         const auto snapshot=std::atomic_load_explicit(&playbackSession,std::memory_order_acquire);
         if(!snapshot)return;
-        const auto& playback=*snapshot;
         for(auto& peak:channelPeaks)peak.store(0.0f,std::memory_order_relaxed);
-        const auto blockStart=sessionFrames.load(std::memory_order_relaxed);
+        const auto cursor=sessionFrames.load(std::memory_order_relaxed);
+        const auto next=idw::daw::renderPreparedPlayback(*snapshot,playing.load(std::memory_order_relaxed),cursor,info.numSamples,
+            [&](int offset,int count,std::int64_t frame){
+                const juce::AudioSourceChannelInfo segment(info.buffer,info.startSample+offset,count);
+                renderPlaybackSegment(segment,snapshot->session,frame);
+                if(snapshot->loop && info.buffer->getNumChannels()>0)
+                    idw::daw::applyPlaybackLoopFade(info.buffer->getWritePointer(0,segment.startSample),
+                        info.buffer->getNumChannels()>1?info.buffer->getWritePointer(1,segment.startSample):nullptr,
+                        count,frame,*snapshot->loop);
+            });
+        if(!next){info.clearActiveBufferRegion();playing.store(false);return;}
+        if(playing.load(std::memory_order_relaxed))sessionFrames.store(*next,std::memory_order_relaxed);
+        if(info.buffer->getNumChannels()>0){
+            const float peak=info.buffer->getMagnitude(0,info.startSample,info.numSamples);
+            peakLeft.store(peak,std::memory_order_relaxed);
+            if(peak>=1.0f)peakClipLeft.store(true,std::memory_order_relaxed);
+        }
+        if(info.buffer->getNumChannels()>1){
+            const float peak=info.buffer->getMagnitude(1,info.startSample,info.numSamples);
+            peakRight.store(peak,std::memory_order_relaxed);
+            if(peak>=1.0f)peakClipRight.store(true,std::memory_order_relaxed);
+        }
+    }
+    void renderPlaybackSegment(const juce::AudioSourceChannelInfo& info,const idw::daw::Session& playback,std::int64_t blockStart){
         const bool anySolo=std::any_of(playback.tracks.begin(),playback.tracks.end(),[](const auto& t){return t.solo;});
         for(auto& slot:sources) {
             if(!slot->reader || slot->trackIndex>=playback.tracks.size())continue;
@@ -1749,17 +1775,6 @@ private:
             auto* samples=info.buffer->getWritePointer(ch,info.startSample);
             for(int i=0;i<info.numSamples;++i)samples[i]=juce::jlimit(-ceiling,ceiling,samples[i]);
         }
-        if(info.buffer->getNumChannels()>0){
-            const float peak=info.buffer->getMagnitude(0,info.startSample,info.numSamples);
-            peakLeft.store(peak,std::memory_order_relaxed);
-            if(peak>=1.0f)peakClipLeft.store(true,std::memory_order_relaxed);
-        }
-        if(info.buffer->getNumChannels()>1){
-            const float peak=info.buffer->getMagnitude(1,info.startSample,info.numSamples);
-            peakRight.store(peak,std::memory_order_relaxed);
-            if(peak>=1.0f)peakClipRight.store(true,std::memory_order_relaxed);
-        }
-        sessionFrames.fetch_add(info.numSamples,std::memory_order_relaxed);
     }
     void releaseResources() override {
         playing.store(false,std::memory_order_release);
@@ -2362,10 +2377,10 @@ private:
             return;
         }
         const auto activeSnapshot=std::atomic_load_explicit(&playbackSession,std::memory_order_acquire);
-        const double timelineBpm=activeSnapshot?activeSnapshot->bpm:session.bpm;
+        const double timelineBpm=activeSnapshot?activeSnapshot->session.bpm:session.bpm;
         playheadBeats=idw::daw::playbackBeat(sessionFrames.load(),deviceRate,timelineBpm);
         if(playing.load() && !recorder.isRecording() && !multiRecorder.isRecording() &&
-           activeSnapshot && playheadBeats>=idw::daw::arrangementEndBeat(*activeSnapshot)){
+           activeSnapshot && !activeSnapshot->loop && playheadBeats>=idw::daw::arrangementEndBeat(activeSnapshot->session)){
             playing.store(false);
             if(!exportRunning.load())stopTimer();
             for(auto& slot:sources)slot->transport.stop();
@@ -2513,6 +2528,7 @@ private:
             pianoButton.isEnabled() && (pianoRoll.isVisible() || (selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::midi)));
         menu.addItem(9,"Bounce WAV...",bounce.isEnabled());
         menu.addItem(10,"Save project...",saveProject.isEnabled());
+        menu.addItem(11,session.playbackLoopEnabled?"Loop playback: On...":"Loop playback: Off...");
         menu.addSeparator();
         const auto recent=recentProjects.entries();
         juce::PopupMenu recentMenu;
@@ -2542,6 +2558,7 @@ private:
             if(result==8){if(safe->pianoButton.isEnabled() && safe->pianoButton.onClick)safe->pianoButton.onClick();return;}
             if(result==9){if(safe->bounce.isEnabled() && safe->bounce.onClick)safe->bounce.onClick();return;}
             if(result==10){if(safe->saveProject.isEnabled() && safe->saveProject.onClick)safe->saveProject.onClick();return;}
+            if(result==11){safe->showPlaybackLoopSettings();return;}
             if(result>=200 && (size_t)(result-200)<recent.size()){
                 if(!safe->restoreProject(recent[(size_t)(result-200)]))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Recent project unavailable",
@@ -2559,6 +2576,33 @@ private:
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
                     "Recovery unavailable","The copy could not be opened, or the current work could not be protected. Your current project is unchanged.");
         });
+    }
+    void showPlaybackLoopSettings(){
+        if(!recoveryIdle())return;
+        pianoRoll.setVisible(false);
+        auto plan=std::make_shared<idw::daw::PlaybackLoopSettingsPlan>(session,currentProject);
+        auto* dialog=new juce::AlertWindow("Loop playback",
+            "Beat positions start at 0. End is exclusive; minimum length is 0.25 beats.\nApplies to PLAY only. Recording and WAV export remain linear.",juce::MessageBoxIconType::NoIcon);
+        dialog->addComboBox("mode",juce::StringArray{"Off","On"},"Loop playback");
+        dialog->getComboBoxComponent("mode")->setSelectedId(session.playbackLoopEnabled?2:1);
+        dialog->addTextEditor("start",juce::String(session.playbackLoop.startBeat,9),"Start beat");
+        dialog->addTextEditor("end",juce::String(session.playbackLoop.endBeat,9),"End beat");
+        dialog->addButton("Apply",1,juce::KeyPress(juce::KeyPress::returnKey));
+        dialog->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
+        dialog->enterModalState(true,juce::ModalCallbackFunction::create(
+            [safe=juce::Component::SafePointer<Workstation>(this),dialog,plan](int result){
+                if(safe!=nullptr && result==1){
+                    const auto applied=plan->apply(safe->session,safe->currentProject,safe->recoveryIdle(),
+                        dialog->getComboBoxComponent("mode")->getSelectedId()==2,
+                        dialog->getTextEditorContents("start"),dialog->getTextEditorContents("end"));
+                    if(applied==idw::daw::PlaybackLoopSettingsPlan::Result::invalid)
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Invalid loop region","Use finite beat numbers between 0 and 1000000, with end at least 0.25 beats after start. Settings were preserved.");
+                    else if(applied==idw::daw::PlaybackLoopSettingsPlan::Result::unavailable)
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Loop settings unavailable","The project changed or playback became busy. Settings were preserved.");
+                    else {safe->refreshProjectStatus();safe->repaint();}
+                }
+                delete dialog;
+            }),false);
     }
     void renameSelectedTrack(){
         if(!recoveryIdle() || selectedTrack>=session.tracks.size())return;
@@ -3077,12 +3121,15 @@ private:
             std::any_of(session.tracks.begin(),session.tracks.end(),
                 [](const auto& t){return !t.notes.empty();});
         if(!hasMaterial)return;
+        auto prepared=idw::daw::preparePlayback(session,deviceRate,false);
+        if(!prepared)return;
         std::atomic_store_explicit(&playbackSession,
-            std::make_shared<const idw::daw::Session>(session),std::memory_order_release);
+            std::make_shared<const idw::daw::PreparedPlayback>(std::move(*prepared)),std::memory_order_release);
         sessionFrames.store(0);
         for(auto& slot:sources){
             slot->transport.stop();
             slot->transport.setPosition(slot->sourceOffsetSeconds);
+            slot->nextSourceFrame=-1;
             slot->transport.start();
         }
         playing.store(true);
@@ -3674,7 +3721,7 @@ public:
     std::map<std::string,std::unique_ptr<juce::AudioThumbnail>> waveformThumbnails;
     std::atomic<int64_t> sessionFrames{0};
     // Allocated on the message thread before transport starts; audio only reads.
-    std::shared_ptr<const idw::daw::Session> playbackSession;
+    std::shared_ptr<const idw::daw::PreparedPlayback> playbackSession;
     double deviceRate=48000.0;
     int preparedBlockSize=0;
     std::vector<std::unique_ptr<AudioSlot>> sources;

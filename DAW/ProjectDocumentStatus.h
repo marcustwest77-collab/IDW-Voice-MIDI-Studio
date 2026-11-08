@@ -6,6 +6,8 @@
 namespace idw::daw {
 // Compare persisted fields directly: no JSON allocation or disk I/O in the UI poll.
 inline bool sameDocumentState(const Session& a,const Session& b){
+    if(std::tie(a.playbackLoopEnabled,a.playbackLoop.startBeat,a.playbackLoop.endBeat)!=
+       std::tie(b.playbackLoopEnabled,b.playbackLoop.startBeat,b.playbackLoop.endBeat))return false;
     if(std::tie(a.bpm,a.numerator,a.denominator,a.masterMix.gain,a.masterMix.ceilingDb,a.masterMix.lowDb,a.masterMix.highDb)!=
        std::tie(b.bpm,b.numerator,b.denominator,b.masterMix.gain,b.masterMix.ceilingDb,b.masterMix.lowDb,b.masterMix.highDb) ||
        a.tracks.size()!=b.tracks.size())return false;

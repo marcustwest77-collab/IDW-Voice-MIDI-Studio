@@ -12,6 +12,11 @@ inline juce::var sessionToJson(const Session& s) {
     root->setProperty("bpm",s.bpm);
     root->setProperty("numerator",s.numerator);
     root->setProperty("denominator",s.denominator);
+    auto loop=std::make_unique<juce::DynamicObject>();
+    loop->setProperty("enabled",s.playbackLoopEnabled);
+    loop->setProperty("startBeat",s.playbackLoop.startBeat);
+    loop->setProperty("endBeat",s.playbackLoop.endBeat);
+    root->setProperty("playbackLoop",juce::var(loop.release()));
     auto master=std::make_unique<juce::DynamicObject>();
     master->setProperty("gain",s.masterMix.gain);
     master->setProperty("ceilingDb",s.masterMix.ceilingDb);
@@ -82,6 +87,18 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
     const auto denominator=persistence_detail::boundedInteger(root->getProperty("denominator"),1,32);
     if(!numerator || !denominator)return false;
     next.numerator=*numerator;next.denominator=*denominator;
+    // Legacy projects retain linear playback. Present settings are strict:
+    // no numeric/string coercions and no partial/defaulted region.
+    if(root->hasProperty("playbackLoop")){
+        auto* loop=root->getProperty("playbackLoop").getDynamicObject();
+        if(!loop || !loop->getProperty("enabled").isBool())return false;
+        const auto start=loop->getProperty("startBeat"),end=loop->getProperty("endBeat");
+        const auto numeric=[](const juce::var& v){return v.isInt() || v.isInt64() || v.isDouble();};
+        if(!numeric(start) || !numeric(end))return false;
+        next.playbackLoopEnabled=(bool)loop->getProperty("enabled");
+        next.playbackLoop={(double)start,(double)end};
+        if(!validPlaybackLoop(next.playbackLoop))return false;
+    }
     // Legacy v1 projects use the original master defaults. A present block must
     // be complete and numeric; reject coercions/range loss before committing.
     if(root->hasProperty("masterMix")){

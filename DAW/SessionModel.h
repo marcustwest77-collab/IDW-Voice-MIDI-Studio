@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "PlaybackLoop.h"
 namespace idw::daw {
 enum class TrackType { audio, midi };
 enum class FadeCurve { linear, equalPower };
@@ -51,6 +52,8 @@ public:
     double bpm=120.0;
     int numerator=4, denominator=4;
     MasterMix masterMix;
+    bool playbackLoopEnabled=false;
+    PlaybackLoopRegion playbackLoop;
     std::vector<Track> tracks;
     bool addTrack(TrackType type) {
         if (tracks.size() >= 128) return false;
