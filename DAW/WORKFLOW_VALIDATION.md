@@ -1008,6 +1008,39 @@ macOS foundation targets registered. Application CI and physical recent-menu/
 restart/missing-file checks pending. Installed beta, current #240 test app and
 original user projects/audio remain unchanged.
 
+### Playback loop engine foundation (2026-11-08)
+
+PlaybackLoop.h provides an independently tested engine for the next playback
+integration. It is not yet connected to PLAY, recording, export or project UI.
+There is no live loop-playback qualification at this stage. Beat regions require
+finite nonnegative start, end at most 1000000 beats and at least a quarter-beat
+span. Compilation accepts tempos 20–300 and device rates 8–768 kHz, rounds each
+exclusive endpoint once to device frames, and computes a short boundary fade
+(up to 2 ms, capped at 128 frames and a quarter of the span).
+
+The allocation-free segment planner splits a block exactly at loop endpoints,
+can wrap multiple times in one block and returns the next bounded timeline
+cursor without cumulative beat conversion. It accepts at most 65536 frames per
+call, rejects invalid input before invoking the renderer, and protects the
+nonlooping frame cursor against overflow. Disabled-loop calls retain linear
+rendering. The caller owns Stop and must avoid invoking the engine while stopped.
+Boundary gain is applied after each segment's master processing; arbitrary loop
+endpoints deliberately fade down/up rather than assuming matching waveforms.
+
+PlaybackLoopTests passed locally under MSVC /W4 /WX. Coverage includes frame
+rounding across rates/tempos, limits, exact and multiple wraps, block offsets,
+cursor normalization, maximum blocks, near-int64 endpoints, rejected requests
+with no callback, stereo/mono fade bounds, zero seam and bounded DC ramp steps.
+Real JUCE WAV readers/AudioTransportSource plus the existing readClipWindow path
+loop through EOF at block sizes 1,7,127,512,2048 and preserve source bytes. MIDI
+rendering is checked sample-by-sample against an independent modulo-frame oracle
+at the same sizes. Session data remains unchanged. These are device-free tests
+at an 8 kHz matching source/device rate, not calibrated device, resampling or
+audible glitch-free qualification. Live integration still needs immutable loop
+configuration, stopped-state editing, overdub/export isolation, persistence and
+physical listening checks. CTest/foundation target added; application CI pending.
+Installed beta, current #252 test app and original user projects/audio untouched.
+
 ### MIDI track quantize (2026-11-05)
 
 PIANO ROLL adds QUANTIZE TRACK with quarter, eighth, sixteenth, thirty-second,
