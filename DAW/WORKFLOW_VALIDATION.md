@@ -1257,3 +1257,22 @@ This fixes a demonstrated layout weakness; it does not establish the cause of
 the initial #250 missing-control report, after which the user found the controls
 and completed qualification. Installed beta, running #250 test app and original
 user projects/audio remain unchanged.
+
+### Project workflow tools accessible from the menu (2026-11-08)
+
+The fixed project toolbar can put PIANO ROLL and other later buttons outside a
+narrow window. OPEN / RECOVER now also offers Open piano roll for selected MIDI
+track (or Back to tracks when open), Bounce WAV and Save project. Opening the
+editor is disabled for audio/invalid targets; closing remains available when the
+editor is open even if the selected track changed. Menu enabled states reflect
+the corresponding button, and activation rechecks the live button before routing
+through its existing callback. The existing project-menu recovery-idle guard and
+canonical editing/bounce/save handlers retain their checks and dialogs. No new
+save/export implementation or keyboard-focus path is introduced.
+
+PianoRollCloseTests, MidiBounceTests and SessionSaveTests are rerun under strict
+MSVC warnings for the reused workflows. Full native menu wiring is compiled by
+application CI; physical narrow-window open/close and save/bounce picker-cancel
+checks remain pending. This adds alternate access, not toolbar wrapping or a
+redesign of other clipped controls. Installed beta, running #251 test app and
+original user projects/audio remain unchanged.

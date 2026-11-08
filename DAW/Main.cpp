@@ -2508,6 +2508,12 @@ private:
         menu.addItem(4,"Export audible MIDI tracks...");
         menu.addItem(5,"Import MIDI notes...");
         menu.addItem(7,"Rename selected track...",selectedTrack<session.tracks.size());
+        menu.addSeparator();
+        menu.addItem(8,pianoRoll.isVisible()?"Back to tracks":"Open piano roll for selected MIDI track",
+            pianoButton.isEnabled() && (pianoRoll.isVisible() || (selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::midi)));
+        menu.addItem(9,"Bounce WAV...",bounce.isEnabled());
+        menu.addItem(10,"Save project...",saveProject.isEnabled());
+        menu.addSeparator();
         const auto recent=recentProjects.entries();
         juce::PopupMenu recentMenu;
         for(size_t i=0;i<recent.size();++i){
@@ -2533,6 +2539,9 @@ private:
             if(result==4){safe->exportMidiFile();return;}
             if(result==5){safe->importMidiFile();return;}
             if(result==7){safe->renameSelectedTrack();return;}
+            if(result==8){if(safe->pianoButton.isEnabled() && safe->pianoButton.onClick)safe->pianoButton.onClick();return;}
+            if(result==9){if(safe->bounce.isEnabled() && safe->bounce.onClick)safe->bounce.onClick();return;}
+            if(result==10){if(safe->saveProject.isEnabled() && safe->saveProject.onClick)safe->saveProject.onClick();return;}
             if(result>=200 && (size_t)(result-200)<recent.size()){
                 if(!safe->restoreProject(recent[(size_t)(result-200)]))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Recent project unavailable",
