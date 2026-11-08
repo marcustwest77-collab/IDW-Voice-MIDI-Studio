@@ -1208,3 +1208,30 @@ including after deleting the final note. Registered CTest and
 foundation target. Application CI and physical selected-delete/history/save-
 reload/playback checks pending. Installed beta, running #248 test app and original
 user project/audio files unchanged.
+
+### MIDI note navigation and read-only summary
+
+PIANO ROLL adds NOTE < and NOTE > on a second footer row. Select notes in start-
+time order, then pitch, then original list index for duplicates. Forward selection
+starts at the earliest note and wraps at the end; reverse starts at the latest
+and wraps at the beginning. The stored note list is never reordered. Navigation
+reveals offscreen notes and updates the existing velocity inspector. The adjacent
+read-only summary shows pitch name/number, start and length in zero-based beats
+(three decimals), and velocity; a tooltip retains the full text at narrow widths.
+The extra footer row reserves space outside the note grid.
+
+Selection alone does not edit project data, mark it dirty or change Undo/Redo.
+A pending velocity text entry commits before a navigation-button action. The
+helper validates at most 100000 notes and rejects invalid/unrepresentable data.
+Busy/audio/invalid targets and active gestures cannot navigate; a stale selected
+track/name/note snapshot clears selection and reports a conflict. The summary
+updates after edits and clears on track/project reset. Hidden narrow controls
+avoid overlap with the inspector and existing editing buttons.
+
+MidiNoteSelectionTests cover chronological/reverse/wrap/tie order, invalid input,
+100000-note bounds, actual navigation callbacks, pitch extremes, summary fields,
+unchanged JSON/dirty callbacks/history, redo after navigation, busy/gesture/stale
+guards, save/reopen, reset and layout. CTest/foundation target registered. Local
+strict results are recorded in the PR. Full application CI and physical note-
+navigation/summary/history/save-reload/playback checks pending. Installed beta,
+running #249 test app and original user projects/audio unchanged.
