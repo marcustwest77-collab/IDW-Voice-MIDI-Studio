@@ -4,6 +4,7 @@
 #include "LoopbackReference.h"
 #include "LoopbackCapture.h" // experimental live capture engine; not wired to UI yet
 #include "PianoRoll.h"
+#include "PianoRollLayout.h"
 #include <JuceHeader.h>
 #include "SessionModel.h"
 #include "ClipEnvelope.h"
@@ -907,7 +908,7 @@ public:
         connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
         remoteReviewPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,630),260));
         aiPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,575),225));
-        pianoRoll.setBounds(juce::Rectangle<int>(20,335,juce::jmax(100,getWidth()-40),480));
+        pianoRoll.setBounds(idw::daw::pianoRollOverlayBounds(getWidth(),getHeight()));
     }
     void startDictation(){
 #if JUCE_WINDOWS
@@ -3688,6 +3689,8 @@ private:
         MainWindow(juce::String name):DocumentWindow(name,juce::Colours::black,allButtons){
             setUsingNativeTitleBar(true);
             setContentOwned(new Workstation(),true);
+            setResizable(true,true);
+            setResizeLimits(800,480,8192,8192);
             centreWithSize(getWidth(),getHeight());
             setVisible(true);
         }

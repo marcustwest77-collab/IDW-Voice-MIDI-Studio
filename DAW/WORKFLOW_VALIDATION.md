@@ -1235,3 +1235,25 @@ guards, save/reopen, reset and layout. CTest/foundation target registered. Local
 strict results are recorded in the PR. Full application CI and physical note-
 navigation/summary/history/save-reload/playback checks pending. Installed beta,
 running #249 test app and original user projects/audio unchanged.
+
+### Piano-roll layout in shorter windows (2026-11-08)
+
+The workstation previously placed the editor at y335 with a fixed 480-pixel
+height, putting its footer beyond a content area shorter than 815 pixels. The
+native main window also did not enable resizing. It now allows resize/maximize
+with limits 800x480 through 8192x8192. The editor keeps its familiar placement in
+large windows, shortens to available height, and moves upward when necessary to
+retain a 240-pixel editor. Its bounds remain inside the parent content rectangle.
+Resize keeps a selected note revealed by adjusting only its viewport. This does
+not edit note data, mix or history. The main toolbar's wrapping is outside scope.
+
+PianoRollLayoutTests cover normal, 720/768-high and compact content sizes, geometry
+containment and extreme input sizes, visible child bounds and footer placement,
+real software painting of a selected low-pitch/far-time note after shrinking,
+high-pitch navigation, no dirty callbacks/JSON/history changes, redo retained
+across resize/navigation and persistence. CTest/foundation target registered.
+Application CI and physical resize/footer/selection/history checks pending.
+This fixes a demonstrated layout weakness; it does not establish the cause of
+the initial #250 missing-control report, after which the user found the controls
+and completed qualification. Installed beta, running #250 test app and original
+user projects/audio remain unchanged.
