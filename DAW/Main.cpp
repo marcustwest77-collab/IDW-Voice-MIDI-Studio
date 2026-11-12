@@ -2,6 +2,7 @@
 #include "PlaybackTiming.h"
 #include "PreparedPlayback.h"
 #include "PlaybackLoopSettings.h"
+#include "WavExportReceipt.h"
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
 #include "LoopbackCapture.h" // experimental live capture engine; not wired to UI yet
@@ -2780,6 +2781,7 @@ private:
                 output=output.withFileExtension(".wav");
                 if(exportThread.joinable())exportThread.join();
                 const auto snapshot=session;
+                const auto sourceProject=currentProject;
                 bounce.setEnabled(false);
                 cancelBounce.setEnabled(true);
                 exportCancel.store(false);
@@ -2787,10 +2789,11 @@ private:
                 exportRunning.store(true);
                 startTimerHz(10);
                 const juce::Component::SafePointer<Workstation> safeThis(this);
-                exportThread=std::thread([this,safeThis,snapshot,output]{
+                exportThread=std::thread([this,safeThis,snapshot,output,sourceProject]{
                     juce::String error;
                     const bool ok=idw::daw::renderProjectWav(snapshot,output,error,44100,&exportProgress,&exportCancel);
-                    juce::MessageManager::callAsync([safeThis,ok,error]{
+                    const auto receipt=ok?idw::daw::wavExportReceipt(sourceProject,output):std::nullopt;
+                    juce::MessageManager::callAsync([safeThis,ok,error,receipt]{
                         if(!safeThis)return;
                         safeThis->exportRunning.store(false);
                         safeThis->bounce.setEnabled(true);
@@ -2798,7 +2801,7 @@ private:
                         if(!safeThis->playing.load())safeThis->stopTimer();
                         safeThis->repaint();
                         juce::AlertWindow::showMessageBoxAsync(ok?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
-                            ok?"WAV export complete":"WAV bounce unavailable",ok?"Stereo WAV written successfully.":error);
+                            ok?"WAV export complete":"WAV bounce unavailable",ok?(receipt?*receipt:juce::String("WAV written, but its details could not be read. Verify the exported file before using it.")):error);
                     });
                 });
             });
