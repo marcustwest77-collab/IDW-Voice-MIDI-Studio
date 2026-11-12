@@ -1342,3 +1342,26 @@ and multitrack overdub regressions passed. Full application CI and a separate
 AudioBox check of repeated audio/MIDI, STOP, loop settings and save/reload remain
 pending. Installed beta, active #252 test app and original projects/audio remain
 unchanged. No live two-computer collaboration is claimed.
+
+### WAV export completion identifies source and actual file (2026-11-12)
+
+The success dialog retains WAV export complete and now names the source project
+(current session snapshot), the full WAV destination, actual duration to three
+decimals, channels, bit depth and sample rate. Untitled projects are labeled
+explicitly. Capture the source identity with the export snapshot; inspect the
+completed WAV on the export worker after the writer closes. The message-thread
+callback receives the resulting immutable text, so later session edits do not
+change the receipt. Failed/cancelled exports retain the existing error flow;
+unreadable details after a successful write produce an explicit verification
+notice rather than invented metadata. No extra files or audio processing are
+introduced. This makes exports easier to identify; it does not establish the
+cause of prior mismatched filenames/durations or bind output against subsequent
+external replacement.
+
+WavExportReceiptTests render real 44.1/48-kHz WAVs and cover source/destination,
+untitled labeling, actual frame duration including fractional tempo, loop/export
+isolation, unchanged session/output bytes, existing-output refusal and missing/
+malformed WAVs. CTest/foundation target registered. Local strict MSVC result is
+recorded in the PR; full application CI and separate native dialog checks pending.
+Installed beta, qualified candidate, portable user backup and recordings remain
+unchanged. No merge or live two-computer collaboration claim.
