@@ -61,6 +61,16 @@ int main(int argc,char** argv) {
         require(exportPortableProject(source,package,error),"portable export");
         require(package.getChildFile("Audio").findChildFiles(juce::File::findFiles,false).size()==2,
                 "repeated source copied more than once or same-name sources merged");
+        const auto sourceProject=root.getChildFile("Original Mix.idwproj");
+        const auto summary=portableProjectExportSummary(source,sourceProject,package);
+        require(summary.contains(sourceProject.getFullPathName()) &&
+                summary.contains(package.getChildFile("Session.idwproj").getFullPathName()) &&
+                summary.contains("current session snapshot") && summary.contains("Tracks: 3 | Audio files copied: 2"),
+                "portable completion source/path/deduplicated counts");
+        require(portableProjectExportSummary(source,{},package).contains("Untitled project"),"untitled portable summary");
+        Session midiOnly;midiOnly.addTrack(TrackType::midi);
+        require(portableProjectExportSummary(midiOnly,{},package).contains("Tracks: 1 | Audio files copied: 0"),
+                "MIDI-only portable summary counts");
         require(error.isEmpty() && json(source)==sourceJson && bytes(a)==aBytes && bytes(b)==bBytes,
                 "export changed live project/source or retained stale error");
         const auto relocated=root.getChildFile("Relocated/Package");

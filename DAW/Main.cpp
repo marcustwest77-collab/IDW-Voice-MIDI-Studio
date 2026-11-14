@@ -2529,6 +2529,7 @@ private:
             pianoButton.isEnabled() && (pianoRoll.isVisible() || (selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::midi)));
         menu.addItem(9,"Bounce WAV...",bounce.isEnabled());
         menu.addItem(10,"Save project...",saveProject.isEnabled());
+        menu.addItem(12,"Export portable project...",exportProject.isEnabled());
         menu.addItem(11,session.playbackLoopEnabled?"Loop playback: On...":"Loop playback: Off...");
         menu.addSeparator();
         const auto recent=recentProjects.entries();
@@ -2560,6 +2561,7 @@ private:
             if(result==9){if(safe->bounce.isEnabled() && safe->bounce.onClick)safe->bounce.onClick();return;}
             if(result==10){if(safe->saveProject.isEnabled() && safe->saveProject.onClick)safe->saveProject.onClick();return;}
             if(result==11){safe->showPlaybackLoopSettings();return;}
+            if(result==12){if(safe->exportProject.isEnabled() && safe->exportProject.onClick)safe->exportProject.onClick();return;}
             if(result>=200 && (size_t)(result-200)<recent.size()){
                 if(!safe->restoreProject(recent[(size_t)(result-200)]))
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Recent project unavailable",
@@ -2875,16 +2877,22 @@ private:
             });
     }
     void exportProjectFile(){
-        if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
-        projectChooser=std::make_unique<juce::FileChooser>("Export portable IDW Project",
+        if(!recoveryIdle())return;
+        projectChooser=std::make_unique<juce::FileChooser>("Export portable IDW Project (choose a new folder name)",
             juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*");
         projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
-            [this](const juce::FileChooser& picker){
+            [safe=juce::Component::SafePointer<Workstation>(this)](const juce::FileChooser& picker){
                 const auto folder=picker.getResult();
-                if(folder==juce::File{} || playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;
+                if(safe==nullptr || folder==juce::File{} || !safe->recoveryIdle())return;
+                safe->pianoRoll.setVisible(false); // Commit pending note edits before copying the snapshot.
+                const auto snapshot=safe->session;
+                const auto sourceProject=safe->currentProject;
                 juce::String error;
-                if(!idw::daw::exportPortableProject(session,folder,error))
-                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Export failed",error);
+                if(!idw::daw::exportPortableProject(snapshot,folder,error)){
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Export failed",error);return;
+                }
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,"Portable export complete",
+                    idw::daw::portableProjectExportSummary(snapshot,sourceProject,folder));
             });
     }
     void rememberRecentProject(){

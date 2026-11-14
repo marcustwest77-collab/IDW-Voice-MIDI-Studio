@@ -2,6 +2,20 @@
 #include "SessionPersistence.h"
 #include <map>
 namespace idw::daw {
+// Format only after exportPortableProject succeeds. Identity/counts describe
+// the same snapshot passed to that export, not a later editable session.
+inline juce::String portableProjectExportSummary(const Session& snapshot,
+    const juce::File& sourceProject,const juce::File& folder){
+    std::map<std::string,bool> audio;
+    for(const auto& track:snapshot.tracks)for(const auto& clip:track.clips)
+        audio.emplace(juce::File(juce::String(clip.sourcePath)).getFullPathName().toStdString(),true);
+    const auto source=sourceProject==juce::File{}?juce::String("Untitled project"):sourceProject.getFullPathName();
+    return "Source project (current session snapshot):\n"+source+
+        "\n\nPortable project:\n"+folder.getChildFile("Session.idwproj").getFullPathName()+
+        "\n\nTracks: "+juce::String((int)snapshot.tracks.size())+
+        " | Audio files copied: "+juce::String((int)audio.size())+
+        "\n\nKeep the Audio folder beside Session.idwproj.\nYour open project and original audio are unchanged.";
+}
 // Export a self-contained folder: Session.idwproj and Audio/*. Files are copied,
 // never moved. Do not overwrite an existing package directory.
 inline bool exportPortableProject(const Session& source,const juce::File& folder,juce::String& error){
