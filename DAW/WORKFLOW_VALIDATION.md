@@ -1365,3 +1365,27 @@ malformed WAVs. CTest/foundation target registered. Local strict MSVC result is
 recorded in the PR; full application CI and separate native dialog checks pending.
 Installed beta, qualified candidate, portable user backup and recordings remain
 unchanged. No merge or live two-computer collaboration claim.
+
+### Portable export completion and alternate menu access (2026-11-13)
+
+OPEN / RECOVER now includes Export portable project, routed through the existing
+EXPORT PORTABLE button handler with enabled-state and live idle checks. The
+picker title says to choose a new folder name. A safe component pointer replaces
+the raw async callback owner; accepting a destination rechecks recovery-idle,
+finishes pending piano edits and copies an immutable session/source identity.
+The existing exporter still copies/verifies audio, refuses existing destinations,
+preserves originals and cleans up incomplete new packages. Success now shows
+Portable export complete with source snapshot, full Session.idwproj path, track
+count and distinct copied-audio count, plus instructions to keep Audio beside
+Session.idwproj. Failures retain Export failed; cancellation creates no receipt.
+The open project identity/save baseline is not switched to the backup.
+
+PortableProjectTests additionally assert named/untitled source labels, output
+path and deduplicated counts, including MIDI-only zero-audio summaries. Existing
+same-basename/reused-source, exact stereo render after repeated relocation,
+resave-relative-path and failure-preservation tests run with these assertions.
+Full application CI and physical menu/cancel/complete/error checks pending.
+Copying remains synchronous as before; very large backups can block the UI.
+This adds clear completion feedback, not a background-copy/cancellation system.
+Qualified candidate, installed beta, user recordings and existing backups remain
+unchanged. No merge or live two-computer collaboration claim.
