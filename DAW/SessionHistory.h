@@ -35,6 +35,8 @@ public:
     }
     Result undo(Session& session){return restore(session,undoEntries,redoEntries,true);}
     Result redo(Session& session){return restore(session,redoEntries,undoEntries,false);}
+    bool canUndo() const {return !undoEntries.empty();}
+    bool canRedo() const {return !redoEntries.empty();}
     void clear(){undoEntries.clear();redoEntries.clear();}
 private:
     struct Change {size_t track;std::vector<Clip> before,after;};
