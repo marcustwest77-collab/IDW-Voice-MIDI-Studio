@@ -5,6 +5,7 @@
 #include "WavExportReceipt.h"
 #include "StudioControlLayout.h"
 #include "ClipSplitPlan.h"
+#include "AudioClipIdentity.h"
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
 #include "LoopbackCapture.h" // experimental live capture engine; not wired to UI yet
@@ -1564,7 +1565,15 @@ public:
                 drawFade(true);drawFade(false);
                 ++renderedClipIndex;
                 g.setColour(juce::Colours::white);
-                g.drawFittedText(juce::String(clip.gainDb,1)+" dB | "+juce::File(juce::String(clip.sourcePath)).getFileName(),clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
+                if(track.type==idw::daw::TrackType::audio){
+                    const int badgeSpace=idw::daw::audioClipBadgeWidth(clipWidth);
+                    const int labelOffset=badgeSpace>0?badgeSpace+4:0;
+                    g.drawFittedText(juce::String(clip.gainDb,1)+" dB | "+juce::File(juce::String(clip.sourcePath)).getFileName(),
+                        clipX+5+labelOffset,y+11,juce::jmax(0,juce::jmin(clipWidth-10-labelOffset,getWidth()-35-clipX-labelOffset)),
+                        14,juce::Justification::centredLeft,1);
+                    idw::daw::drawAudioClipIdentity(g,{clipX,y+8,clipWidth,trackHeight-18},renderedClipIndex);
+                }else g.drawFittedText(juce::String(clip.gainDb,1)+" dB | "+juce::File(juce::String(clip.sourcePath)).getFileName(),
+                    clipX+5,y+14,juce::jmax(0,juce::jmin(clipWidth-10,getWidth()-35-clipX)),25,juce::Justification::centredLeft,1);
                 g.restoreState();
             }
             y+=trackHeight;
