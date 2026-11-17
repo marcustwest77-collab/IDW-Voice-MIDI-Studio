@@ -5,6 +5,7 @@
 #include "WavExportReceipt.h"
 #include "StudioControlLayout.h"
 #include "ClipSplitPlan.h"
+#include "ClipPositionPlan.h"
 #include "AudioClipIdentity.h"
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
@@ -1073,14 +1074,49 @@ public:
                 delete dialog;
             }),false);
     }
-    void showAudioSplitMenu(){
+    void showClipPositionDialog(size_t track,size_t index){
+        if(!recoveryIdle() || !clipEditAvailable() || draggingClip || track>=session.tracks.size() ||
+           session.tracks[track].type!=idw::daw::TrackType::audio || index>=session.tracks[track].clips.size())return;
+        pianoRoll.setVisible(false);
+        const auto clip=session.tracks[track].clips[index];
+        auto plan=std::make_shared<idw::daw::ClipPositionPlan>(session,currentProject,track,index);
+        auto* dialog=new juce::AlertWindow("Move or trim audio clip",
+            "Track: "+juce::String(session.tracks[track].name)+" | Clip "+juce::String((int)index+1)+
+            "\nCurrent range: "+juce::String(clip.startBeat,9)+" to "+juce::String(clip.startBeat+clip.lengthBeats,9)+
+            " beats. Positions are absolute and start at 0. Trim only removes audio from an edge.",juce::MessageBoxIconType::NoIcon);
+        dialog->addComboBox("operation",juce::StringArray{"Move start (keep length)","Trim left to beat","Trim right to beat"},"Action");
+        dialog->getComboBoxComponent("operation")->setSelectedId(1);
+        dialog->addTextEditor("beat",{},"Target beat");
+        dialog->addButton("Apply",1,juce::KeyPress(juce::KeyPress::returnKey));
+        dialog->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
+        dialog->enterModalState(true,juce::ModalCallbackFunction::create(
+            [safe=juce::Component::SafePointer<Workstation>(this),dialog,plan](int result){
+                if(safe!=nullptr && result==1){
+                    using Plan=idw::daw::ClipPositionPlan;juce::String error;
+                    const auto action=dialog->getComboBoxComponent("operation")->getSelectedId();
+                    const auto operation=action==2?Plan::Operation::trimLeft:action==3?Plan::Operation::trimRight:Plan::Operation::move;
+                    const auto applied=plan->commit(safe->session,safe->clipHistory,safe->currentProject,
+                        safe->recoveryIdle() && safe->clipEditAvailable() && !safe->draggingClip,
+                        operation,dialog->getTextEditorContents("beat"),error);
+                    if(applied==Plan::Result::rejected)
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Clip edit unavailable",error);
+                    else{
+                        safe->selectedClipValid=false;safe->refreshProjectStatus();
+                        safe->commandStatus.setText(applied==Plan::Result::applied?"Clip edit applied. Undo audio edit restores it.":"Clip unchanged.",juce::dontSendNotification);
+                        safe->repaint();
+                    }
+                }
+                delete dialog;
+            }),false);
+    }
+    void showAudioSplitMenu(bool position=false){
         if(!recoveryIdle() || !clipEditAvailable() || draggingClip || selectedTrack>=session.tracks.size() ||
            session.tracks[selectedTrack].type!=idw::daw::TrackType::audio || session.tracks[selectedTrack].clips.empty())return;
         pianoRoll.setVisible(false);
         if(selectedClipValid && selectedClipTrack==selectedTrack && selectedClipIndex<session.tracks[selectedTrack].clips.size()){
-            showClipSplitDialog(selectedTrack,selectedClipIndex);return;
+            if(position)showClipPositionDialog(selectedTrack,selectedClipIndex);else showClipSplitDialog(selectedTrack,selectedClipIndex);return;
         }
-        if(session.tracks[selectedTrack].clips.size()==1){showClipSplitDialog(selectedTrack,0);return;}
+        if(session.tracks[selectedTrack].clips.size()==1){if(position)showClipPositionDialog(selectedTrack,0);else showClipSplitDialog(selectedTrack,0);return;}
         const auto track=selectedTrack;const auto origin=currentProject;
         const auto before=juce::JSON::toString(idw::daw::sessionToJson(session),true);
         juce::PopupMenu menu;
@@ -1089,10 +1125,10 @@ public:
             menu.addItem((int)i+1,"Clip "+juce::String((int)i+1)+" | "+juce::String(clip.startBeat,3)+" to "+
                 juce::String(clip.startBeat+clip.lengthBeats,3)+" beats");
         }
-        menu.showMenuAsync(juce::PopupMenu::Options(),[safe=juce::Component::SafePointer<Workstation>(this),track,origin,before](int result){
+        menu.showMenuAsync(juce::PopupMenu::Options(),[safe=juce::Component::SafePointer<Workstation>(this),track,origin,before,position](int result){
             if(safe==nullptr || result<=0 || !safe->recoveryIdle() || safe->currentProject!=origin ||
                juce::JSON::toString(idw::daw::sessionToJson(safe->session),true)!=before)return;
-            safe->showClipSplitDialog(track,(size_t)(result-1));
+            if(position)safe->showClipPositionDialog(track,(size_t)(result-1));else safe->showClipSplitDialog(track,(size_t)(result-1));
         });
     }
     void splitSelectedClip(){
@@ -1125,6 +1161,7 @@ public:
         menu.addItem(11,"Duplicate clip");
         menu.addItem(12,"Delete clip");
         menu.addItem(13,"Split clip...");
+        menu.addItem(14,"Move or trim clip...");
         juce::PopupMenu volume;
         volume.addItem(7,"Adjust clip volume...");
         volume.addItem(8,"Quieter: -1 dB");
@@ -1162,6 +1199,7 @@ public:
                 if(result==11){safe->duplicateClipAt(track,index);return;}
                 if(result==7){safe->showClipGainDialog(track,index);return;}
                 if(result==13){safe->showClipSplitDialog(track,index);return;}
+                if(result==14){safe->showClipPositionDialog(track,index);return;}
                 if(result>=8 && result<=10){
                     changed=safe->session.setClipGain(track,index,result==10?0.0:
                         std::clamp(c.gainDb+(result==8?-1.0:1.0),-60.0,12.0));
@@ -2598,6 +2636,7 @@ private:
         menu.addItem(10,"Save project...",saveProject.isEnabled());
         menu.addItem(12,"Export portable project...",exportProject.isEnabled());
         menu.addItem(13,"Split audio clip...",selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::audio && !session.tracks[selectedTrack].clips.empty());
+        menu.addItem(16,"Move or trim audio clip...",selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::audio && !session.tracks[selectedTrack].clips.empty());
         menu.addItem(14,"Undo audio edit",clipHistory.canUndo() && !pianoRoll.isVisible() && !draggingClip);
         menu.addItem(15,"Redo audio edit",clipHistory.canRedo() && !pianoRoll.isVisible() && !draggingClip);
         menu.addItem(11,session.playbackLoopEnabled?"Loop playback: On...":"Loop playback: Off...");
@@ -2632,6 +2671,7 @@ private:
             if(result==10){if(safe->saveProject.isEnabled() && safe->saveProject.onClick)safe->saveProject.onClick();return;}
             if(result==11){safe->showPlaybackLoopSettings();return;}
             if(result==13){safe->showAudioSplitMenu();return;}
+            if(result==16){safe->showAudioSplitMenu(true);return;}
             if(result==14){safe->restoreClipHistory(true);return;}
             if(result==15){safe->restoreClipHistory(false);return;}
             if(result==12){if(safe->exportProject.isEnabled() && safe->exportProject.onClick)safe->exportProject.onClick();return;}
