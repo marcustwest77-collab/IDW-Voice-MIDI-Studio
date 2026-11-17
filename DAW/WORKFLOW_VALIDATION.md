@@ -1389,3 +1389,35 @@ Copying remains synchronous as before; very large backups can block the UI.
 This adds clear completion feedback, not a background-copy/cancellation system.
 Qualified candidate, installed beta, user recordings and existing backups remain
 unchanged. No merge or live two-computer collaboration claim.
+
+### Visible audio split and unobstructed timeline controls (2026-11-16)
+
+The ten control rows previously extended to y421 while the timeline ruler began
+at y330. Synth/EQ/ceiling components could cover the ruler and clip lane and
+receive clicks intended for timeline editing. Shared StudioControlLayout bounds
+now end at y322, leaving a gap above the unchanged ruler. Input/readiness status
+share a reserved row. Background decks use those same row bounds and no longer
+paint headings underneath controls. This fixes vertical overlap; horizontal
+wrapping of long toolbars is outside scope.
+
+OPEN / RECOVER adds Split audio clip, Undo audio edit and Redo audio edit. A
+single clip on the selected audio track can be split without selecting the canvas
+or moving the playhead; with multiple clips, use the selected clip or choose from
+a list of the first 1000. The clip context menu also offers Split clip. The dialog
+shows the clip's absolute zero-based beat range, prefills its midpoint and accepts
+a precise decimal split position. It preserves source audio, validates strictly
+inside clip/fade boundaries and records one clip-history entry. Menu Undo/Redo
+reuse the existing audio-history implementation. They are disabled with the piano
+roll open or during a drag, rather than editing a different history.
+
+ClipSplitPlan rejects busy/stale/project-origin changes, replay, non-audio targets
+and malformed/out-of-range input without changing work/history. It stages the
+split before history recording and swaps only the affected clip list. Cancel
+submits no edit. ClipSplitDialogTests cover row/ruler nonintersection and compact
+geometry, strict input/fade/endpoints, state/history protection, one Undo/Redo,
+dirty state, saved reload, unrelated master preservation and byte-identical WAV
+before/after split, with source bytes unchanged. Clip editing/history regressions
+are rerun. CTest/foundation target registered; full application CI and physical
+layout/dialog/history checks pending. Existing S shortcut remains; the precise
+cause of every prior keypress-count mismatch is not established. Installed beta,
+qualified candidate, saved user projects/audio and portable backups unchanged.

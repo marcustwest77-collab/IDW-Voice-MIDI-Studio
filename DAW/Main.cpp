@@ -3,6 +3,8 @@
 #include "PreparedPlayback.h"
 #include "PlaybackLoopSettings.h"
 #include "WavExportReceipt.h"
+#include "StudioControlLayout.h"
+#include "ClipSplitPlan.h"
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
 #include "LoopbackCapture.h" // experimental live capture engine; not wired to UI yet
@@ -842,13 +844,13 @@ public:
         auto area=getLocalBounds().reduced(20);
         setWantsKeyboardFocus(true);
         auto header=area.removeFromTop(42);
-        recordReadiness.setBounds(26,249,juce::jmax(100,getWidth()-52),18);
+        const auto rows=idw::daw::studioControlRows(getWidth());
         skinToolsButton.setBounds(header.removeFromRight(112).reduced(3));
         remoteReviewButton.setBounds(header.removeFromRight(125).reduced(3));
         skinSelector.setBounds(header.removeFromRight(165).reduced(3));
         title.setBounds(header.removeFromTop(24));
         projectStatus.setBounds(header);
-        auto controls=area.removeFromTop(44);
+        auto controls=rows[idw::daw::transportRow];
         play.setBounds(controls.removeFromLeft(110).reduced(4));
         stop.setBounds(controls.removeFromLeft(100).reduced(4));
         tempoLabel.setBounds(controls.removeFromLeft(45));
@@ -857,7 +859,7 @@ public:
         midi.setBounds(controls.removeFromLeft(160).reduced(3));
         open.setBounds(controls.removeFromLeft(180).reduced(3));
         record.setBounds(controls.removeFromLeft(165).reduced(3));
-        auto projectRow=area.removeFromTop(40);
+        auto projectRow=rows[idw::daw::projectRow];
         saveProject.setBounds(projectRow.removeFromLeft(145).reduced(3));
         openProject.setBounds(projectRow.removeFromLeft(145).reduced(3));
         exportProject.setBounds(projectRow.removeFromLeft(160).reduced(3));
@@ -872,7 +874,7 @@ public:
         voiceHistoryButton.setBounds(projectRow.removeFromLeft(80).reduced(3));
         pushToTalkButton.setBounds(projectRow.removeFromLeft(70).reduced(3));
         commandStatus.setBounds(projectRow.removeFromLeft(95).reduced(3));
-        auto mixRow=area.removeFromTop(42);
+        auto mixRow=rows[idw::daw::mixRow];
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(165));
         panLabel.setBounds(mixRow.removeFromLeft(45));
@@ -883,32 +885,33 @@ public:
         nextTrack.setBounds(mixRow.removeFromLeft(100));
         armControl.setBounds(mixRow.removeFromLeft(105));
         inputChannel.setBounds(mixRow.removeFromLeft(90));
-        auto monitorRow=area.removeFromTop(28);
+        auto monitorRow=rows[idw::daw::monitorRow];
         monitorControl.setBounds(monitorRow.removeFromLeft(190));
         audioDevices.setBounds(monitorRow.removeFromLeft(155).reduced(2));
         preflightButton.setBounds(monitorRow.removeFromLeft(130).reduced(2));
-        inputLevel.setBounds(area.removeFromTop(26));
-        auto overdubRow=area.removeFromTop(36);
+        auto status=rows[idw::daw::statusRow];
+        inputLevel.setBounds(status.removeFromLeft(230));recordReadiness.setBounds(status);
+        auto overdubRow=rows[idw::daw::overdubRow];
         overdubControl.setBounds(overdubRow.removeFromLeft(285));
         latencyLabel.setBounds(overdubRow.removeFromLeft(120));
         latencyAdjust.setBounds(overdubRow.removeFromLeft(200));
         analyzeCalibration.setBounds(overdubRow.removeFromLeft(200).reduced(3));
         generateCalibration.setBounds(overdubRow.removeFromLeft(170).reduced(3));
         liveCalibration.setBounds(overdubRow.removeFromLeft(175).reduced(3));
-        auto masterRow=area.removeFromTop(38);
+        auto masterRow=rows[idw::daw::masterRow];
         masterLabel.setBounds(masterRow.removeFromLeft(115));
         masterGain.setBounds(masterRow.removeFromLeft(260));
         clearClips.setBounds(masterRow.removeFromLeft(120).reduced(3));
-        auto synthRow=area.removeFromTop(35);
+        auto synthRow=rows[idw::daw::synthRow];
         attackLabel.setBounds(synthRow.removeFromLeft(100));
         attackControl.setBounds(synthRow.removeFromLeft(175));
         releaseLabel.setBounds(synthRow.removeFromLeft(115));
         releaseControl.setBounds(synthRow.removeFromLeft(175));
-        auto eqRow=area.removeFromTop(35);
+        auto eqRow=rows[idw::daw::eqRow];
         eqLabel.setBounds(eqRow.removeFromLeft(115));
         lowEq.setBounds(eqRow.removeFromLeft(180));
         highEq.setBounds(eqRow.removeFromLeft(180));
-        auto ceilingRow=area.removeFromTop(35);
+        auto ceilingRow=rows[idw::daw::ceilingRow];
         limitLabel.setBounds(ceilingRow.removeFromLeft(145));
         ceilingControl.setBounds(ceilingRow.removeFromLeft(220));
         connectPanel.setBounds(juce::Rectangle<int>(20,335,juce::jmin(getWidth()-40,565),205));
@@ -1038,6 +1041,59 @@ public:
         commandStatus.setText("Clip duplicated",juce::dontSendNotification);
         repaint();
     }
+    void showClipSplitDialog(size_t track,size_t index){
+        if(!recoveryIdle() || !clipEditAvailable() || draggingClip || track>=session.tracks.size() ||
+           session.tracks[track].type!=idw::daw::TrackType::audio || index>=session.tracks[track].clips.size())return;
+        pianoRoll.setVisible(false);
+        const auto clip=session.tracks[track].clips[index];
+        auto plan=std::make_shared<idw::daw::ClipSplitPlan>(session,currentProject,track,index);
+        auto* dialog=new juce::AlertWindow("Split audio clip",
+            "Track: "+juce::String(session.tracks[track].name)+" | Clip "+juce::String((int)index+1)+
+            "\nClip range: "+juce::String(clip.startBeat,3)+" to "+juce::String(clip.startBeat+clip.lengthBeats,3)+
+            " beats. Enter an absolute, zero-based beat strictly inside the clip. Source audio is unchanged.",
+            juce::MessageBoxIconType::NoIcon);
+        dialog->addTextEditor("beat",juce::String(clip.startBeat+clip.lengthBeats/2,9),"Split beat");
+        dialog->addButton("Split",1,juce::KeyPress(juce::KeyPress::returnKey));
+        dialog->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey));
+        dialog->enterModalState(true,juce::ModalCallbackFunction::create(
+            [safe=juce::Component::SafePointer<Workstation>(this),dialog,plan](int result){
+                if(safe!=nullptr && result==1){
+                    juce::String error;
+                    if(!plan->commit(safe->session,safe->clipHistory,safe->currentProject,
+                        safe->recoveryIdle() && safe->clipEditAvailable() && !safe->draggingClip,
+                        dialog->getTextEditorContents("beat"),error))
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Split unavailable",error);
+                    else{
+                        safe->selectedClipValid=false;safe->refreshProjectStatus();
+                        safe->commandStatus.setText("Split applied. Undo audio edit restores the clip.",juce::dontSendNotification);
+                        safe->repaint();
+                    }
+                }
+                delete dialog;
+            }),false);
+    }
+    void showAudioSplitMenu(){
+        if(!recoveryIdle() || !clipEditAvailable() || draggingClip || selectedTrack>=session.tracks.size() ||
+           session.tracks[selectedTrack].type!=idw::daw::TrackType::audio || session.tracks[selectedTrack].clips.empty())return;
+        pianoRoll.setVisible(false);
+        if(selectedClipValid && selectedClipTrack==selectedTrack && selectedClipIndex<session.tracks[selectedTrack].clips.size()){
+            showClipSplitDialog(selectedTrack,selectedClipIndex);return;
+        }
+        if(session.tracks[selectedTrack].clips.size()==1){showClipSplitDialog(selectedTrack,0);return;}
+        const auto track=selectedTrack;const auto origin=currentProject;
+        const auto before=juce::JSON::toString(idw::daw::sessionToJson(session),true);
+        juce::PopupMenu menu;
+        for(size_t i=0;i<session.tracks[track].clips.size() && i<1000;++i){
+            const auto& clip=session.tracks[track].clips[i];
+            menu.addItem((int)i+1,"Clip "+juce::String((int)i+1)+" | "+juce::String(clip.startBeat,3)+" to "+
+                juce::String(clip.startBeat+clip.lengthBeats,3)+" beats");
+        }
+        menu.showMenuAsync(juce::PopupMenu::Options(),[safe=juce::Component::SafePointer<Workstation>(this),track,origin,before](int result){
+            if(safe==nullptr || result<=0 || !safe->recoveryIdle() || safe->currentProject!=origin ||
+               juce::JSON::toString(idw::daw::sessionToJson(safe->session),true)!=before)return;
+            safe->showClipSplitDialog(track,(size_t)(result-1));
+        });
+    }
     void splitSelectedClip(){
         if(!clipEditAvailable() || draggingClip || pianoRoll.isVisible() || !selectedClipValid ||
            selectedClipTrack>=session.tracks.size() ||
@@ -1067,6 +1123,7 @@ public:
         juce::PopupMenu menu;
         menu.addItem(11,"Duplicate clip");
         menu.addItem(12,"Delete clip");
+        menu.addItem(13,"Split clip...");
         juce::PopupMenu volume;
         volume.addItem(7,"Adjust clip volume...");
         volume.addItem(8,"Quieter: -1 dB");
@@ -1103,6 +1160,7 @@ public:
                 if(result==12){safe->deleteClipAt(track,index);return;}
                 if(result==11){safe->duplicateClipAt(track,index);return;}
                 if(result==7){safe->showClipGainDialog(track,index);return;}
+                if(result==13){safe->showClipSplitDialog(track,index);return;}
                 if(result>=8 && result<=10){
                     changed=safe->session.setClipGain(track,index,result==10?0.0:
                         std::clamp(c.gainDb+(result==8?-1.0:1.0),-60.0,12.0));
@@ -1379,19 +1437,19 @@ public:
     void paint(juce::Graphics& g) override {
         g.fillAll(useCustomBackground?customBackground:juce::Colour(activeSkin==1?0xff17100b:activeSkin==2?0xff091c18:activeSkin==3?0xff160d22:0xff080f1c));
         // Neo Studio control decks: visual grouping stays outside the audio callback.
-        const auto deck=[&g,this](juce::Rectangle<float> bounds,const juce::String& label){
+        const auto deck=[&g,this](juce::Rectangle<float> bounds){
             g.setColour(useCustomPanel ? customPanel : juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
             g.fillRoundedRectangle(bounds,10.0f);
             g.setColour(neoTheme.accentColour().withAlpha(0.32f));
             g.drawRoundedRectangle(bounds,10.0f,1.0f);
             g.setColour(neoTheme.accentColour());
             g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
-            g.drawText(label,bounds.removeFromTop(16.0f).reduced(10.0f,0.0f),juce::Justification::centredLeft);
+
         };
-        const auto fullWidth=(float)juce::jmax(100,getWidth()-40);
-        deck({20.0f,68.0f,fullWidth,93.0f},"TRANSPORT  /  PROJECT");
-        deck({20.0f,164.0f,fullWidth,84.0f},"TRACK CONTROL  /  INPUT ROUTING");
-        deck({20.0f,251.0f,fullWidth,74.0f},"MASTER  /  SYNTH  /  PROCESSING");
+        const auto controlRows=idw::daw::studioControlRows(getWidth());
+        deck(controlRows[idw::daw::transportRow].getUnion(controlRows[idw::daw::projectRow]).toFloat());
+        deck(controlRows[idw::daw::mixRow].getUnion(controlRows[idw::daw::overdubRow]).toFloat());
+        deck(controlRows[idw::daw::masterRow].getUnion(controlRows[idw::daw::ceilingRow]).toFloat());
         const auto rect=getLocalBounds().reduced(20);
         const int top=330, trackHeight=70, left=205;
         g.setColour(juce::Colour(activeSkin==1?0xff352a1e:activeSkin==2?0xff173e32:activeSkin==3?0xff302340:0xff122338));g.fillRect(20,top,getWidth()-40,36);
@@ -2530,6 +2588,9 @@ private:
         menu.addItem(9,"Bounce WAV...",bounce.isEnabled());
         menu.addItem(10,"Save project...",saveProject.isEnabled());
         menu.addItem(12,"Export portable project...",exportProject.isEnabled());
+        menu.addItem(13,"Split audio clip...",selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::audio && !session.tracks[selectedTrack].clips.empty());
+        menu.addItem(14,"Undo audio edit",clipHistory.canUndo() && !pianoRoll.isVisible() && !draggingClip);
+        menu.addItem(15,"Redo audio edit",clipHistory.canRedo() && !pianoRoll.isVisible() && !draggingClip);
         menu.addItem(11,session.playbackLoopEnabled?"Loop playback: On...":"Loop playback: Off...");
         menu.addSeparator();
         const auto recent=recentProjects.entries();
@@ -2561,6 +2622,9 @@ private:
             if(result==9){if(safe->bounce.isEnabled() && safe->bounce.onClick)safe->bounce.onClick();return;}
             if(result==10){if(safe->saveProject.isEnabled() && safe->saveProject.onClick)safe->saveProject.onClick();return;}
             if(result==11){safe->showPlaybackLoopSettings();return;}
+            if(result==13){safe->showAudioSplitMenu();return;}
+            if(result==14){safe->restoreClipHistory(true);return;}
+            if(result==15){safe->restoreClipHistory(false);return;}
             if(result==12){if(safe->exportProject.isEnabled() && safe->exportProject.onClick)safe->exportProject.onClick();return;}
             if(result>=200 && (size_t)(result-200)<recent.size()){
                 if(!safe->restoreProject(recent[(size_t)(result-200)]))
