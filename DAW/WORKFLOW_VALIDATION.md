@@ -1421,3 +1421,24 @@ are rerun. CTest/foundation target registered; full application CI and physical
 layout/dialog/history checks pending. Existing S shortcut remains; the precise
 cause of every prior keypress-count mismatch is not established. Installed beta,
 qualified candidate, saved user projects/audio and portable backups unchanged.
+
+### Visible audio clip identities at split boundaries (2026-11-16)
+
+Adjacent split clips previously shared the same colour and filename, making
+successful splits hard to see at normal zoom. Audio clips now have high-contrast
+vertical edges on dark backing and numbered header badges (Clip 1, Clip 2, etc.;
+C1/C2 on narrower clips). Below 24 pixels, omit text and retain edges. Gain/source
+labels reserve badge space and are omitted when there is insufficient room.
+Numbers follow the clip list, matching the split chooser/context dialog. They
+are display indices, not persistent IDs, and can change after edits. Existing
+selected-clip outline and fade controls remain; no timeline hit boxes, source
+intervals, session fields, playback or export code are changed.
+
+The drawing helper clips to both the actual clip rectangle and the visible lane;
+scrolled-off edges are not pinned to the viewport as false boundaries. Rendering
+tests use deterministic software images to check contrasting adjacent joins,
+label sizing, tiny clips, viewport/offscreen clipping and graphics-state restore.
+A preview from the actual drawing helper was rendered and visually reviewed at
+normal/larger zoom and a scrolled position. CTest/foundation target registered.
+Full native application CI and physical boundary/selection/scroll checks pending.
+Installed beta, qualified candidates, recordings and portable backups unchanged.
