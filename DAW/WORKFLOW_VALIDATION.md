@@ -1442,3 +1442,19 @@ A preview from the actual drawing helper was rendered and visually reviewed at
 normal/larger zoom and a scrolled position. CTest/foundation target registered.
 Full native application CI and physical boundary/selection/scroll checks pending.
 Installed beta, qualified candidates, recordings and portable backups unchanged.
+
+### Precise audio clip position dialog
+
+OPEN / RECOVER > Move or trim audio clip offers absolute beat targets for moving
+while keeping length, trimming the left edge, or trimming the right edge. The
+same dialog is available from an audio clip context menu. Multiple clips use
+the selected clip or a numbered range chooser, as in Split audio clip.
+
+ClipPositionPlan stages edits, rejects stale/busy/replayed requests and malformed
+or out-of-range input, and records one audio history entry before applying.
+Unchanged targets preserve Redo. Trimming cannot extend the current clip, adjusts
+left source offset at session tempo and clamps fades using existing primitives.
+Source files are untouched. Local strict MSVC /W4 /WX tests pass for move/trim,
+invalid bounds, no-op/Redo, one-step Undo/Redo, dirty baseline, save/reload,
+source-byte preservation and unrelated master-state preservation. Native dialog
+and AudioBox playback checks remain pending for the new build.
