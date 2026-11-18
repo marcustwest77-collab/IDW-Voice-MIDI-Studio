@@ -22,7 +22,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: IDW-VST3-Effect-Probe-${{ matrix.os }}
-          path: build-v14/IDWVst3EffectProbe_artefacts/Release/
+          path: |
+            build-v14/IDWVst3EffectProbe_artefacts/**/IDWVst3EffectProbe
+            build-v14/IDWVst3EffectProbe_artefacts/**/IDWVst3EffectProbe.exe
           if-no-files-found: error
           retention-days: 14
       - name: Test session model
