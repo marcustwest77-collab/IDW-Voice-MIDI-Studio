@@ -1470,3 +1470,23 @@ snapshot protections are unchanged. Local strict ProjectSaveDestinationTests
 cover same/different/untitled sources, immutable summary, normalized destination
 and the existing consent/stale/failure checks. Native layout checks are pending.
 The earlier portable-path observation is not claimed to have a proven root cause.
+
+### Experimental stereo effect host foundation
+
+StereoEffectSlot owns one prepared stereo AudioProcessor. Control-thread install
+and clear require callbacks stopped. In-place processing checks block geometry,
+provides bypass, reports latency, and silences/latches nonfinite output or C++
+exceptions. No plugin creation, preparation or destruction occurs in process.
+This does not guarantee third-party plugin allocation behavior or crash safety.
+
+Strict local MSVC /W4 /WX synthetic-effect tests pass for gain, dry bypass,
+invalid configuration, preservation after rejected replacement, block bounds,
+latency, lifecycle and nonfinite fault containment. The VST3 probe translation
+unit compiles locally with hosting enabled. Full linked probe build is pending CI.
+
+IDW_BUILD_VST3_PROBE adds a separate explicit-path console diagnostic. It scans
+only the selected VST3, instantiates an effect and processes synthetic stereo
+blocks. Foundation CI builds/uploads it but never loads installed plugins. It
+is not connected to the DAW track engine, editor windows, persistence or export.
+A successful probe is not full plugin compatibility qualification. No real plugin
+has yet been loaded. MAutoPitch is the selected first installed test target.
