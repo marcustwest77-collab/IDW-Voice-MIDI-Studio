@@ -32,6 +32,21 @@ int main(){
         ProjectSavePlan replace(edited,canonical,root.getChildFile("Song.v2.idwproj..idwproj"));
         juce::String error;
         require(replace.target()==canonical,"overwrite prompt path differs from write target");
+        const auto sameSummary=replace.replacementSummary();
+        require(sameSummary.contains(canonical.getFullPathName()) && sameSummary.contains("Current session snapshot") &&
+            sameSummary.contains("Tracks: 2 | Audio clips: 1 | MIDI notes: 1") &&
+            !sameSummary.contains("different project file") && sameSummary.contains("referenced, not copied"),"same-project replacement summary");
+        const auto other=root.getChildFile("Other/Session.idwproj");
+        ProjectSavePlan cross(edited,canonical,other);
+        require(cross.replacementSummary().contains(canonical.getFullPathName()) &&
+            cross.replacementSummary().contains(other.getFullPathName()) &&
+            cross.replacementSummary().contains("different project file"),"cross-project source/destination ambiguity");
+        ProjectSavePlan untitled(edited,{},canonical);
+        require(untitled.replacementSummary().contains("Untitled project") &&
+            untitled.replacementSummary().contains(canonical.getFullPathName()),"untitled replacement summary");
+        auto later=edited;later.tracks.clear();
+        require(replace.replacementSummary()==sameSummary && canonical.loadFileAsString()==original,
+            "summary follows later session edits or writes target");
         require(!replace.commit(edited,canonical,true,false,error) && error.isNotEmpty(),"normalization bypassed replace consent");
         require(canonical.loadFileAsString()==original && status.hasUnsavedChanges(edited),"unapproved save modified file or status");
         require(!replace.commit(edited,canonical,false,true,error) && canonical.loadFileAsString()==original,"busy save accepted");

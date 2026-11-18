@@ -3042,8 +3042,7 @@ private:
                 auto plan=std::make_shared<idw::daw::ProjectSavePlan>(safe->session,safe->currentProject,picker.getResult());
                 if(!plan->target().exists()){safe->finishProjectSave(plan,false);return;}
                 auto* prompt=new juce::AlertWindow("Replace saved project?",
-                    "Replace this existing file?\n\n"+plan->target().getFullPathName()+
-                    "\n\nChoose Cancel to keep it and select another filename.",juce::MessageBoxIconType::QuestionIcon);
+                    plan->replacementSummary(),juce::MessageBoxIconType::QuestionIcon);
                 prompt->addButton("Replace project",1);
                 prompt->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey),juce::KeyPress(juce::KeyPress::returnKey));
                 prompt->enterModalState(true,juce::ModalCallbackFunction::create([safe,plan](int result){

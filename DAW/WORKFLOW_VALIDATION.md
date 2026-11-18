@@ -1458,3 +1458,15 @@ Source files are untouched. Local strict MSVC /W4 /WX tests pass for move/trim,
 invalid bounds, no-op/Redo, one-step Undo/Redo, dirty baseline, save/reload,
 source-byte preservation and unrelated master-state preservation. Native dialog
 and AudioBox playback checks remain pending for the new build.
+
+### Save replacement source/destination identity
+
+The existing replacement dialog now names the captured current session and the
+normalized destination separately, with track/audio-clip/MIDI-note counts. A
+different destination explicitly says the current session replaces that file
+without opening or merging it. It also distinguishes linked audio from portable
+export. Cancel remains the default Return/Escape action; save consent and stale
+snapshot protections are unchanged. Local strict ProjectSaveDestinationTests
+cover same/different/untitled sources, immutable summary, normalized destination
+and the existing consent/stale/failure checks. Native layout checks are pending.
+The earlier portable-path observation is not claimed to have a proven root cause.

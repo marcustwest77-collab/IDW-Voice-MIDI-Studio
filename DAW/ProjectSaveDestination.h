@@ -22,6 +22,20 @@ public:
         : snapshot(session),before(juce::JSON::toString(sessionToJson(session),true)),project(origin),
           destination(projectSaveDestination(selected)) {}
     const juce::File& target() const {return destination;}
+    juce::String replacementSummary() const {
+        size_t clips=0,notes=0;
+        for(const auto& track:snapshot.tracks){clips+=track.clips.size();notes+=track.notes.size();}
+        const auto source=project==juce::File{}?juce::String("Untitled project"):project.getFullPathName();
+        return "Current session snapshot:\n"+source+
+            "\n\nExisting file to replace:\n"+destination.getFullPathName()+
+            "\n\nTracks: "+juce::String((juce::int64)snapshot.tracks.size())+
+            " | Audio clips: "+juce::String((juce::int64)clips)+" | MIDI notes: "+juce::String((juce::int64)notes)+
+            (project!=juce::File{} && project!=destination
+                ? "\n\nThis replaces a different project file with the current session. It does not open or merge that file."
+                : "\n\nThis saves the current session over the existing file.")+
+            "\nAudio files are referenced, not copied. Use Export portable project for a copy with audio."
+            "\n\nChoose Cancel to keep the existing file and select another filename.";
+    }
     bool commit(const Session& live,const juce::File& origin,bool idle,bool replaceApproved,juce::String& error){
         error.clear();
         if(used){error="This save request has already completed.";return false;}
