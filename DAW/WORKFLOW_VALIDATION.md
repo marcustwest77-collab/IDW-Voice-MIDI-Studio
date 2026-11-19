@@ -1506,3 +1506,27 @@ processing invocation, partial blocks, clip gaps, reuse isolation, gain/pan,
 output offsets, mono output, rejected bounds, failed-effect silence, and dry
 comparison to the prior direct mix within 1e-6. Device playback and full CI remain
 pending. This is the routing prerequisite, not finished plugin editor/recall/export.
+
+### Experimental Windows MAutoPitch track integration
+
+OPEN / RECOVER > Experimental track effect provides explicit load confirmation,
+editor, stopped-only bypass and unload. The first integration targets the known
+installed Windows MAutoPitch path. Explicit discovery runs on the message thread;
+instance creation is async and rejects changed session/origin/device snapshots.
+Instance install/unload use the audio callback lock while playback is stopped;
+editor destruction precedes processor destruction. The summed track insertion
+runs the StereoEffectSlot before gain/pan. Device rate/block mismatch rejects
+playback or stops processing. Loop playback is unavailable while loaded.
+
+Plugin state, export and latency compensation are not implemented. Save/portable
+export/WAV bounce/recording/project switching are blocked while an effect is
+loaded, including bypassed, to avoid silently losing state or exporting dry audio.
+Load confirmation explains limits and native crash risk. Dry recordings are not
+written. Playback drains reported latency plus a tail capped at 30 seconds; this
+is not full tail/latency qualification. Processing faults stop playback with status.
+
+Local strict ExperimentalEffectPolicyTests pass loading/loaded document gates,
+device configuration and loop playback restrictions. Existing processing and
+track-bus tests passed in preceding drafts. Full linked app build, editor lifetime,
+plugin bypass listening, callback lifecycle and device-change tests remain pending.
+The UI is an experimental Windows compatibility step, not production plugin support.
