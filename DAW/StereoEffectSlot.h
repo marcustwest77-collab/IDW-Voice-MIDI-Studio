@@ -35,6 +35,8 @@ public:
     }
     void setBypassed(bool value){bypassed.store(value,std::memory_order_relaxed);}
     bool hasEffect() const {return processor!=nullptr;}
+    // Control thread only, with callbacks stopped and their lock held.
+    juce::AudioProcessor* processorForControlThread() const {return processor.get();}
     bool hasFault() const {return faulted.load(std::memory_order_relaxed);}
     int latencySamples() const {return processor?processor->getLatencySamples():0;}
     // In-place, pre-sized stereo buffers only; never create/load/free an instance.
