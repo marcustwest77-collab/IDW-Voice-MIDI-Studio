@@ -1490,3 +1490,19 @@ blocks. Foundation CI builds/uploads it but never loads installed plugins. It
 is not connected to the DAW track engine, editor windows, persistence or export.
 A successful probe is not full plugin compatibility qualification. No real plugin
 has yet been loaded. MAutoPitch is the selected first installed test target.
+
+### Per-track audio summing for effect insertion
+
+TrackAudioBus is prepared outside callbacks and reused for each audio track.
+The live renderer sums all clip windows from all source readers belonging to a
+track, then runs one insertion callback before gain/pan and adds to the output.
+The insertion remains dry in this change; no VST3 instance is attached yet.
+Track meters now measure the summed post-insertion track, including overlaps,
+rather than the maximum of individual source-window peaks. Master/MIDI code and
+offline bounce are unchanged. Floating-point summation order can differ slightly.
+
+Local strict MSVC /W4 /WX TrackAudioBusTests pass source summing, exactly one
+processing invocation, partial blocks, clip gaps, reuse isolation, gain/pan,
+output offsets, mono output, rejected bounds, failed-effect silence, and dry
+comparison to the prior direct mix within 1e-6. Device playback and full CI remain
+pending. This is the routing prerequisite, not finished plugin editor/recall/export.

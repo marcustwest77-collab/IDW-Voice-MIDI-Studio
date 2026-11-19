@@ -6,6 +6,7 @@
 #include "StudioControlLayout.h"
 #include "ClipSplitPlan.h"
 #include "ClipPositionPlan.h"
+#include "TrackAudioBus.h"
 #include "AudioClipIdentity.h"
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
@@ -1771,11 +1772,13 @@ private:
     size_t dragTrack=0,dragIndex=0;
     int dragOriginX=0;
     double dragOriginalStart=0.0,dragOriginalLength=0.0;
+    idw::daw::TrackAudioBus trackAudioBus;
     void prepareToPlay(int samplesPerBlockExpected,double sampleRate) override {
         playing.store(false,std::memory_order_release);
         deviceRate=sampleRate;
         for(auto& state:eqState)state=0.0f;
         preparedBlockSize=juce::jmax(1,samplesPerBlockExpected);
+        trackAudioBus.prepare(preparedBlockSize);
         for(auto& slot:sources){
             slot->scratch.setSize(2,preparedBlockSize,false,true,false);
             slot->transport.prepareToPlay(samplesPerBlockExpected,sampleRate);
@@ -1814,41 +1817,27 @@ private:
     }
     void renderPlaybackSegment(const juce::AudioSourceChannelInfo& info,const idw::daw::Session& playback,std::int64_t blockStart){
         const bool anySolo=std::any_of(playback.tracks.begin(),playback.tracks.end(),[](const auto& t){return t.solo;});
-        for(auto& slot:sources) {
-            if(!slot->reader || slot->trackIndex>=playback.tracks.size())continue;
-            const auto& track=playback.tracks[slot->trackIndex];
-            if(track.mute || (anySolo && !track.solo) || track.clips.empty())continue;
-            const float gain=juce::jlimit(0.0f,2.0f,track.gain);
-            const float pan=juce::jlimit(-1.0f,1.0f,track.pan);
-            const float leftGain=gain*(pan>0.0f?1.0f-pan:1.0f);
-            const float rightGain=gain*(pan<0.0f?1.0f+pan:1.0f);
-            float trackPeak=0.0f;
-            // Each clip owns an independent timeline window and source offset.
-            // Seek the existing transport before each read, so gaps stay silent
-            // and overlapping clips sum rather than replacing one another.
-            for(const auto& clip:track.clips){
-                if(clip.sourcePath!=slot->sourcePath)continue;
-                const auto window=idw::daw::readClipWindow(slot->transport,slot->scratch,
-                    slot->nextSourceFrame,clip,playback.bpm,deviceRate,blockStart,info.numSamples);
-                if(window.frames<=0)continue;
-                for(int ch=0;ch<juce::jmin(2,slot->scratch.getNumChannels());++ch){
-                    const float level=slot->scratch.getMagnitude(ch,0,window.frames) *
-                        (ch==0?leftGain:rightGain);
-                    trackPeak=juce::jmax(trackPeak,level);
+        for(size_t trackIndex=0;trackIndex<playback.tracks.size();++trackIndex){
+            const auto& track=playback.tracks[trackIndex];
+            if(track.type!=idw::daw::TrackType::audio || track.mute || (anySolo && !track.solo) ||
+               track.clips.empty() || !trackAudioBus.begin(info.numSamples))continue;
+            for(auto& slot:sources){
+                if(!slot->reader || slot->trackIndex!=trackIndex)continue;
+                for(const auto& clip:track.clips){
+                    if(clip.sourcePath!=slot->sourcePath)continue;
+                    const auto window=idw::daw::readClipWindow(slot->transport,slot->scratch,
+                        slot->nextSourceFrame,clip,playback.bpm,deviceRate,blockStart,info.numSamples);
+                    if(window.frames>0)trackAudioBus.add(slot->scratch,0,window.offset,window.frames);
                 }
-                for(int channel=0;channel<info.buffer->getNumChannels();++channel)
-                    info.buffer->addFrom(channel,info.startSample+window.offset,
-                        slot->scratch,channel,0,window.frames,
-                        channel==0?leftGain:rightGain);
             }
-            if(slot->trackIndex<channelPeaks.size()){
-                // Multiple source slots can belong to one track. Preserve the
-                // highest peak across all slots in this callback block.
-                auto& meter=channelPeaks[slot->trackIndex];
-                float observed=meter.load(std::memory_order_relaxed);
-                while(observed<trackPeak &&
-                      !meter.compare_exchange_weak(observed,trackPeak,
-                          std::memory_order_relaxed,std::memory_order_relaxed)){}
+            // Plugin insertion seam: process the summed track once before gain/pan.
+            // This foundation remains dry until instance lifecycle/UI is connected.
+            const float trackPeak=trackAudioBus.mix(*info.buffer,info.startSample,track.gain,track.pan,
+                [](juce::AudioBuffer<float>&){return true;});
+            if(trackIndex<channelPeaks.size()){
+                auto& meter=channelPeaks[trackIndex];float observed=meter.load(std::memory_order_relaxed);
+                while(observed<trackPeak && !meter.compare_exchange_weak(observed,trackPeak,
+                    std::memory_order_relaxed,std::memory_order_relaxed)){}
             }
         }
         // Basic audible piano-roll preview. No MIDI device or VST routing yet.
