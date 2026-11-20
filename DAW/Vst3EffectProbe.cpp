@@ -24,9 +24,13 @@ int main(int argc,char** argv){
             for(int size:{32,512,1024}){
                 juce::String error;auto instance=formats.createPluginInstance(*description,rate,size,error);
                 if(!instance){std::cerr<<error<<'\n';return 1;}
-                juce::Array<juce::var> parameters;
+                juce::Array<juce::var> parameters,parameterInventory;
                 for(auto* parameter:instance->getParameters()){
                     const auto name=parameter->getName(128);
+                    auto* entry=new juce::DynamicObject();entry->setProperty("index",parameter->getParameterIndex());
+                    entry->setProperty("name",name);entry->setProperty("label",parameter->getLabel());
+                    entry->setProperty("normalizedValue",parameter->getValue());
+                    entry->setProperty("displayValue",parameter->getCurrentValueAsText());parameterInventory.add(juce::var(entry));
                     if(name.equalsIgnoreCase("Depth") || name.equalsIgnoreCase("Speed")){
                         parameter->setValueNotifyingHost(1.0f);parameters.add(name);
                     }
@@ -59,6 +63,8 @@ int main(int argc,char** argv){
                 writer.reset();
                 auto* result=new juce::DynamicObject();
                 result->setProperty("blockSize",size);result->setProperty("sampleRate",rate);
+                result->setProperty("parameterInventory",parameterInventory);
+                result->setProperty("requestedMaximumSettingsApplied",parameters.size()==2);
                 result->setProperty("latencySamples",effect.latencySamples());result->setProperty("parametersSetToMaximum",parameters);
                 result->setProperty("peak",metrics.peak);result->setProperty("maxBoundaryJump",metrics.maxBoundaryJump);
                 result->setProperty("maxInteriorJump",metrics.maxInteriorJump);result->setProperty("maxProcessMs",metrics.maxProcessMs);
