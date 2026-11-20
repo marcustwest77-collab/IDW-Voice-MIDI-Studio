@@ -31,12 +31,22 @@ int main(int argc,char** argv){
                     entry->setProperty("name",name);entry->setProperty("label",parameter->getLabel());
                     entry->setProperty("normalizedValue",parameter->getValue());
                     entry->setProperty("displayValue",parameter->getCurrentValueAsText());parameterInventory.add(juce::var(entry));
-                    if(name.equalsIgnoreCase("Depth") || name.equalsIgnoreCase("Speed")){
+                    if(name.equalsIgnoreCase("Depth") || name.equalsIgnoreCase("Speed") ||
+                       name.equalsIgnoreCase("Depth (Automatic tuning)") || name.equalsIgnoreCase("Speed (Automatic tuning)")){
                         parameter->setValueNotifyingHost(1.0f);parameters.add(name);
                     }
                 }
                 idw::daw::StereoEffectSlot effect;
                 if(!effect.install(std::move(instance),rate,size,error)){std::cerr<<error<<'\n';return 1;}
+                juce::Array<juce::var> confirmedSettings;bool maximumConfirmed=parameters.size()==2;
+                for(auto* parameter:effect.processorForControlThread()->getParameters()){
+                    if(!parameters.contains(juce::var(parameter->getName(128))))continue;
+                    auto* setting=new juce::DynamicObject();setting->setProperty("name",parameter->getName(128));
+                    setting->setProperty("normalizedValue",parameter->getValue());
+                    setting->setProperty("displayValue",parameter->getCurrentValueAsText());confirmedSettings.add(juce::var(setting));
+                    maximumConfirmed=maximumConfirmed && parameter->getValue()>=0.999f;
+                }
+                maximumConfirmed=maximumConfirmed && confirmedSettings.size()==2;
                 const auto output=destination.getChildFile("MAutoPitch-"+juce::String(size)+".wav");
                 auto stream=output.createOutputStream();juce::WavAudioFormat wav;
                 auto writer=std::unique_ptr<juce::AudioFormatWriter>(stream?wav.createWriterFor(stream.get(),rate,2,24,{},0):nullptr);
@@ -64,7 +74,8 @@ int main(int argc,char** argv){
                 auto* result=new juce::DynamicObject();
                 result->setProperty("blockSize",size);result->setProperty("sampleRate",rate);
                 result->setProperty("parameterInventory",parameterInventory);
-                result->setProperty("requestedMaximumSettingsApplied",parameters.size()==2);
+                result->setProperty("confirmedSettingsAfterPrepare",confirmedSettings);
+                result->setProperty("requestedMaximumSettingsApplied",maximumConfirmed);
                 result->setProperty("latencySamples",effect.latencySamples());result->setProperty("parametersSetToMaximum",parameters);
                 result->setProperty("peak",metrics.peak);result->setProperty("maxBoundaryJump",metrics.maxBoundaryJump);
                 result->setProperty("maxInteriorJump",metrics.maxInteriorJump);result->setProperty("maxProcessMs",metrics.maxProcessMs);
