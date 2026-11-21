@@ -13,6 +13,17 @@ int main(){
     const auto temp=juce::File::getSpecialLocation(juce::File::tempDirectory);
     const auto root=temp.getNonexistentChildFile("idw-clip-split-dialog","",false);
     try{
+        for(int width:{1240,1280,1450,1920,8192}){
+            const auto commands=studioCommandBounds(width);
+            const juce::Rectangle<int> available(620,250,width-640,72);
+            for(size_t i=0;i<commands.size();++i){
+                require(available.contains(commands[i]) && commands[i].getWidth()>=79 && commands[i].getHeight()>=22,
+                        "command control clipped or too small");
+                for(size_t j=i+1;j<commands.size();++j)
+                    require(!commands[i].intersects(commands[j]),"command controls overlap");
+            }
+        }
+        for(const auto& bounds:studioCommandBounds(800))require(bounds.isEmpty(),"unsupported command width");
         for(int width:{800,1280,1450,1920,std::numeric_limits<int>::max()}){
             const auto rows=studioControlRows(width);
             const juce::Rectangle<int> ruler(20,330,width-40,36);

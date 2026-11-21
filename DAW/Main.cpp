@@ -889,11 +889,12 @@ public:
         aiButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         pianoButton.setBounds(projectRow.removeFromLeft(125).reduced(3));
         synthPreset.setBounds(projectRow.removeFromLeft(100).reduced(3));
-        voiceCommandInput.setBounds(projectRow.removeFromLeft(145).reduced(3));
-        runVoiceCommand.setBounds(projectRow.removeFromLeft(80).reduced(3));
-        voiceHistoryButton.setBounds(projectRow.removeFromLeft(80).reduced(3));
-        pushToTalkButton.setBounds(projectRow.removeFromLeft(70).reduced(3));
-        commandStatus.setBounds(projectRow.removeFromLeft(95).reduced(3));
+        const auto commandBounds=idw::daw::studioCommandBounds(getWidth());
+        voiceCommandInput.setBounds(commandBounds[0]);
+        runVoiceCommand.setBounds(commandBounds[1]);
+        voiceHistoryButton.setBounds(commandBounds[2]);
+        pushToTalkButton.setBounds(commandBounds[3]);
+        commandStatus.setBounds(commandBounds[4]);
         auto mixRow=rows[idw::daw::mixRow];
         gainLabel.setBounds(mixRow.removeFromLeft(110));
         gainControl.setBounds(mixRow.removeFromLeft(165));
@@ -3983,7 +3984,7 @@ private:
             setUsingNativeTitleBar(true);
             setContentOwned(new Workstation(),true);
             setResizable(true,true);
-            setResizeLimits(800,480,8192,8192);
+            setResizeLimits(1280,720,8192,8192);
             centreWithSize(getWidth(),getHeight());
             setVisible(true);
         }
