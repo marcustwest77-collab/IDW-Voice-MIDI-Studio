@@ -8,6 +8,7 @@
 #include "ClipPositionPlan.h"
 #include "TrackAudioBus.h"
 #include "StereoEffectSlot.h"
+#include "PluginPresetFile.h"
 #include "ExperimentalEffectPolicy.h"
 #include "AudioClipIdentity.h"
 #include "DimensionalControls.h"
@@ -1800,19 +1801,20 @@ private:
     std::unique_ptr<EffectEditorWindow> effectEditor;
     juce::AudioPluginFormatManager effectFormats;
     bool effectLoading=false,effectBypassed=false;
+    juce::String effectIdentifier;
     size_t effectTrack=0;
     double effectRate=0,effectDrainSeconds=0;int effectBlock=0;
     bool blockForExperimentalEffect(const juce::String& action){
         if(!idw::daw::experimentalEffectBlocksDocumentAction(effectLoading,experimentalEffect.hasEffect()))return false;
         juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Experimental effect active",
-            "Unload MAutoPitch before "+action+". This first track-host build does not save plugin settings, compensate latency or render effects in exports. Your dry recordings are unchanged.");
+            "Unload MAutoPitch before "+action+". Save an effect preset first to keep its settings. Projects do not recall effects yet; latency compensation and effect export are not supported. Your dry recordings are unchanged.");
         return true;
     }
     void unloadTrackEffect(){
         if(!recoveryIdle())return;
         effectEditor.reset();
         const juce::ScopedLock lock(deviceManager.getAudioCallbackLock());
-        experimentalEffect.clear();effectBypassed=false;
+        experimentalEffect.clear();effectBypassed=false;effectIdentifier.clear();
         commandStatus.setText("Track effect unloaded; dry playback restored",juce::dontSendNotification);
     }
     void openTrackEffectEditor(){
@@ -1823,7 +1825,41 @@ private:
         if(auto* editor=processor->createEditorIfNeeded())effectEditor=std::make_unique<EffectEditorWindow>(editor);
         else juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,"No effect editor","This effect did not provide an editor.");
     }
-    void loadTrackEffect(){
+    void saveEffectPreset(){
+        if(!recoveryIdle() || !experimentalEffect.hasEffect())return;
+        juce::String error;std::optional<idw::daw::PluginStateData> state;
+        {const juce::ScopedLock lock(deviceManager.getAudioCallbackLock());
+            state=experimentalEffect.captureState(effectIdentifier,true,error);}
+        if(!state){juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Preset not saved",error);return;}
+        auto chooser=std::make_shared<juce::FileChooser>("Save MAutoPitch preset (current settings snapshot)",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("MAutoPitch.idwfx"),"*.idwfx");
+        chooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles|
+            juce::FileBrowserComponent::warnAboutOverwriting,
+            [safe=juce::Component::SafePointer<Workstation>(this),chooser,state=*state](const juce::FileChooser& picker){
+                if(safe==nullptr || picker.getResult()==juce::File{})return;
+                juce::String failure;
+                if(!idw::daw::writePluginPreset(picker.getResult(),state,failure))
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Preset not saved",failure);
+                else safe->commandStatus.setText("Effect preset snapshot saved: "+picker.getResult().getFileName(),juce::dontSendNotification);
+            });
+    }
+    void chooseEffectPreset(){
+        if(!recoveryIdle() || experimentalEffect.hasEffect())return;
+        const auto origin=currentProject;const auto track=selectedTrack;
+        const auto before=juce::JSON::toString(idw::daw::sessionToJson(session),true);
+        auto chooser=std::make_shared<juce::FileChooser>("Load MAutoPitch preset on selected audio track",
+            juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*.idwfx");
+        chooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,
+            [safe=juce::Component::SafePointer<Workstation>(this),chooser,origin,track,before](const juce::FileChooser& picker){
+                if(safe==nullptr || picker.getResult()==juce::File{} || !safe->recoveryIdle() || safe->experimentalEffect.hasEffect())return;
+                if(safe->currentProject!=origin || safe->selectedTrack!=track ||
+                    juce::JSON::toString(idw::daw::sessionToJson(safe->session),true)!=before)return;
+                juce::String error;const auto state=idw::daw::readPluginPreset(picker.getResult(),error);
+                if(!state){juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Preset not loaded",error);return;}
+                safe->loadTrackEffect(state);
+            });
+    }
+    void loadTrackEffect(std::optional<idw::daw::PluginStateData> recalled=std::nullopt){
        #if ! JUCE_WINDOWS
         juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,"Windows test only","This first integration targets the installed Windows MAutoPitch plugin.");return;
        #endif
@@ -1833,9 +1869,9 @@ private:
         }
         if(preparedBlockSize<1 || deviceRate<8000)return;
         auto* prompt=new juce::AlertWindow("Load experimental MAutoPitch?",
-            "Playback-only test on the selected audio track. Plugin settings are not saved; export and recording are blocked until unload. Latency is not compensated. Use low headphone volume. The plugin runs inside this test DAW and a native plugin crash can close it.",juce::MessageBoxIconType::QuestionIcon);
+            "Playback-only test on the selected audio track. Effect presets can save settings separately; projects do not recall them yet. Export and recording are blocked until unload. Latency is not compensated. Use low headphone volume. The plugin runs inside this test DAW and a native plugin crash can close it.",juce::MessageBoxIconType::QuestionIcon);
         prompt->addButton("Load effect",1);prompt->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey),juce::KeyPress(juce::KeyPress::returnKey));
-        prompt->enterModalState(true,juce::ModalCallbackFunction::create([safe=juce::Component::SafePointer<Workstation>(this)](int result){
+        prompt->enterModalState(true,juce::ModalCallbackFunction::create([safe=juce::Component::SafePointer<Workstation>(this),recalled](int result){
             if(safe==nullptr || result!=1 || !safe->recoveryIdle() || safe->experimentalEffect.hasEffect() ||
                 safe->selectedTrack>=safe->session.tracks.size() || safe->session.tracks[safe->selectedTrack].type!=idw::daw::TrackType::audio)return;
             const juce::File file("C:/Program Files/Common Files/VST3/MeldaProduction/Pitch Shift/MAutoPitch.vst3");
@@ -1848,11 +1884,15 @@ private:
             const juce::PluginDescription* chosen=nullptr;
             for(const auto* type:types)if(!type->isInstrument){chosen=type;break;}
             if(!chosen){juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Effect unavailable","No audio effect was found.");return;}
+            const auto identifier=chosen->createIdentifierString();
+            if(recalled && !idw::daw::pluginStateMatches(*recalled,identifier)){
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Preset mismatch","This preset belongs to a different plugin identity. No effect was loaded.");return;
+            }
             const auto track=safe->selectedTrack;const auto origin=safe->currentProject;
             const auto before=juce::JSON::toString(idw::daw::sessionToJson(safe->session),true);
             const double rate=safe->deviceRate;const int block=safe->preparedBlockSize;
             safe->effectLoading=true;
-            safe->effectFormats.createPluginInstanceAsync(*chosen,rate,block,[safe,track,origin,before,rate,block](std::unique_ptr<juce::AudioPluginInstance> instance,const juce::String& failure){
+            safe->effectFormats.createPluginInstanceAsync(*chosen,rate,block,[safe,track,origin,before,rate,block,recalled,identifier](std::unique_ptr<juce::AudioPluginInstance> instance,const juce::String& failure){
                 if(safe==nullptr)return;
                 safe->effectLoading=false;
                 if(!safe->recoveryIdle() || safe->currentProject!=origin ||
@@ -1861,8 +1901,9 @@ private:
                 {
                     const juce::ScopedLock lock(safe->deviceManager.getAudioCallbackLock());
                     if(safe->deviceRate!=rate || safe->preparedBlockSize!=block){error="Audio device changed; load again.";}
-                    else if(instance && safe->experimentalEffect.install(std::move(instance),rate,block,error)){
-                        safe->effectTrack=track;safe->effectRate=rate;safe->effectBlock=block;safe->effectBypassed=false;
+                    else if(instance && safe->experimentalEffect.install(std::move(instance),rate,block,error,recalled?&*recalled:nullptr,identifier)){
+                        safe->effectTrack=track;safe->effectRate=rate;safe->effectBlock=block;safe->effectBypassed=recalled?recalled->bypassed:false;
+                        safe->effectIdentifier=identifier;
                         const double tail=safe->experimentalEffect.processorForControlThread()->getTailLengthSeconds();
                         safe->effectDrainSeconds=std::clamp(std::isfinite(tail)?tail:0.0,0.0,30.0)+
                             std::clamp((double)safe->experimentalEffect.latencySamples()/rate,0.0,30.0)+0.1;
@@ -2739,6 +2780,10 @@ private:
         effects.addItem(302,"Open MAutoPitch editor",experimentalEffect.hasEffect());
         effects.addItem(303,effectBypassed?"Enable MAutoPitch":"Bypass MAutoPitch",experimentalEffect.hasEffect());
         effects.addItem(304,"Unload MAutoPitch",experimentalEffect.hasEffect());
+        effects.addSeparator();
+        effects.addItem(305,"Save MAutoPitch preset...",experimentalEffect.hasEffect());
+        effects.addItem(306,"Load MAutoPitch preset...",!experimentalEffect.hasEffect() && !effectLoading &&
+            selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::audio);
         menu.addSubMenu("Experimental track effect",effects);
         menu.addItem(16,"Move or trim audio clip...",selectedTrack<session.tracks.size() && session.tracks[selectedTrack].type==idw::daw::TrackType::audio && !session.tracks[selectedTrack].clips.empty());
         menu.addItem(14,"Undo audio edit",clipHistory.canUndo() && !pianoRoll.isVisible() && !draggingClip);
@@ -2768,6 +2813,8 @@ private:
             if(result==302){safe->openTrackEffectEditor();return;}
             if(result==303 && safe->experimentalEffect.hasEffect()){safe->effectBypassed=!safe->effectBypassed;safe->experimentalEffect.setBypassed(safe->effectBypassed);safe->commandStatus.setText(safe->effectBypassed?"MAutoPitch bypassed":"MAutoPitch enabled",juce::dontSendNotification);return;}
             if(result==304){safe->unloadTrackEffect();return;}
+            if(result==305){safe->saveEffectPreset();return;}
+            if(result==306){safe->chooseEffectPreset();return;}
             if(result==1){safe->openProjectFile();return;}
             if(result==6){safe->newEmptyProject();return;}
             if(result==3){safe->showMissingAudioMenu();return;}
