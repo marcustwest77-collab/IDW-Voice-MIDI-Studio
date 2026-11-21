@@ -96,6 +96,17 @@ public:
         setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(0xff176b94));
     }
     juce::Colour accentColour() const {return findColour(juce::Slider::thumbColourId);}
+    void drawLinearSlider(juce::Graphics& g,int x,int y,int width,int height,
+                          float position,float minPosition,float maxPosition,
+                          juce::Slider::SliderStyle style,juce::Slider& slider) override {
+        if(style!=juce::Slider::LinearHorizontal && style!=juce::Slider::LinearVertical){
+            juce::LookAndFeel_V4::drawLinearSlider(g,x,y,width,height,position,minPosition,maxPosition,style,slider);
+            return;
+        }
+        idw::daw::drawStudioFader(g,{(float)x,(float)y,(float)width,(float)height},position,
+            style==juce::Slider::LinearHorizontal,slider.findColour(juce::Slider::thumbColourId),
+            slider.isEnabled(),slider.isMouseOverOrDragging(),slider.hasKeyboardFocus(false));
+    }
     void setCustomAccent(juce::Colour accent){
         setColour(juce::Slider::thumbColourId,accent);
         setColour(juce::ToggleButton::tickColourId,accent);
