@@ -841,6 +841,13 @@ public:
         ceilingControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,60,24);
         addAndMakeVisible(ceilingControl);
         ceilingControl.onValueChange=[this]{session.masterMix.ceilingDb=ceilingControl.getValue();ceilingDb.store((float)session.masterMix.ceilingDb,std::memory_order_relaxed);};
+        // JUCE sliders do not request keyboard focus by default. Enable it so
+        // Tab/click focus and arrow-key editing reach the visible fader.
+        for(auto* slider:{&tempo,&gainControl,&panControl,&latencyAdjust,&masterGain,
+                          &attackControl,&releaseControl,&lowEq,&highEq,&ceilingControl}){
+            slider->setWantsKeyboardFocus(true);
+            slider->setMouseClickGrabsKeyboardFocus(true);
+        }
         refreshMixer();
         recovery.begin(session);
         recentProjects.load(); // Metadata only; never restore or open a project automatically.
