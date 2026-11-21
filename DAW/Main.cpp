@@ -1824,7 +1824,10 @@ private:
         for(size_t i=0;i<session.tracks.size();++i)if(!session.tracks[i].effectPreset.empty()){
             selectedTrack=i;refreshMixer();
             commandStatus.setText("Saved effect pending; load MAutoPitch to hear this project's effect",juce::dontSendNotification);
-            loadTrackEffect(idw::daw::decodePluginState(juce::String(session.tracks[i].effectPreset)));return;
+            const auto saved=idw::daw::decodePluginState(juce::String(session.tracks[i].effectPreset));
+            if(saved)loadTrackEffect(saved);
+            else commandStatus.setText("Saved effect is invalid; settings retained without loading",juce::dontSendNotification);
+            return;
         }
     }
     bool blockForExperimentalEffect(const juce::String& action){

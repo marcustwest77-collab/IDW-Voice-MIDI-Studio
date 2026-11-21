@@ -41,7 +41,7 @@ int main() {
                     "corrupt integer recovery changed session/origin");
         };
         struct Field {const char* name;int low,high;};
-        const Field fields[]{{"version",1,1},{"numerator",1,32},{"denominator",1,32},
+        const Field fields[]{{"version",1,2},{"numerator",1,32},{"denominator",1,32},
             {"inputChannel",0,7},{"synthPreset",0,4},{"pitch",0,127},{"velocity",1,127},
             {"fadeInCurve",0,1},{"fadeOutCurve",0,1}};
         for(const auto& field:fields) {
@@ -62,7 +62,9 @@ int main() {
                 require(sessionFromJson(valid,loaded),"valid in-memory integer boundary rejected");
                 require(sessionFromJson(juce::JSON::parse(juce::JSON::toString(valid)),loaded),"valid integer boundary rejected");
                 auto saved=sessionToJson(loaded);
-                require(static_cast<juce::int64>(location(saved,field.name)->getProperty(field.name))==boundary,
+                // Dry sessions deliberately serialize as v1 for older builds.
+                const int expected=juce::String(field.name)=="version"?1:boundary;
+                require(static_cast<juce::int64>(location(saved,field.name)->getProperty(field.name))==expected,
                         "valid integer boundary changed");
             }
         }
