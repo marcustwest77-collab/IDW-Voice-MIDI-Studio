@@ -2,14 +2,19 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <atomic>
 #include <cmath>
+#include "PluginStateData.h"
 namespace idw::daw {
 // Control-thread lifecycle; the caller must stop callbacks before install/clear.
-// This component is not yet connected to Workstation or offline rendering.
+// Workstation playback uses this slot; offline rendering remains unsupported.
 class StereoEffectSlot {
 public:
     ~StereoEffectSlot(){clear();}
-    bool install(std::unique_ptr<juce::AudioProcessor> candidate,double rate,int maximumBlock,juce::String& error){
+    bool install(std::unique_ptr<juce::AudioProcessor> candidate,double rate,int maximumBlock,juce::String& error,
+                 const PluginStateData* recalled=nullptr,const juce::String& instanceIdentifier={}){
         error.clear();
+        if(recalled && !pluginStateMatches(*recalled,instanceIdentifier)){
+            error="Plugin identity or saved state is invalid.";return false;
+        }
         if(!candidate || !std::isfinite(rate) || rate<8000 || rate>768000 || maximumBlock<1 || maximumBlock>65536){
             error="Invalid effect or audio configuration.";return false;
         }
@@ -25,9 +30,33 @@ public:
         try{
             candidate->setRateAndBufferSizeDetails(rate,maximumBlock);
             candidate->prepareToPlay(rate,maximumBlock);
-        }catch(...){error="The effect failed to prepare.";return false;}
+            if(recalled)candidate->setStateInformation(recalled->bytes.getData(),(int)recalled->bytes.getSize());
+            if(candidate->getBusCount(true)!=1 || candidate->getBusCount(false)!=1 ||
+               candidate->getMainBusNumInputChannels()!=2 || candidate->getMainBusNumOutputChannels()!=2){
+                candidate->releaseResources();error="Restored effect changed the required stereo layout.";return false;
+            }
+        }catch(...){
+            try{candidate->releaseResources();}catch(...){}
+            error="The effect failed to prepare or restore state.";return false;
+        }
         clear();processor=std::move(candidate);maxBlock=maximumBlock;
-        faulted.store(false);bypassed.store(false);return true;
+        faulted.store(false);bypassed.store(recalled?recalled->bypassed:false);return true;
+    }
+    std::optional<PluginStateData> captureState(const juce::String& instanceIdentifier,bool idle,juce::String& error){
+        error.clear();
+        if(!idle || !processor || instanceIdentifier.isEmpty()){
+            error="Stop playback and select the loaded plugin before capturing settings.";return {};
+        }
+        PluginStateData state;state.identifier=instanceIdentifier;state.bypassed=bypassed.load(std::memory_order_relaxed);
+        try{processor->getStateInformation(state.bytes);}
+        catch(...){error="The plugin could not provide settings.";return {};}
+        if(!validPluginState(state)){error="Plugin settings exceed the supported size or identity limits.";return {};}
+        return state;
+    }
+    bool restoreCandidate(std::unique_ptr<juce::AudioProcessor> candidate,const juce::String& actualIdentifier,
+                          const PluginStateData& state,double rate,int block,bool idle,juce::String& error){
+        if(!idle){error="Stop playback before restoring plugin settings.";return false;}
+        return install(std::move(candidate),rate,block,error,&state,actualIdentifier);
     }
     void clear(){
         if(processor){try{processor->releaseResources();}catch(...){}processor.reset();}
