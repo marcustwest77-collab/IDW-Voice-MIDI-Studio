@@ -17,6 +17,39 @@
 #include <iostream>
 int main(){
  using namespace idw::daw;
+ // Effects belong to an audio track, survive unavailable-plugin saves, and
+ // require v2 so older applications cannot silently erase them.
+ {
+    Session original;original.addTrack(TrackType::audio);original.addTrack(TrackType::audio);
+    PluginStateData state;state.identifier="test-vst3";state.bypassed=true;
+    const unsigned char bytes[]={0,1,255,0,64};state.bytes.append(bytes,sizeof(bytes));
+    original.tracks[1].effectPreset=encodePluginState(state)->toStdString();
+    const auto text=juce::JSON::toString(sessionToJson(original),true);
+    Session restored;
+    if(!sessionFromJson(juce::JSON::parse(text),restored) || restored.tracks[1].effectPreset!=original.tracks[1].effectPreset ||
+       !restored.tracks[0].effectPreset.empty() || (int)sessionToJson(restored).getProperty("version",0)!=2)
+        throw std::runtime_error("effect track/state roundtrip");
+    const auto decoded=decodePluginState(juce::String(restored.tracks[1].effectPreset));
+    if(!decoded || !decoded->bypassed || decoded->bytes!=state.bytes)throw std::runtime_error("effect binary/bypass recall");
+    for(int invalid=0;invalid<5;++invalid){
+        auto json=sessionToJson(original);auto* root=json.getDynamicObject();
+        auto* tracks=root->getProperty("tracks").getArray();auto* target=tracks->getReference(1).getDynamicObject();
+        if(invalid==0)target->setProperty("effectPreset","broken");
+        if(invalid==1)target->setProperty("effectPreset",42);
+        if(invalid==2)target->setProperty("type","midi");
+        if(invalid==3)root->setProperty("version",1);
+        if(invalid==4)tracks->getReference(0).getDynamicObject()->setProperty("effectPreset",juce::String(original.tracks[1].effectPreset));
+        if(sessionFromJson(json,restored) || juce::JSON::toString(sessionToJson(restored),true)!=text)
+            throw std::runtime_error("invalid effect replaced live session");
+    }
+    const auto file=juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("idw-effect-project",".idwproj");
+    if(!saveProjectSession(original,file) || !loadSession(file,restored) || restored.tracks[1].effectPreset!=original.tracks[1].effectPreset)
+        throw std::runtime_error("effect project disk roundtrip");
+    file.deleteFile();
+    original.tracks[1].effectPreset.clear();
+    if((int)sessionToJson(original).getProperty("version",0)!=1 || !sessionFromJson(sessionToJson(original),restored) || !restored.tracks[1].effectPreset.empty())
+        throw std::runtime_error("legacy dry project compatibility");
+ }
  // Invalid saved tempo must not silently change timing or replace live work.
  Session tempoOriginal;tempoOriginal.setTempo(97.5);tempoOriginal.addTrack(TrackType::audio);
  tempoOriginal.addClip(0,{"keep.wav",2,4,0.5,0.25,0.5,FadeCurve::linear,FadeCurve::equalPower,-6});

@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_core/juce_core.h>
 #include "SessionModel.h"
+#include "PluginStateData.h"
 #include <algorithm>
 #include <cstring>
 #include <optional>
@@ -8,7 +9,8 @@ namespace idw::daw {
 inline juce::var sessionToJson(const Session& s) {
     auto root=std::make_unique<juce::DynamicObject>();
     root->setProperty("format","idw-daw-session");
-    root->setProperty("version",1);
+    const bool hasEffect=std::any_of(s.tracks.begin(),s.tracks.end(),[](const auto& t){return !t.effectPreset.empty();});
+    root->setProperty("version",hasEffect?2:1); // Older builds must not silently strip effects.
     root->setProperty("bpm",s.bpm);
     root->setProperty("numerator",s.numerator);
     root->setProperty("denominator",s.denominator);
@@ -30,6 +32,7 @@ inline juce::var sessionToJson(const Session& s) {
         track->setProperty("type",t.type==TrackType::audio?"audio":"midi");
         track->setProperty("mute",t.mute);
         track->setProperty("solo",t.solo);
+        if(!t.effectPreset.empty())track->setProperty("effectPreset",juce::String(t.effectPreset));
         if(t.type==TrackType::audio)track->setProperty("inputChannel",t.inputChannel);
         track->setProperty("gain",t.gain);
         track->setProperty("pan",t.pan);
@@ -75,7 +78,7 @@ inline std::optional<int> boundedInteger(const juce::var& value,int minimum,int 
 inline bool sessionFromJson(const juce::var& data,Session& output){
     auto* root=data.getDynamicObject();
     if(!root || root->getProperty("format").toString()!="idw-daw-session" ||
-       !persistence_detail::boundedInteger(root->getProperty("version"),1,1))return false;
+       !persistence_detail::boundedInteger(root->getProperty("version"),1,2))return false;
     Session next;
     // Loading must preserve saved timing exactly, not silently clamp/default it.
     const auto savedTempo=root->getProperty("bpm");
@@ -115,6 +118,7 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
     }
     const auto tracks=root->getProperty("tracks");
     if(!tracks.isArray())return false;
+    int effectCount=0;
     for(const auto& t:*tracks.getArray()){
         auto* obj=t.getDynamicObject();
         if(!obj)return false;
@@ -125,6 +129,13 @@ inline bool sessionFromJson(const juce::var& data,Session& output){
         target.name=obj->getProperty("name").toString().toStdString();
         target.mute=(bool)obj->getProperty("mute");
         target.solo=(bool)obj->getProperty("solo");
+        if(obj->hasProperty("effectPreset")){
+            const auto saved=obj->getProperty("effectPreset");
+            if((int)root->getProperty("version")!=2 || type!="audio" || !saved.isString() || ++effectCount>1)return false;
+            const auto state=decodePluginState(saved.toString());
+            if(!state)return false;
+            target.effectPreset=encodePluginState(*state)->toStdString();
+        }
         const auto input=obj->getProperty("inputChannel");
         if(!input.isVoid()){
             const auto channel=persistence_detail::boundedInteger(input,0,7);
@@ -242,7 +253,7 @@ inline bool saveSession(const Session& s,const juce::File& file){
     });
 }
 inline bool loadSession(const juce::File& file,Session& result){
-    if(!file.existsAsFile())return false;
+    if(!file.existsAsFile() || file.getSize()>32*1024*1024)return false;
     auto data=juce::JSON::parse(file);
     return sessionFromJson(data,result);
 }

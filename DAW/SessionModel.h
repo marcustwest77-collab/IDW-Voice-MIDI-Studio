@@ -46,6 +46,9 @@ struct Track {
     float synthAttackMs=5.0f,synthReleaseMs=5.0f;
     std::vector<Clip> clips;
     std::vector<MidiNote> notes;
+    // Canonical bounded plugin-state JSON; empty means no effect. Kept even
+    // when the plugin cannot be instantiated on this machine.
+    std::string effectPreset;
 };
 class Session {
 public:
