@@ -73,4 +73,17 @@ with tempfile.TemporaryDirectory() as folder:
     assert outputs[12]["result"]["isError"] is True
     assert json.loads(inbox_path.read_text()) == {"format": "idw-ai-proposal-v1", "action": {"type": "set_tempo", "bpm": 148}}
     assert '"bpm": 124' in path.read_text(encoding="utf-8")
+    # V2 plugin state remains opaque and must not leak through metadata tools.
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["version"] = 2
+    data["tracks"][0]["effectPreset"] = "private-plugin-state-marker"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    read_commands = [c for c in commands if c.get("id") in (3, 4, 10)]
+    proc = subprocess.run([sys.executable, str(server)], input="\n".join(map(json.dumps, read_commands))+"\n",
+                          capture_output=True, text=True, timeout=8,
+                          env={**os.environ, "IDW_PROJECT_FILE": str(path)})
+    assert proc.returncode == 0, proc.stderr
+    replies = [json.loads(line) for line in proc.stdout.splitlines()]
+    assert len(replies) == 3 and all(not r["result"].get("isError") for r in replies)
+    assert "private-plugin-state-marker" not in proc.stdout and "do-not-expose" not in proc.stdout
     print("IDW MCP protocol smoke tests: PASS")
