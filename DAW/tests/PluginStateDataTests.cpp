@@ -1,4 +1,5 @@
 #include "PluginStateData.h"
+#include "PluginPresetFile.h"
 #include <iostream>
 #include <stdexcept>
 using namespace idw::daw;
@@ -31,5 +32,24 @@ int main(){try{
     maximum.bytes.setSize(maximumPluginStateBytes+1);
     require(!encodePluginState(maximum),"oversized binary");
     require(!decodePluginState(juce::String::repeatedString("x",maximumPluginStateText+65537)),"oversized document");
+    const auto presetFile=juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getNonexistentChildFile("idw-effect-preset-test",".idwfx",false);
+    struct Cleanup {juce::File file;~Cleanup(){file.deleteFile();}} cleanup{presetFile};
+    juce::String error;
+    require(writePluginPreset(presetFile,state,error) && error.isEmpty(),"write preset file");
+    const auto fromFile=readPluginPreset(presetFile,error);
+    require(fromFile && fromFile->identifier==state.identifier && fromFile->bytes==state.bytes && fromFile->bypassed,"preset file roundtrip");
+    const auto original=presetFile.loadFileAsString();
+    require(!writePluginPreset(presetFile,PluginStateData{},error) && error.isNotEmpty() &&
+        presetFile.loadFileAsString()==original,"invalid capture replaced existing preset");
+    auto replacement=state;replacement.bypassed=false;replacement.bytes.reset();
+    require(writePluginPreset(presetFile,replacement,error),"replace preset");
+    const auto replaced=readPluginPreset(presetFile,error);
+    require(replaced && !replaced->bypassed && replaced->bytes.getSize()==0,"replacement state mismatch");
+    require(presetFile.replaceWithText("{bad json"),"create corrupt preset");
+    require(!readPluginPreset(presetFile,error) && error.isNotEmpty(),"corrupt preset accepted");
+    require(presetFile.replaceWithText(juce::String::repeatedString("x",maximumPluginStateText+65537)),"create oversized preset");
+    require(!readPluginPreset(presetFile,error),"oversized file accepted");
+    require(!readPluginPreset(presetFile.getSiblingFile("missing-"+juce::Uuid().toString()+".idwfx"),error),"missing file accepted");
     std::cout<<"Plugin state data tests passed\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
