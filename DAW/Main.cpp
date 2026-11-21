@@ -10,6 +10,7 @@
 #include "StereoEffectSlot.h"
 #include "ExperimentalEffectPolicy.h"
 #include "AudioClipIdentity.h"
+#include "DimensionalControls.h"
 #include "LoopbackWavAnalysis.h"
 #include "LoopbackReference.h"
 #include "LoopbackCapture.h" // experimental live capture engine; not wired to UI yet
@@ -102,15 +103,11 @@ public:
     void drawButtonBackground(juce::Graphics& g,juce::Button& button,
                               const juce::Colour& background,
                               bool highlighted,bool down) override {
-        const auto area=button.getLocalBounds().toFloat().reduced(1.5f);
-        const bool recording=button.getButtonText().containsIgnoreCase("RECORD") ||
-            button.getButtonText().containsIgnoreCase("STOP RECORD");
-        const auto accent=recording ? juce::Colour(0xffe94565) : accentColour();
-        const auto fill=down ? accent.withAlpha(0.36f) :
-            (highlighted ? juce::Colour(0xff214463) : background);
-        g.setColour(fill);g.fillRoundedRectangle(area,7.0f);
-        g.setColour(accent.withAlpha(highlighted || down ? 0.95f : 0.44f));
-        g.drawRoundedRectangle(area,7.0f,highlighted ? 1.6f : 1.0f);
+        const bool recording=button.getButtonText().containsIgnoreCase("RECORD");
+        const auto accent=recording?juce::Colour(0xffe94565):accentColour();
+        const bool pressed=down || button.getToggleState();
+        idw::daw::drawRaisedControl(g,button.getLocalBounds().toFloat(),background,accent,
+            button.isEnabled(),highlighted,pressed);
     }
 };
 class ClipGainDialog final : public juce::AlertWindow {
@@ -1480,10 +1477,8 @@ public:
         g.fillAll(useCustomBackground?customBackground:juce::Colour(activeSkin==1?0xff17100b:activeSkin==2?0xff091c18:activeSkin==3?0xff160d22:0xff080f1c));
         // Neo Studio control decks: visual grouping stays outside the audio callback.
         const auto deck=[&g,this](juce::Rectangle<float> bounds){
-            g.setColour(useCustomPanel ? customPanel : juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32));
-            g.fillRoundedRectangle(bounds,10.0f);
-            g.setColour(neoTheme.accentColour().withAlpha(0.32f));
-            g.drawRoundedRectangle(bounds,10.0f,1.0f);
+            idw::daw::drawStudioPanel(g,bounds,
+                useCustomPanel?customPanel:juce::Colour(activeSkin==1?0xff2b2118:activeSkin==2?0xff112d26:activeSkin==3?0xff261d39:0xff101f32),neoTheme.accentColour());
             g.setColour(neoTheme.accentColour());
             g.setFont(juce::Font(juce::FontOptions(11.0f,juce::Font::bold)));
 
@@ -1685,8 +1680,8 @@ public:
                 g.fillRoundedRectangle((float)faderX-2,(float)mixTop+49,4.0f,(float)mixHeight-68,2.0f);
                 const float normalized=juce::jlimit(0.0f,1.0f,track.gain/1.5f);
                 const float thumbY=(float)mixTop+mixHeight-20.0f-normalized*(float)(mixHeight-70);
-                g.setColour(neoTheme.accentColour());
-                g.fillRoundedRectangle((float)faderX-9,thumbY-4,18.0f,8.0f,3.0f);
+                idw::daw::drawRaisedControl(g,{(float)faderX-9,thumbY-4,18.0f,8.0f},
+                    juce::Colour(0xffa7b8ca),neoTheme.accentColour(),true,false,false,2.0f);
                 // Numeric mix readouts are gain/pan settings, not live audio meters.
                 g.setColour(juce::Colour(0xffa9cadb));
                 g.setFont(juce::Font(juce::FontOptions(9.0f)));
