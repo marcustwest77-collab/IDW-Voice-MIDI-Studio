@@ -22,17 +22,18 @@ if(IDW_SANITIZE_THREAD OR IDW_SANITIZE_ADDRESS)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         message(FATAL_ERROR "The sanitizer builds require GCC or Clang")
     endif()
+    # Shared by both sanitizers: symbols and usable stacks at a sane speed.
+    target_compile_options(IDWDAWExportSessionStressTests PRIVATE
+        -fno-omit-frame-pointer -g -O1)
 endif()
 if(IDW_SANITIZE_THREAD)
-    target_compile_options(IDWDAWExportSessionStressTests PRIVATE
-        -fsanitize=thread -fno-omit-frame-pointer -g -O1)
+    target_compile_options(IDWDAWExportSessionStressTests PRIVATE -fsanitize=thread)
     target_link_options(IDWDAWExportSessionStressTests PRIVATE -fsanitize=thread)
 endif()
 if(IDW_SANITIZE_ADDRESS)
     # -fno-sanitize-recover=all turns a UB report into a failure instead of a warning.
     target_compile_options(IDWDAWExportSessionStressTests PRIVATE
-        -fsanitize=address,undefined -fno-sanitize-recover=all
-        -fno-omit-frame-pointer -g -O1)
+        -fsanitize=address,undefined -fno-sanitize-recover=all)
     target_link_options(IDWDAWExportSessionStressTests PRIVATE -fsanitize=address,undefined)
 endif()
 
