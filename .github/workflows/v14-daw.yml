@@ -94,3 +94,17 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # ThreadSanitizer on the export-session stress test: the race check for the
+  # single-owner atomics. Linux only, no JUCE build, so it stays a few minutes.
+  sanitizer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # Standalone project: no JUCE, so configure cannot need freetype or X11.
+      - name: Configure with ThreadSanitizer
+        run: cmake -S DAW/tests/export_session_stress -B build-tsan -DIDW_SANITIZE_THREAD=ON
+      - name: Build the session stress test
+        run: cmake --build build-tsan
+      - name: Run under ThreadSanitizer
+        run: ctest --test-dir build-tsan --output-on-failure
