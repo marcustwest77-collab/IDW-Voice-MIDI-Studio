@@ -94,6 +94,27 @@ int main(){
             []{return false;});
     });
 
+    // 4. A window destroyed before either event must drop both: the deadline
+    // cannot report, and a late instance is destroyed without being delivered.
+    PluginLoadGate closedGate;
+    bool closedAccepted=false,closedDestroyed=false,closedTimedOut=false;
+    const int closedToken=closedGate.begin();
+    juce::Timer::callAfterDelay(450,[&]{
+        auto closedCallback=wrapPluginLoadCallback<Probe>(closedGate,closedToken,[]{return false;},
+            [&](std::unique_ptr<Probe>,const juce::String&){closedAccepted=true;});
+        closedCallback(makeProbe(&closedDestroyed),juce::String("closed"));
+        armPluginLoadDeadline(closedGate,closedToken,20,[]{return false;},
+            [&](PluginLoadGate::Timeout){closedTimedOut=true;},
+            []{return false;});
+    });
+
+    juce::Timer::callAfterDelay(900,[&]{
+        report.require(closedDestroyed,"closed window kept a late instance alive");
+        report.require(!closedAccepted,"closed window delivered a late instance");
+        report.require(!closedTimedOut,"closed window reported a deadline");
+        report.require(closedGate.isWaiting(),"closed window resolved its load");
+    });
+
     juce::Timer::callAfterDelay(pluginInstantiationTimeoutMs+900,[&]{
         report.require(deadlineVerdict!=nullptr && *deadlineVerdict==PluginLoadGate::Timeout::failed,
             "deadline did not stay resolved as failed");
