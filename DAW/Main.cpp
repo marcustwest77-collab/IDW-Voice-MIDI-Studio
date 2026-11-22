@@ -41,6 +41,7 @@
 #include "ProjectPackaging.h"
 #include "OfflineBounce.h"
 #include "StandardMidiExport.h"
+#include "ExportAlertMessageBox.h"
 #include "StandardMidiImport.h"
 #include "AudioDevicePreferences.h"
 #include "AudioDeviceRecallStatus.h"
@@ -3095,7 +3096,7 @@ private:
         if(!playing.load())stopTimer();repaint();
         const auto plan=idw::daw::exportAlertPlan(idw::daw::ExportMediaKind::wav,outcome);
         const bool ok=outcome==idw::daw::ExportOutcome::completed;
-        juce::AlertWindow::showMessageBoxAsync(plan.icon==idw::daw::ExportAlertIcon::info?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
+        juce::AlertWindow::showMessageBoxAsync(idw::daw::messageBoxIconFor(plan.icon),
             juce::String(plan.title),ok?(receipt?*receipt:juce::String("WAV written; verify the exported file before using it.")):error);
     }
     void renderWavSnapshot(const idw::daw::Session& snapshot,const juce::File& output,
@@ -3238,7 +3239,7 @@ private:
                         if(!safe->playing.load())safe->stopTimer();safe->repaint();
                         const auto plan=idw::daw::exportAlertPlan(idw::daw::ExportMediaKind::midi,outcome);
                         const bool ok=outcome==idw::daw::ExportOutcome::completed;
-                        juce::AlertWindow::showMessageBoxAsync(plan.icon==idw::daw::ExportAlertIcon::info?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
+                        juce::AlertWindow::showMessageBoxAsync(idw::daw::messageBoxIconFor(plan.icon),
                             juce::String(plan.title),
                             ok?"MIDI tracks exported. Open the file in another DAW and choose instruments for its tracks.":error);
                     });

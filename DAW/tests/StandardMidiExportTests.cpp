@@ -131,7 +131,9 @@ int main(){try{
     require(longMidi.getTrack(1)->getEndTime()==69120000,"large tick conversion");
     boundary.tracks[1].notes[0].startBeat=72000;reject(boundary);
     std::atomic<bool> cancel{true};
-    require(!exportSessionMidi(s,rejected,error,nullptr,&cancel) && !rejected.exists(),"canceled export published");
+    const auto canceledMidi=exportSessionMidi(s,rejected,error,nullptr,&cancel);
+    require(canceledMidi==ExportOutcome::canceled,"canceled MIDI export was not reported as canceled");
+    require(!rejected.exists(),"canceled MIDI export published a file");
     const auto blocker=root.getChildFile("blocker");require(blocker.replaceWithText("unchanged"),"blocked-parent fixture");
     require(!exportSessionMidi(s,blocker.getChildFile("failed.mid"),error) && blocker.loadFileAsString()=="unchanged","failed output modified parent");
     require(juce::JSON::toString(sessionToJson(s))==before && bytes(output)==raw,"source session or original MIDI changed");
