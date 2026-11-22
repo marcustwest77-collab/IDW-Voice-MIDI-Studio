@@ -71,6 +71,9 @@ int main(){
         "missing media resolved relative to wrong directory");
     // Untitled absolute-path projects also recover, including a session restored but not saved.
     Session untitled=session;untitled.tracks[0].clips[0].sourcePath=audio.getFullPathName().toStdString();
+    PluginStateData effect;effect.identifier="unavailable-test-plugin";effect.bypassed=true;
+    effect.bytes.append("saved-settings",14);
+    untitled.tracks[0].effectPreset=encodePluginState(effect)->toStdString();
     SessionRecovery unsaved(root.getChildFile("untitled"));unsaved.begin(untitled,true);
     require(unsaved.checkpoint(untitled,{})==SessionRecovery::Result::saved,"untitled recovery");
     require(SessionRecovery::read(unsaved.copies().front(),restored,origin) &&

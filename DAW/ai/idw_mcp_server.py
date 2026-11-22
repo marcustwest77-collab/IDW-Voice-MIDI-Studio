@@ -48,11 +48,12 @@ def project():
     if not configured:
         raise ValueError("Set IDW_PROJECT_FILE to a saved IDW V14 project JSON file.")
     path = Path(configured).expanduser()
-    if not path.is_file() or path.stat().st_size > 4_000_000:
-        raise ValueError("Project not found or exceeds 4 MB limit.")
+    if not path.is_file() or path.stat().st_size > 32 * 1024 * 1024:
+        raise ValueError("Project not found or exceeds 32 MB limit.")
     with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
-    if not isinstance(data, dict) or data.get("format") != "idw-daw-session" or data.get("version") != 1:
+    if (not isinstance(data, dict) or data.get("format") != "idw-daw-session"
+        or type(data.get("version")) is not int or data["version"] not in (1, 2)):
         raise ValueError("Not a supported IDW V14 session.")
     if not isinstance(data.get("tracks"), list):
         raise ValueError("Project tracks malformed.")
