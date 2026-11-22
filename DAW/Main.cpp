@@ -42,6 +42,7 @@
 #include "OfflineBounce.h"
 #include "StandardMidiExport.h"
 #include "ExportAlertMessageBox.h"
+#include "ExportSession.h"
 #include "PluginLoadDeadline.h"
 #include "PluginLoadGate.h"
 #include "StandardMidiImport.h"
@@ -139,7 +140,8 @@ public:
     }
     juce::Slider gain;
 };
-class Workstation final : public juce::AudioAppComponent, private juce::Timer, private juce::ChangeListener {
+class Workstation final : public juce::AudioAppComponent, private juce::Timer, private juce::ChangeListener,
+                           public idw::daw::ExportView {
 public:
     Workstation() {
         remoteEventPollTimer.startTimerHz(15);
@@ -730,13 +732,12 @@ public:
         cancelBounce.onClick=[this]{
             if(!exportRunning.load())return;
             exportCancel.store(true);
-            cancelBounce.setButtonText("CANCELING...");
-            cancelBounce.setEnabled(false);
-            // A plugin load cannot be interrupted, so stop waiting for it here;
-            // the gate abandons its token and the late instance is torn down.
-            if(pluginLoadGate.cancel())
-                finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");
-            repaint();
+            // A plugin load cannot be interrupted, so the session abandons its
+            // token and resolves now; a render is left to finish on its own.
+            if(exportSession.cancel()!=idw::daw::ExportSession::Cancel::notRunning){
+                cancelBounce.setEnabled(false); // One cancel click is enough.
+                repaint();
+            }
         };
         audio.onClick=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;addAudioTrack();refreshMixer();repaint();};
         midi.onClick=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
@@ -3101,23 +3102,24 @@ private:
             });
     }
     void finishWavExport(idw::daw::ExportOutcome outcome,const juce::String& error,const std::optional<juce::String>& receipt={}){
-        exportRunning.store(false);bounce.setEnabled(true);cancelBounce.setEnabled(false);
-        cancelBounce.setButtonText("CANCEL EXPORT");
-        if(!playing.load())stopTimer();repaint();
-        const auto plan=idw::daw::exportAlertPlan(idw::daw::ExportMediaKind::wav,outcome);
         const bool ok=outcome==idw::daw::ExportOutcome::completed;
-        juce::AlertWindow::showMessageBoxAsync(idw::daw::messageBoxIconFor(plan.icon),
-            juce::String(plan.title),ok?(receipt?*receipt:juce::String("WAV written; verify the exported file before using it.")):error);
+        exportSession.finish(outcome,(ok?(receipt?*receipt:juce::String("WAV written; verify the exported file before using it.")):error).toStdString());
     }
     void finishMidiExport(idw::daw::ExportOutcome outcome,const juce::String& error){
-        exportRunning.store(false);bounce.setEnabled(true);cancelBounce.setEnabled(false);
-        cancelBounce.setButtonText("CANCEL EXPORT");
-        if(!playing.load())stopTimer();repaint();
-        const auto plan=idw::daw::exportAlertPlan(idw::daw::ExportMediaKind::midi,outcome);
         const bool ok=outcome==idw::daw::ExportOutcome::completed;
+        exportSession.finish(outcome,(ok?juce::String("MIDI tracks exported. Open the file in another DAW and choose instruments for its tracks."):error).toStdString());
+    }
+    void exportRunningChanged(bool running) override {
+        exportRunning.store(running);
+        bounce.setEnabled(!running);cancelBounce.setEnabled(running);
+        if(!running && !playing.load())stopTimer();
+        repaint();
+    }
+    void exportCancelText(const std::string& text) override {cancelBounce.setButtonText(juce::String(text));}
+    void exportAlert(idw::daw::ExportMediaKind media,idw::daw::ExportOutcome outcome,const std::string& message) override {
+        const auto plan=idw::daw::exportAlertPlan(media,outcome);
         juce::AlertWindow::showMessageBoxAsync(idw::daw::messageBoxIconFor(plan.icon),
-            juce::String(plan.title),
-            ok?"MIDI tracks exported. Open the file in another DAW and choose instruments for its tracks.":error);
+            juce::String(plan.title),juce::String(message));
     }
     void renderWavSnapshot(const idw::daw::Session& snapshot,const juce::File& output,
                            const juce::File& sourceProject,std::shared_ptr<idw::daw::OfflineBounceEffect> effect={}){
@@ -3167,23 +3169,16 @@ private:
         for(const auto* type:types)if(!type->isInstrument && idw::daw::pluginStateMatches(*state,type->createIdentifierString())){chosen=type;break;}
         if(!chosen){finishWavExport(idw::daw::ExportOutcome::failed,"The installed effect does not match the saved plugin identity.");return;}
         const auto identifier=chosen->createIdentifierString();
-        const int loadToken=pluginLoadGate.begin();
+        const int loadToken=exportSession.pluginLoad().begin();
         // A plugin that never answers must not wedge the export: the deadline
         // resolves it, and a load arriving later is torn down by its callback.
         const juce::Component::SafePointer<Workstation> safe(this);
-        idw::daw::armPluginLoadDeadline(pluginLoadGate,loadToken,idw::daw::pluginInstantiationTimeoutMs,
+        idw::daw::armPluginLoadDeadline(exportSession.pluginLoad(),loadToken,idw::daw::pluginInstantiationTimeoutMs,
             [safe]{return safe!=nullptr;},
-            [safe](idw::daw::PluginLoadGate::Timeout timeout){
-                if(timeout==idw::daw::PluginLoadGate::Timeout::canceled)
-                    safe->finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");
-                else
-                    safe->finishWavExport(idw::daw::ExportOutcome::failed,
-                        "The track effect did not finish loading within "+
-                        juce::String(idw::daw::pluginInstantiationTimeoutMs/1000)+" seconds, so the WAV was not exported.");
-            },
+            [safe](idw::daw::PluginLoadGate::Timeout){safe->exportSession.resolvePluginTimeout();},
             [safe]{return safe!=nullptr && safe->exportCancel.load();});
         createOfflinePlugin(*chosen,44100,1024,
-            idw::daw::wrapPluginLoadCallback<juce::AudioPluginInstance>(pluginLoadGate,loadToken,
+            idw::daw::wrapPluginLoadCallback<juce::AudioPluginInstance>(exportSession.pluginLoad(),loadToken,
                 [safe]{return safe!=nullptr;},
                 [safe,snapshot,output,sourceProject,effect,state,identifier]
             (std::unique_ptr<juce::AudioPluginInstance> instance,const juce::String& failure){
@@ -3227,17 +3222,17 @@ private:
                 }
                 if(!captured)return;
                 const auto snapshot=safe->session;
-                // Flag the run before enabling the button; otherwise a click
-                // landing between the two statements is ignored as "not running".
-                safe->exportCancel.store(false);safe->exportProgress.store(0.0f);safe->exportRunning.store(true);
-                safe->bounce.setEnabled(false);safe->cancelBounce.setEnabled(true);
+                // The session flags the run before enabling the button, so an
+                // early click is honored rather than dropped.
+                safe->exportCancel.store(false);safe->exportProgress.store(0.0f);
+                if(safe->exportSession.start(idw::daw::ExportMediaKind::wav)!=idw::daw::ExportSession::Start::started)return;
                 safe->startTimerHz(10);
                 try{
                     safe->prepareWavSnapshot(snapshot,output,origin);
                 }catch(...){
                     // This call can throw before any work is queued, so abandon
                     // the load token and resolve the export once.
-                    safe->pluginLoadGate.cancel();
+                    safe->exportSession.pluginLoad().cancel();
                     if(safe->exportRunning.load())
                         safe->finishWavExport(idw::daw::ExportOutcome::failed,"WAV export failed unexpectedly.");
                 }
@@ -3292,8 +3287,8 @@ private:
                 const auto output=picker.getResult().withFileExtension(".mid");
                 const auto snapshot=safe->session;
                 if(safe->exportThread.joinable())safe->exportThread.join();
-                safe->exportCancel.store(false);safe->exportProgress.store(0);safe->exportRunning.store(true);
-                safe->bounce.setEnabled(false);safe->cancelBounce.setEnabled(true);
+                safe->exportCancel.store(false);safe->exportProgress.store(0);
+                if(safe->exportSession.start(idw::daw::ExportMediaKind::midi)!=idw::daw::ExportSession::Start::started)return;
                 safe->startTimerHz(10);
                 auto* owner=safe.getComponent();
                 try{
@@ -4082,7 +4077,7 @@ public:
     std::atomic<bool> exportCancel{false};
     // Touched only on the message thread: the chooser callback, the plugin-load
     // callback, the deadline and the cancel button all run there.
-    idw::daw::PluginLoadGate pluginLoadGate;
+    idw::daw::ExportSession exportSession{*this,idw::daw::pluginInstantiationTimeoutMs/1000};
     // Injected so a harness can drive a load that never answers or answers late.
     using OfflinePluginCreate=std::function<void(const juce::PluginDescription&,double,int,
         std::function<void(std::unique_ptr<juce::AudioPluginInstance>,const juce::String&)>)>;
