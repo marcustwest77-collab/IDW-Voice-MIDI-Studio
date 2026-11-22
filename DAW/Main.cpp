@@ -3215,7 +3215,15 @@ private:
                 safe->exportCancel.store(false);safe->exportProgress.store(0.0f);safe->exportRunning.store(true);
                 safe->bounce.setEnabled(false);safe->cancelBounce.setEnabled(true);
                 safe->startTimerHz(10);
-                safe->prepareWavSnapshot(snapshot,output,origin);
+                try{
+                    safe->prepareWavSnapshot(snapshot,output,origin);
+                }catch(...){
+                    // Nothing may escape the message thread: abandon any load this
+                    // attempt started and report the export as failed once.
+                    safe->pluginLoadGate.cancel();
+                    if(safe->exportRunning.load())
+                        safe->finishWavExport(idw::daw::ExportOutcome::failed,"WAV export failed unexpectedly.");
+                }
             });
     }
     void importMidiFile(){
