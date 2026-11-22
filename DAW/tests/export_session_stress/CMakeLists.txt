@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(IDW_SANITIZE_THREAD "Build the stress test with ThreadSanitizer" OFF)
+option(IDW_SANITIZE_ADDRESS "Build the stress test with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
 find_package(Threads REQUIRED)
 
@@ -14,13 +15,25 @@ add_executable(IDWDAWExportSessionStressTests ../ExportSessionStressTests.cpp)
 target_include_directories(IDWDAWExportSessionStressTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../..")
 target_link_libraries(IDWDAWExportSessionStressTests PRIVATE Threads::Threads)
 
-if(IDW_SANITIZE_THREAD)
+if(IDW_SANITIZE_THREAD AND IDW_SANITIZE_ADDRESS)
+    message(FATAL_ERROR "Choose one sanitizer build, not both")
+endif()
+if(IDW_SANITIZE_THREAD OR IDW_SANITIZE_ADDRESS)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        message(FATAL_ERROR "IDW_SANITIZE_THREAD requires GCC or Clang")
+        message(FATAL_ERROR "The sanitizer builds require GCC or Clang")
     endif()
+endif()
+if(IDW_SANITIZE_THREAD)
     target_compile_options(IDWDAWExportSessionStressTests PRIVATE
         -fsanitize=thread -fno-omit-frame-pointer -g -O1)
     target_link_options(IDWDAWExportSessionStressTests PRIVATE -fsanitize=thread)
+endif()
+if(IDW_SANITIZE_ADDRESS)
+    # -fno-sanitize-recover=all turns a UB report into a failure instead of a warning.
+    target_compile_options(IDWDAWExportSessionStressTests PRIVATE
+        -fsanitize=address,undefined -fno-sanitize-recover=all
+        -fno-omit-frame-pointer -g -O1)
+    target_link_options(IDWDAWExportSessionStressTests PRIVATE -fsanitize=address,undefined)
 endif()
 
 enable_testing()

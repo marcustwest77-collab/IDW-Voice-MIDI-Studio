@@ -25,7 +25,7 @@ jobs:
       - name: Configure V14 DAW
         run: cmake -S . -B build-v14 -DIDW_BUILD_DAW=ON -DBUILD_TESTING=ON -DIDW_BUILD_VST3_PROBE=ON
       - name: Build workstation and test
-        run: cmake --build build-v14 --config Release --target IDWDAW IDWVst3EffectProbe IDWDAWStereoEffectSlotTests IDWDAWTrackAudioBusTests IDWDAWExperimentalEffectPolicyTests IDWDAWEffectDiagnosticMetricsTests IDWDAWPluginStateDataTests IDWDAWDimensionalControlsTests IDWDAWPianoRollCloseTests IDWDAWPianoRollDragThresholdTests IDWDAWPianoRollSnapTests IDWDAWMidiNoteDeleteTests IDWDAWMidiNoteSelectionTests IDWDAWPianoRollLayoutTests IDWDAWPlaybackLoopTests IDWDAWLivePlaybackLoopTests IDWDAWWavExportReceiptTests IDWDAWClipSplitDialogTests IDWDAWClipPositionDialogTests IDWDAWAudioClipIdentityTests IDWDAWArmedRecordingPreflightTests IDWDAWRecordingPreflightTests IDWDAWAudioDeviceRecallStatusTests IDWDAWAudioDeviceRecallIntegrationTests IDWDAWAudioDevicePreferencesTests IDWDAWMidiLengthTests IDWDAWMidiQuantizeTests IDWDAWMidiTransposeTests IDWDAWMidiTrackVelocityTests IDWDAWMidiTrackRepeatTests IDWDAWMidiNudgeTests IDWDAWMidiDuplicateTests IDWDAWMidiVelocityTests IDWDAWStandardMidiImportTests IDWDAWStandardMidiExportTests IDWDAWMasterMixRecallTests IDWDAWPianoRollNavigationTests IDWDAWMidiEditHistoryTests IDWDAWMidiBounceTests IDWDAWPortableProjectTests IDWDAWProjectIntegerTests IDWDAWSessionSaveTests IDWDAWMultitrackOverdubTests IDWDAWExtendedRecordingTests IDWDAWAudioCallbackIsolationTests IDWDAWAudioBackendTests IDWDAWRecordEditRoundtripTests IDWDAWWindowsCommandReviewOperationTests IDWDAWLocalCommandConsentTests IDWDAWWindowsCommandReviewTests IDWDAWCommandReviewWireTests IDWDAWTLSOfferWireTests IDWDAWBridgeReadyWireTests IDWDAWPrivateReadinessTests IDWDAWLocalOfferConsentTests IDWDAWManagedOfferControllerTests IDWDAWTransportDispatchGuardTests IDWDAWNativeLocalReviewFixture IDWDAWWindowsBridgeSessionTests IDWDAWWindowsBootstrapChannelTests IDWDAWLocalSessionOwnerTests IDWDAWLocalSocketReceiverTests IDWDAWSessionTests IDWDAWTimelineTests IDWDAWPersistenceTests IDWDAWBounceTests IDWDAWExportOutcomeTests IDWDAWExportAlertMessageBoxTests IDWDAWPluginLoadGateTests IDWDAWPluginLoadDeadlineTests IDWDAWExportSessionTests IDWDAWMidiBenchmark IDWDAWClipEditingTests IDWDAWMultiClipTests IDWDAWClipFadeTests IDWDAWClipTransportTests IDWDAWWaveformTests IDWDAWZoomTests IDWDAWSnapTests IDWDAWClipHistoryTests IDWDAWRecoveryTests IDWDAWNewProjectTests IDWDAWProjectDocumentStatusTests IDWDAWProjectSaveDestinationTests IDWDAWTrackRenameTests IDWDAWRecentProjectsTests IDWDAWRelinkTests IDWDAWRecordingTests IDWDAWRemotePermissionTests IDWDAWRemoteCommandTests IDWDAWRemoteSessionControllerTests IDWDAWRemoteHandshakeTests IDWDAWRemoteWireFrameTests IDWDAWRemoteStreamDecoderTests IDWDAWRemoteReceivePipelineTests IDWDAWRemoteParserTests IDWDAWValidatedReceiverTests IDWDAWHostApprovalTests IDWDAWControllerViewTests IDWDAWRemoteReceiptTests IDWDAWHostReviewPanelCompile IDWDAWHostReviewControllerTests IDWDAWSessionReviewCoordinatorTests --parallel 2
+        run: cmake --build build-v14 --config Release --target IDWDAW IDWVst3EffectProbe IDWDAWStereoEffectSlotTests IDWDAWTrackAudioBusTests IDWDAWExperimentalEffectPolicyTests IDWDAWEffectDiagnosticMetricsTests IDWDAWPluginStateDataTests IDWDAWDimensionalControlsTests IDWDAWPianoRollCloseTests IDWDAWPianoRollDragThresholdTests IDWDAWPianoRollSnapTests IDWDAWMidiNoteDeleteTests IDWDAWMidiNoteSelectionTests IDWDAWPianoRollLayoutTests IDWDAWPlaybackLoopTests IDWDAWLivePlaybackLoopTests IDWDAWWavExportReceiptTests IDWDAWClipSplitDialogTests IDWDAWClipPositionDialogTests IDWDAWAudioClipIdentityTests IDWDAWArmedRecordingPreflightTests IDWDAWRecordingPreflightTests IDWDAWAudioDeviceRecallStatusTests IDWDAWAudioDeviceRecallIntegrationTests IDWDAWAudioDevicePreferencesTests IDWDAWMidiLengthTests IDWDAWMidiQuantizeTests IDWDAWMidiTransposeTests IDWDAWMidiTrackVelocityTests IDWDAWMidiTrackRepeatTests IDWDAWMidiNudgeTests IDWDAWMidiDuplicateTests IDWDAWMidiVelocityTests IDWDAWStandardMidiImportTests IDWDAWStandardMidiExportTests IDWDAWMasterMixRecallTests IDWDAWPianoRollNavigationTests IDWDAWMidiEditHistoryTests IDWDAWMidiBounceTests IDWDAWPortableProjectTests IDWDAWProjectIntegerTests IDWDAWSessionSaveTests IDWDAWMultitrackOverdubTests IDWDAWExtendedRecordingTests IDWDAWAudioCallbackIsolationTests IDWDAWAudioBackendTests IDWDAWRecordEditRoundtripTests IDWDAWWindowsCommandReviewOperationTests IDWDAWLocalCommandConsentTests IDWDAWWindowsCommandReviewTests IDWDAWCommandReviewWireTests IDWDAWTLSOfferWireTests IDWDAWBridgeReadyWireTests IDWDAWPrivateReadinessTests IDWDAWLocalOfferConsentTests IDWDAWManagedOfferControllerTests IDWDAWTransportDispatchGuardTests IDWDAWNativeLocalReviewFixture IDWDAWWindowsBridgeSessionTests IDWDAWWindowsBootstrapChannelTests IDWDAWLocalSessionOwnerTests IDWDAWLocalSocketReceiverTests IDWDAWSessionTests IDWDAWTimelineTests IDWDAWPersistenceTests IDWDAWBounceTests IDWDAWExportOutcomeTests IDWDAWExportAlertMessageBoxTests IDWDAWPluginLoadGateTests IDWDAWPluginLoadDeadlineTests IDWDAWExportSessionTests IDWDAWExportSessionStressTests IDWDAWMidiBenchmark IDWDAWClipEditingTests IDWDAWMultiClipTests IDWDAWClipFadeTests IDWDAWClipTransportTests IDWDAWWaveformTests IDWDAWZoomTests IDWDAWSnapTests IDWDAWClipHistoryTests IDWDAWRecoveryTests IDWDAWNewProjectTests IDWDAWProjectDocumentStatusTests IDWDAWProjectSaveDestinationTests IDWDAWTrackRenameTests IDWDAWRecentProjectsTests IDWDAWRelinkTests IDWDAWRecordingTests IDWDAWRemotePermissionTests IDWDAWRemoteCommandTests IDWDAWRemoteSessionControllerTests IDWDAWRemoteHandshakeTests IDWDAWRemoteWireFrameTests IDWDAWRemoteStreamDecoderTests IDWDAWRemoteReceivePipelineTests IDWDAWRemoteParserTests IDWDAWValidatedReceiverTests IDWDAWHostApprovalTests IDWDAWControllerViewTests IDWDAWRemoteReceiptTests IDWDAWHostReviewPanelCompile IDWDAWHostReviewControllerTests IDWDAWSessionReviewCoordinatorTests --parallel 2
       - name: Upload experimental VST3 probe
         uses: actions/upload-artifact@v4
         with:
@@ -97,14 +97,23 @@ jobs:
   # ThreadSanitizer on the export-session stress test: the race check for the
   # single-owner atomics. Linux only, no JUCE build, so it stays a few minutes.
   sanitizer:
+    name: sanitizer (${{ matrix.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: thread
+            option: IDW_SANITIZE_THREAD
+          - name: address-undefined
+            option: IDW_SANITIZE_ADDRESS
     steps:
       - uses: actions/checkout@v4
       # Standalone project: no JUCE, so configure cannot need freetype or X11.
-      - name: Configure with ThreadSanitizer
-        run: cmake -S DAW/tests/export_session_stress -B build-tsan -DIDW_SANITIZE_THREAD=ON
+      - name: Configure with ${{ matrix.name }}
+        run: cmake -S DAW/tests/export_session_stress -B build-sanitizer -D${{ matrix.option }}=ON
       - name: Build the session stress test
-        run: cmake --build build-tsan
-      - name: Run under ThreadSanitizer
-        run: ctest --test-dir build-tsan --output-on-failure
+        run: cmake --build build-sanitizer
+      - name: Run under ${{ matrix.name }}
+        run: ctest --test-dir build-sanitizer --output-on-failure
