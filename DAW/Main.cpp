@@ -1801,6 +1801,7 @@ private:
     std::unique_ptr<EffectEditorWindow> effectEditor;
     juce::AudioPluginFormatManager effectFormats;
     bool effectLoading=false,effectBypassed=false;
+    bool projectEffectSnapshotPending=false;
     juce::String effectIdentifier;
     size_t effectTrack=0;
     double effectRate=0,effectDrainSeconds=0;int effectBlock=0;
@@ -2713,6 +2714,7 @@ private:
             !exportRunning.load() && !draggingClip && !loopbackCapture.isActive();
     }
     bool autosaveRecovery(){
+        if(projectEffectSnapshotPending)return false;
         if(!recoveryIdle())return false;
         if(!captureProjectEffect())return false;
         const auto result=recovery.checkpoint(session,currentProject);
@@ -3210,7 +3212,7 @@ private:
             commandStatus.setText("Project ready; recent-list preference could not be saved",juce::dontSendNotification);
     }
     void finishProjectSave(const std::shared_ptr<idw::daw::ProjectSavePlan>& plan,bool replaceApproved){
-        if(!captureProjectEffect())return;
+        projectEffectSnapshotPending=false;
         juce::String error;
         if(!plan->commit(session,currentProject,recoveryIdle(),replaceApproved,error)){
             juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save failed",error);return;
@@ -3222,6 +3224,7 @@ private:
         rememberRecentProject();
     }
     void saveProjectFile(){
+        if(projectEffectSnapshotPending)return;
         if(!captureProjectEffect())return;
         if(!recoveryIdle())return;
         pianoRoll.setVisible(false); // Finalize pending note edits before the save workflow.
@@ -3229,13 +3232,17 @@ private:
         const auto expectedState=juce::JSON::toString(idw::daw::sessionToJson(session),true);
         const auto initial=idw::daw::suggestedProjectSaveDestination(currentProject,
             juce::File::getSpecialLocation(juce::File::userDocumentsDirectory));
-        projectChooser=std::make_unique<juce::FileChooser>("Save IDW DAW Project",initial,"*.idwproj");
+        projectChooser=std::make_unique<juce::FileChooser>("Save IDW DAW Project (settings snapshot)",initial,"*.idwproj");
+        // VST state may include changing housekeeping bytes. Capture once per
+        // save request; periodic recovery must not invalidate this snapshot.
+        projectEffectSnapshotPending=true;
         // Confirm the normalized final path ourselves, rather than a picker alias.
         projectChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
             [safe=juce::Component::SafePointer<Workstation>(this),expectedProject,expectedState](const juce::FileChooser& picker){
-                if(safe==nullptr || picker.getResult()==juce::File{} || !safe->recoveryIdle())return;
-                if(!safe->captureProjectEffect())return;
+                if(safe==nullptr)return;
+                if(picker.getResult()==juce::File{} || !safe->recoveryIdle()){safe->projectEffectSnapshotPending=false;return;}
                 if(safe->currentProject!=expectedProject || juce::JSON::toString(idw::daw::sessionToJson(safe->session),true)!=expectedState){
+                    safe->projectEffectSnapshotPending=false;
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Save cancelled",
                         "The project changed while the file picker was open. Choose SAVE PROJECT again.");return;
                 }
@@ -3247,6 +3254,7 @@ private:
                 prompt->addButton("Cancel",0,juce::KeyPress(juce::KeyPress::escapeKey),juce::KeyPress(juce::KeyPress::returnKey));
                 prompt->enterModalState(true,juce::ModalCallbackFunction::create([safe,plan](int result){
                     if(safe!=nullptr && result==1)safe->finishProjectSave(plan,true);
+                    else if(safe!=nullptr)safe->projectEffectSnapshotPending=false;
                 }),true);
             });
     }

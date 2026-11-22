@@ -57,6 +57,16 @@ int main(){
         status.begin(edited,replace.target());require(!status.hasUnsavedChanges(edited),"saved status");
         Session read;require(loadSession(canonical,read) && read.bpm==100 && read.tracks[1].notes[0].velocity==70,"saved model mismatch");
         require(!replace.commit(edited,canonical,true,true,error),"double commit");
+        // Save uses one captured effect snapshot, including across replacement
+        // confirmation; do not substitute a later plugin capture at commit.
+        auto withEffect=edited;PluginStateData effect;effect.identifier="snapshot-test";
+        effect.bytes.append("first",5);withEffect.tracks[0].effectPreset=encodePluginState(effect)->toStdString();
+        const auto effectFile=root.getChildFile("Effect.idwproj");
+        ProjectSavePlan effectPlan(withEffect,canonical,effectFile);
+        effect.bytes.append("later",5); // A later capture is not this save request.
+        require(effectPlan.commit(withEffect,canonical,true,false,error),"effect snapshot save");
+        require(loadSession(effectFile,read) && read.tracks[0].effectPreset==withEffect.tracks[0].effectPreset,
+            "effect snapshot changed during save");
         // A new file appearing after selection still needs explicit consent.
         const auto next=root.getChildFile("New.idwproj");ProjectSavePlan race(edited,canonical,next);
         require(next.replaceWithText("appeared after picker"),"new target fixture");
