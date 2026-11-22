@@ -67,7 +67,7 @@ int main(int argc,char** argv){try{
     editor.session=&rendered;editor.resetEditor();select(editor);half->onClick();
     const auto root=juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile("idw-midi-length","",false);
     require(root.createDirectory().wasOk(),"fixture directory");juce::String error;
-    const auto shortWav=root.getChildFile("short.wav");require(renderProjectWav(rendered,shortWav,error,48000),"short note WAV");
+    const auto shortWav=root.getChildFile("short.wav");require(renderProjectWav(rendered,shortWav,error,48000).completed(),"short note WAV");
     twice->onClick();twice->onClick();const auto project=root.getChildFile("Session.idwproj");
     require(saveSession(rendered,project),"save duration edit");Session reopened;
     require(loadSession(project,reopened) && reopened.tracks[0].notes[0].lengthBeats==2,"reopen duration edit");

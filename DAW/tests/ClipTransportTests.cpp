@@ -95,7 +95,7 @@ int main(){
     for(auto curve:{FadeCurve::linear,FadeCurve::equalPower}){
         require(overlapSession.crossfadeClips(0,0,1,curve),"crossfade fixture");
         const auto output=root.getChildFile(curve==FadeCurve::linear?"linear.wav":"power.wav");
-        juce::String error;require(renderSessionWav(overlapSession,output,error),"crossfade bounce");
+        juce::String error;require(renderSessionWav(overlapSession,output,error).completed(),"crossfade bounce");
         juce::AudioFormatManager formats;formats.registerBasicFormats();
         auto bounceReader=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(output));
         require(bounceReader!=nullptr,"bounce reader");
@@ -109,7 +109,7 @@ int main(){
     // Exercise history through actual audio, not just metadata. Each curve
     // starts from a dry session, with independent outside fades on the pair.
     const auto bounceAudio=[&](const Session& session,const juce::File& output){
-        juce::String error;require(renderSessionWav(session,output,error),"history bounce");
+        juce::String error;require(renderSessionWav(session,output,error).completed(),"history bounce");
         juce::AudioFormatManager formats;formats.registerBasicFormats();
         auto reader=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(output));
         require(reader!=nullptr && reader->lengthInSamples==160,"history bounce length");
@@ -188,7 +188,7 @@ int main(){
                         FadeCurve::equalPower,FadeCurve::linear,-6.0});
     require(duplicate.duplicateClip(0,0),"duplicate audio clip");
     const auto duplicateWav=root.getChildFile("duplicate.wav");juce::String duplicateError;
-    require(renderSessionWav(duplicate,duplicateWav,duplicateError),"duplicate export");
+    require(renderSessionWav(duplicate,duplicateWav,duplicateError).completed(),"duplicate export");
     {
         juce::AudioFormatManager formats;formats.registerBasicFormats();
         auto reader=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(duplicateWav));

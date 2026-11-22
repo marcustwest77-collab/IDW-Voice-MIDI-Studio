@@ -68,8 +68,8 @@ int main(){
         s.playbackLoopEnabled=true;require(!preparePlayback(s,0,true) && preparePlayback(s,0,false).has_value(),"invalid loop device rate / overdub isolation");
         // Export must render the complete arrangement once, irrespective of loop.
         juce::String error;const auto loopWav=root.getChildFile("LoopPreference.wav"),linearWav=root.getChildFile("Linear.wav");
-        require(renderProjectWav(s,loopWav,error,8000),"export with loop preference");s.playbackLoopEnabled=false;
-        require(renderProjectWav(s,linearWav,error,8000),"linear export");juce::MemoryBlock a,b;
+        require(renderProjectWav(s,loopWav,error,8000).completed(),"export with loop preference");s.playbackLoopEnabled=false;
+        require(renderProjectWav(s,linearWav,error,8000).completed(),"linear export");juce::MemoryBlock a,b;
         require(loopWav.loadFileAsData(a) && linearWav.loadFileAsData(b) && a==b,"loop altered/truncated export");
         require(root.getParentDirectory()==temp && root.deleteRecursively(),"cleanup");
         std::cout<<"Live playback loop settings/snapshot tests passed\n";return 0;

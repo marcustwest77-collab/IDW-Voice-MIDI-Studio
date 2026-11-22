@@ -52,8 +52,8 @@ int main(){
     std::abs(wetAudio.getSample(1,2000)-0.375f)>0.001f)
      throw std::runtime_error("effect must process summed track before gain/pan");
  const auto missingEffectOutput=root.getChildFile("missing-effect.wav");
- if(renderProjectWav(wetSession,missingEffectOutput,effectError) || missingEffectOutput.exists())
-     throw std::runtime_error("saved effect silently exported dry");
+ if(renderProjectWav(wetSession,missingEffectOutput,effectError)!=ExportOutcome::failed || missingEffectOutput.exists())
+     throw std::runtime_error("saved effect silently exported dry or was reported as canceled");
  // Delay larger than a render block must align wet and dry tracks and retain
  // the final source samples. A declared tail extends only the output duration.
  wetSession.tracks[0].clips.resize(1);wetSession.tracks[0].gain=1;wetSession.tracks[0].pan=0;
@@ -107,8 +107,9 @@ int main(){
  std::atomic<bool> effectCancel{false};
  effect.process=[&](juce::AudioBuffer<float>&){effectCancel.store(true);return true;};
  const auto canceledEffectOutput=root.getChildFile("canceled-effect.wav");
- if(renderProjectWav(wetSession,canceledEffectOutput,effectError,44100,nullptr,&effectCancel,&effect) || canceledEffectOutput.exists())
-     throw std::runtime_error("canceled effect left an output");
+ const auto effectCancelResult=renderProjectWav(wetSession,canceledEffectOutput,effectError,44100,nullptr,&effectCancel,&effect);
+ if(effectCancelResult!=ExportOutcome::canceled || canceledEffectOutput.exists())
+     throw std::runtime_error("canceled effect left an output or was not reported as canceled");
  const auto existingLength=wetOutput.getSize();
  if(renderProjectWav(wetSession,wetOutput,effectError,44100,nullptr,nullptr,&effect) || wetOutput.getSize()!=existingLength)
      throw std::runtime_error("effect export overwrote existing output");
@@ -511,10 +512,9 @@ int main(){
  std::atomic<float> progress{0.0f};
  std::atomic<bool> cancel{true};
  error.clear();
- if(renderSessionWav(session,canceledOutput,error,44100,1.0f,-1.0f,0.0f,0.0f,&progress,&cancel))
-    throw std::runtime_error("accepted canceled bounce");
- if(canceledOutput.existsAsFile() || error!="Export canceled.")
-    throw std::runtime_error("canceled bounce left an output");
+ const auto cancelResult=renderSessionWav(session,canceledOutput,error,44100,1.0f,-1.0f,0.0f,0.0f,&progress,&cancel);
+ if(cancelResult!=ExportOutcome::canceled || canceledOutput.existsAsFile() || error!="Export canceled.")
+    throw std::runtime_error("canceled bounce left an output or was not reported as canceled");
  reader.reset();root.deleteRecursively();
  std::cout<<"PASS: stereo WAV bounce timeline and signal test\n";
 }

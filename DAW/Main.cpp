@@ -3089,13 +3089,14 @@ private:
                         "The project is invalid or cannot be opened during playback.");
             });
     }
-    void finishWavExport(bool ok,const juce::String& error,const std::optional<juce::String>& receipt={}){
+    void finishWavExport(idw::daw::ExportOutcome outcome,const juce::String& error,const std::optional<juce::String>& receipt={}){
         exportRunning.store(false);bounce.setEnabled(true);cancelBounce.setEnabled(false);
         cancelBounce.setButtonText("CANCEL EXPORT");
         if(!playing.load())stopTimer();repaint();
-        const bool canceled=!ok && error=="Export canceled.";
-        juce::AlertWindow::showMessageBoxAsync(ok || canceled?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
-            ok?"WAV export complete":canceled?"WAV export canceled":"WAV bounce unavailable",ok?(receipt?*receipt:juce::String("WAV written; verify the exported file before using it.")):error);
+        const auto plan=idw::daw::exportAlertPlan(idw::daw::ExportMediaKind::wav,outcome);
+        const bool ok=outcome==idw::daw::ExportOutcome::completed;
+        juce::AlertWindow::showMessageBoxAsync(plan.icon==idw::daw::ExportAlertIcon::info?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
+            juce::String(plan.title),ok?(receipt?*receipt:juce::String("WAV written; verify the exported file before using it.")):error);
     }
     void renderWavSnapshot(const idw::daw::Session& snapshot,const juce::File& output,
                            const juce::File& sourceProject,std::shared_ptr<idw::daw::OfflineBounceEffect> effect={}){
@@ -3103,11 +3104,11 @@ private:
         const juce::Component::SafePointer<Workstation> safe(this);
         exportThread=std::thread([this,safe,snapshot,output,sourceProject,effect]() mutable {
             juce::String error;
-            const bool ok=idw::daw::renderProjectWav(snapshot,output,error,44100,&exportProgress,&exportCancel,effect.get());
-            const auto receipt=ok?idw::daw::wavExportReceipt(sourceProject,output):std::nullopt;
+            const auto outcome=idw::daw::renderProjectWav(snapshot,output,error,44100,&exportProgress,&exportCancel,effect.get()).outcome;
+            const auto receipt=outcome==idw::daw::ExportOutcome::completed?idw::daw::wavExportReceipt(sourceProject,output):std::nullopt;
             // Retain the offline processor until its message-thread callback.
-            juce::MessageManager::callAsync([safe,ok,error,receipt,effect=std::move(effect)]{
-                if(safe!=nullptr)safe->finishWavExport(ok,error,receipt);
+            juce::MessageManager::callAsync([safe,outcome,error,receipt,effect=std::move(effect)]{
+                if(safe!=nullptr)safe->finishWavExport(outcome,error,receipt);
             });
         });
     }
@@ -3116,7 +3117,7 @@ private:
         while(track<snapshot.tracks.size() && snapshot.tracks[track].effectPreset.empty())++track;
         if(track==snapshot.tracks.size()){renderWavSnapshot(snapshot,output,sourceProject);return;}
         const auto state=idw::daw::decodePluginState(juce::String(snapshot.tracks[track].effectPreset));
-        if(!state){finishWavExport(false,"Saved effect settings are invalid.");return;}
+        if(!state){finishWavExport(idw::daw::ExportOutcome::failed,"Saved effect settings are invalid.");return;}
         auto effect=std::make_shared<idw::daw::OfflineBounceEffect>();
         effect->track=track;effect->preset=snapshot.tracks[track].effectPreset;
         if(state->bypassed){
@@ -3124,28 +3125,28 @@ private:
             renderWavSnapshot(snapshot,output,sourceProject,effect);return;
         }
         const juce::File file("C:/Program Files/Common Files/VST3/MeldaProduction/Pitch Shift/MAutoPitch.vst3");
-        if(!file.existsAsFile()){finishWavExport(false,"MAutoPitch is missing. The WAV was not exported dry.");return;}
+        if(!file.existsAsFile()){finishWavExport(idw::daw::ExportOutcome::failed,"MAutoPitch is missing. The WAV was not exported dry.");return;}
         if(effectFormats.getNumFormats()==0)effectFormats.addFormat(new juce::VST3PluginFormat());
         juce::OwnedArray<juce::PluginDescription> types;
         effectFormats.getFormat(0)->findAllTypesForFile(types,file.getFullPathName());
         const juce::PluginDescription* chosen=nullptr;
         for(const auto* type:types)if(!type->isInstrument && idw::daw::pluginStateMatches(*state,type->createIdentifierString())){chosen=type;break;}
-        if(!chosen){finishWavExport(false,"The installed effect does not match the saved plugin identity.");return;}
+        if(!chosen){finishWavExport(idw::daw::ExportOutcome::failed,"The installed effect does not match the saved plugin identity.");return;}
         const auto identifier=chosen->createIdentifierString();
         effectFormats.createPluginInstanceAsync(*chosen,44100,1024,
             [safe=juce::Component::SafePointer<Workstation>(this),snapshot,output,sourceProject,effect,state,identifier]
             (std::unique_ptr<juce::AudioPluginInstance> instance,const juce::String& failure){
                 if(safe==nullptr)return;
-                if(safe->exportCancel.load()){safe->finishWavExport(false,"Export canceled.");return;}
+                if(safe->exportCancel.load()){safe->finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");return;}
                 auto slot=std::make_shared<idw::daw::StereoEffectSlot>();juce::String error=failure;
                 if(instance)instance->setNonRealtime(true);
                 if(!instance || !slot->install(std::move(instance),44100,1024,error,&*state,identifier)){
-                    safe->finishWavExport(false,error.isEmpty()?juce::String("Could not prepare MAutoPitch for export."):error);return;
+                    safe->finishWavExport(idw::daw::ExportOutcome::failed,error.isEmpty()?juce::String("Could not prepare MAutoPitch for export."):error);return;
                 }
                 const double tail=slot->processorForControlThread()->getTailLengthSeconds();
                 effect->latency=slot->latencySamples();
                 if(!std::isfinite(tail) || tail<0 || tail>30 || effect->latency<0 || effect->latency>44100*30){
-                    safe->finishWavExport(false,"The effect reports an unsupported tail or latency (maximum 30 seconds).");return;
+                    safe->finishWavExport(idw::daw::ExportOutcome::failed,"The effect reports an unsupported tail or latency (maximum 30 seconds).");return;
                 }
                 effect->tail=(int)std::ceil(tail*44100);
                 effect->process=[slot,latency=effect->latency](juce::AudioBuffer<float>& buffer){
@@ -3227,17 +3228,18 @@ private:
                 safe->startTimerHz(10);
                 auto* owner=safe.getComponent();
                 safe->exportThread=std::thread([owner,safe,snapshot,output]{
-                    juce::String error;bool ok=false;
-                    try{ok=idw::daw::exportSessionMidi(snapshot,output,error,&owner->exportProgress,&owner->exportCancel);}
-                    catch(...){error="Could not complete MIDI export.";}
-                    juce::MessageManager::callAsync([safe,ok,error]{
+                    juce::String error;auto outcome=idw::daw::ExportOutcome::failed;
+                    try{outcome=idw::daw::exportSessionMidi(snapshot,output,error,&owner->exportProgress,&owner->exportCancel).outcome;}
+                    catch(...){error="Could not complete MIDI export.";outcome=idw::daw::ExportOutcome::failed;}
+                    juce::MessageManager::callAsync([safe,outcome,error]{
                         if(safe==nullptr)return;
                         safe->exportRunning.store(false);safe->bounce.setEnabled(true);safe->cancelBounce.setEnabled(false);
                         safe->cancelBounce.setButtonText("CANCEL EXPORT");
                         if(!safe->playing.load())safe->stopTimer();safe->repaint();
-                        const bool canceled=!ok && error=="MIDI export canceled.";
-                        juce::AlertWindow::showMessageBoxAsync(ok || canceled?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
-                            ok?"MIDI export complete":canceled?"MIDI export canceled":"MIDI export unavailable",
+                        const auto plan=idw::daw::exportAlertPlan(idw::daw::ExportMediaKind::midi,outcome);
+                        const bool ok=outcome==idw::daw::ExportOutcome::completed;
+                        juce::AlertWindow::showMessageBoxAsync(plan.icon==idw::daw::ExportAlertIcon::info?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
+                            juce::String(plan.title),
                             ok?"MIDI tracks exported. Open the file in another DAW and choose instruments for its tracks.":error);
                     });
                 });

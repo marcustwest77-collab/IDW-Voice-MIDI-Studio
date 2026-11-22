@@ -93,7 +93,7 @@ int main(int argc,char** argv) {
 
         juce::String error;std::atomic<float> progress{0};
         const auto output=root.getChildFile("Workflow-48k.wav");
-        require(renderSessionWav(session,output,error,48000,1,-1,0,0,&progress),"48k bounce failed");
+        require(renderSessionWav(session,output,error,48000,1,-1,0,0,&progress).completed(),"48k bounce failed");
         require(progress.load()==1.0f,"bounce incomplete");
         const auto bounced=readWav(output,48000,120000);
         near(bounced.getSample(0,6000),0,"trimmed lead-in must be silent");
@@ -106,7 +106,7 @@ int main(int argc,char** argv) {
         near(bounced.getSample(0,72000),0,"fade-in endpoint");
         near(bounced.getSample(0,119999),0,"fade-out endpoint");
         const auto converted=root.getChildFile("Workflow-44k1.wav");
-        require(renderSessionWav(session,converted,error,44100),"44k1 bounce failed");
+        require(renderSessionWav(session,converted,error,44100).completed(),"44k1 bounce failed");
         const auto resampled=readWav(converted,44100,110250);
         near(resampled.getSample(0,22050),0.2f,"resampled timeline/gain");
         near(resampled.getSample(1,77175),0.1125f*clipGain,"resampled stereo/source offset");

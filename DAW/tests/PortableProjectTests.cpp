@@ -56,7 +56,7 @@ int main(int argc,char** argv) {
         const auto sourceJson=json(source);juce::String error;
         require(!exportPortableProject(source,{},error) && error.isNotEmpty(),"empty destination accepted");
         const auto reference=root.getChildFile("Reference.wav");
-        require(renderSessionWav(source,reference,error),"reference mix");
+        require(renderSessionWav(source,reference,error).completed(),"reference mix");
         const auto package=root.getChildFile("Package");error="stale error";
         require(exportPortableProject(source,package,error),"portable export");
         require(package.getChildFile("Audio").findChildFiles(juce::File::findFiles,false).size()==2,
@@ -95,7 +95,7 @@ int main(int argc,char** argv) {
             clip.sourcePath=relocated.getChildFile(clip.sourcePath).getFullPathName().toStdString();
         }
         const auto mix=root.getChildFile("Relocated.wav");
-        require(renderSessionWav(portable,mix,error),"relocated mix needs unavailable originals");compareMix(reference,mix);
+        require(renderSessionWav(portable,mix,error).completed(),"relocated mix needs unavailable originals");compareMix(reference,mix);
         const auto liveBeforeSave=json(portable);
         require(saveProjectSession(portable,relocated.getChildFile("Session.idwproj")),"resave opened portable project");
         require(json(portable)==liveBeforeSave,"portable resave changed live player paths");
@@ -123,7 +123,7 @@ int main(int argc,char** argv) {
             clip.sourcePath=again.getChildFile(clip.sourcePath).getFullPathName().toStdString();
         }
         const auto secondMix=root.getChildFile("Moved-Again.wav");
-        require(renderSessionWav(movedAgain,secondMix,error),"resaved/moved mix");compareMix(reference,secondMix);
+        require(renderSessionWav(movedAgain,secondMix,error).completed(),"resaved/moved mix");compareMix(reference,secondMix);
         auto mixedPaths=movedAgain;
         const auto external=hidden.getChildFile("B/take.wav").getFullPathName().toStdString();
         mixedPaths.tracks[1].clips[0].sourcePath=external;

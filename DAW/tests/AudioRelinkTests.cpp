@@ -69,7 +69,7 @@ int main(){
     // when exporting because export correctly refuses missing media.
     live.tracks.pop_back();
     const auto output=root.getChildFile("relinked.wav");
-    require(renderSessionWav(live,output,error),"relinked export");
+    require(renderSessionWav(live,output,error).completed(),"relinked export");
     auto exported=std::unique_ptr<juce::AudioFormatReader>(formats.createReaderFor(output));
     require(exported!=nullptr,"export reader");
     juce::AudioBuffer<float> expectedAudio(2,192);require(exported->read(&expectedAudio,0,192,0,true,true),"export samples");

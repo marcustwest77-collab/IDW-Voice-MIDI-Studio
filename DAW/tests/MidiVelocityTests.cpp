@@ -89,15 +89,15 @@ int main(int argc,char** argv){try{
     require(root.createDirectory().wasOk(),"fixture directory");const auto project=root.getChildFile("Session.idwproj");
     require(saveSession(s,project),"velocity project save");Session reopened;
     require(loadSession(project,reopened) && reopened.tracks[0].notes[0].velocity==1,"velocity project reopen");
-    juce::String error;const auto midi=root.getChildFile("velocity.mid");require(exportSessionMidi(reopened,midi,error),"velocity MIDI export");
+    juce::String error;const auto midi=root.getChildFile("velocity.mid");require(exportSessionMidi(reopened,midi,error).completed(),"velocity MIDI export");
     juce::MidiFile file;{juce::FileInputStream input(midi);require(file.readFrom(input,false),"velocity MIDI read");}
     bool found=false;for(int i=0;i<file.getTrack(1)->getNumEvents();++i){const auto& m=file.getTrack(1)->getEventPointer(i)->message;
         if(m.isNoteOn()){require(m.getVelocity()==1,"MIDI velocity changed");found=true;}}
     require(found,"MIDI note missing");
     const auto quiet=root.getChildFile("quiet.wav"),loud=root.getChildFile("loud.wav");
-    require(renderProjectWav(reopened,quiet,error,48000),"quiet WAV");
+    require(renderProjectWav(reopened,quiet,error,48000).completed(),"quiet WAV");
     select(editor);require(editor.setSelectionVelocity(127),"maximum velocity edit");
-    require(renderProjectWav(s,loud,error,48000),"loud WAV");
+    require(renderProjectWav(s,loud,error,48000).completed(),"loud WAV");
     require(std::abs(sample(quiet)*127-sample(loud))<0.00002f && std::abs(sample(loud))>0.01f,"velocity not reflected in WAV amplitude");
     require(editor.restoreHistory(true) && s.tracks[0].notes[0].velocity==1,"maximum velocity undo");
     require(editor.restoreHistory(false) && s.tracks[0].notes[0].velocity==127,"maximum velocity redo");
