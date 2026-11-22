@@ -22,6 +22,96 @@ int main(){
  const float* ptrs[]{audio.getReadPointer(0)};
  if(!writer->writeFromFloatArrays(ptrs,1,4800))throw std::runtime_error("write input");
  writer.reset();
+ // Effects operate on a summed track before its gain/pan, leaving other tracks dry.
+ Session wetSession;wetSession.setTempo(120);wetSession.addTrack(TrackType::audio);
+ wetSession.addTrack(TrackType::audio);
+ wetSession.addClip(0,{input.getFullPathName().toStdString(),0.0,0.2,0.0});
+ wetSession.addClip(0,{input.getFullPathName().toStdString(),0.0,0.2,0.0});
+ wetSession.addClip(1,{input.getFullPathName().toStdString(),0.0,0.2,0.0});
+ wetSession.tracks[0].effectPreset="test captured state";
+ wetSession.tracks[0].gain=0.5f;wetSession.tracks[0].pan=0.5f;
+ OfflineBounceEffect effect;effect.track=0;effect.preset=wetSession.tracks[0].effectPreset;
+ effect.process=[](juce::AudioBuffer<float>& b){
+     for(int ch=0;ch<2;++ch)for(int i=0;i<b.getNumSamples();++i){
+         const float v=b.getSample(ch,i);b.setSample(ch,i,v*v);
+     }return true;
+ };
+ juce::String effectError;
+ auto readEffectOutput=[&](const juce::File& file,int expectedFrames){
+     auto r=std::unique_ptr<juce::AudioFormatReader>(wav.createReaderFor(file.createInputStream().release(),true));
+     if(!r || r->lengthInSamples!=expectedFrames)throw std::runtime_error("effect export duration");
+     juce::AudioBuffer<float> b(2,expectedFrames);
+     if(!r->read(&b,0,expectedFrames,0,true,true))throw std::runtime_error("effect export read");
+     return b;
+ };
+ const auto wetOutput=root.getChildFile("wet.wav");
+ if(!renderProjectWav(wetSession,wetOutput,effectError,44100,nullptr,nullptr,&effect))
+     throw std::runtime_error(effectError.toStdString());
+ auto wetAudio=readEffectOutput(wetOutput,4410);
+ if(std::abs(wetAudio.getSample(0,2000)-0.3125f)>0.001f ||
+    std::abs(wetAudio.getSample(1,2000)-0.375f)>0.001f)
+     throw std::runtime_error("effect must process summed track before gain/pan");
+ const auto missingEffectOutput=root.getChildFile("missing-effect.wav");
+ if(renderProjectWav(wetSession,missingEffectOutput,effectError) || missingEffectOutput.exists())
+     throw std::runtime_error("saved effect silently exported dry");
+ // Delay larger than a render block must align wet and dry tracks and retain
+ // the final source samples. A declared tail extends only the output duration.
+ wetSession.tracks[0].clips.resize(1);wetSession.tracks[0].gain=1;wetSession.tracks[0].pan=0;
+ effect.latency=1537;effect.tail=137;
+ juce::AudioBuffer<float> pluginDelay(2,effect.latency);pluginDelay.clear();int cursor=0;
+ effect.process=[&](juce::AudioBuffer<float>& b){
+     for(int i=0;i<b.getNumSamples();++i){
+         for(int ch=0;ch<2;++ch){
+             const float v=pluginDelay.getSample(ch,cursor);
+             pluginDelay.setSample(ch,cursor,b.getSample(ch,i)*2);b.setSample(ch,i,v);
+         }cursor=(cursor+1)%effect.latency;
+     }return true;
+ };
+ const auto delayedOutput=root.getChildFile("delayed-effect.wav");
+ if(!renderProjectWav(wetSession,delayedOutput,effectError,44100,nullptr,nullptr,&effect))
+     throw std::runtime_error(effectError.toStdString());
+ auto delayedAudio=readEffectOutput(delayedOutput,4547);
+ for(int at:{100,1023,1024,1536,1537,4390})
+     if(std::abs(delayedAudio.getSample(0,at)-0.75f)>0.001f)
+         throw std::runtime_error("effect latency alignment or final samples");
+ if(std::abs(delayedAudio.getSample(0,4546))>0.001f)throw std::runtime_error("effect tail drain");
+ effect.latency=effect.tail=0;effect.process=[](juce::AudioBuffer<float>&){return true;};
+ const auto bypassOutput=root.getChildFile("bypass.wav");
+ if(!renderProjectWav(wetSession,bypassOutput,effectError,44100,nullptr,nullptr,&effect) ||
+     std::abs(readEffectOutput(bypassOutput,4410).getSample(0,2000)-0.5f)>0.001f)
+     throw std::runtime_error("effect bypass export");
+ const auto bypassAudio=readEffectOutput(bypassOutput,4410);
+ for(int ch=0;ch<2;++ch)for(int i=0;i<4410;++i)
+     if(std::abs(delayedAudio.getSample(ch,i)-1.5f*bypassAudio.getSample(ch,i))>0.00001f)
+         throw std::runtime_error("delayed effect lost first/last samples or track alignment");
+ effect.process=[](juce::AudioBuffer<float>&){throw std::runtime_error("plugin failure");return true;};
+ const auto failedEffectOutput=root.getChildFile("failed-effect.wav");
+ if(renderProjectWav(wetSession,failedEffectOutput,effectError,44100,nullptr,nullptr,&effect) || failedEffectOutput.exists())
+     throw std::runtime_error("effect failure left partial output");
+ wetSession.tracks[0].mute=true;
+ const auto mutedEffectOutput=root.getChildFile("muted-effect.wav");
+ if(!renderProjectWav(wetSession,mutedEffectOutput,effectError,44100,nullptr,nullptr,&effect) ||
+     std::abs(readEffectOutput(mutedEffectOutput,4410).getSample(0,2000)-0.25f)>0.001f)
+     throw std::runtime_error("muted effect was processed");
+ wetSession.tracks[0].mute=false;
+ wetSession.tracks[1].solo=true;
+ const auto soloOutput=root.getChildFile("solo-dry.wav");
+ if(!renderProjectWav(wetSession,soloOutput,effectError,44100,nullptr,nullptr,&effect) ||
+     std::abs(readEffectOutput(soloOutput,4410).getSample(0,2000)-0.25f)>0.001f)
+     throw std::runtime_error("non-solo effect was processed");
+ wetSession.tracks[1].solo=false;
+ effect.process=[](juce::AudioBuffer<float>& b){b.setSample(0,0,std::numeric_limits<float>::quiet_NaN());return true;};
+ const auto nonfiniteOutput=root.getChildFile("nonfinite-effect.wav");
+ if(renderProjectWav(wetSession,nonfiniteOutput,effectError,44100,nullptr,nullptr,&effect) || nonfiniteOutput.exists())
+     throw std::runtime_error("nonfinite effect left an output");
+ std::atomic<bool> effectCancel{false};
+ effect.process=[&](juce::AudioBuffer<float>&){effectCancel.store(true);return true;};
+ const auto canceledEffectOutput=root.getChildFile("canceled-effect.wav");
+ if(renderProjectWav(wetSession,canceledEffectOutput,effectError,44100,nullptr,&effectCancel,&effect) || canceledEffectOutput.exists())
+     throw std::runtime_error("canceled effect left an output");
+ const auto existingLength=wetOutput.getSize();
+ if(renderProjectWav(wetSession,wetOutput,effectError,44100,nullptr,nullptr,&effect) || wetOutput.getSize()!=existingLength)
+     throw std::runtime_error("effect export overwrote existing output");
  // Mix a second source recorded at 44.1 kHz with the 48 kHz take.
  const auto second=root.getChildFile("second.wav");
  auto secondStream=std::unique_ptr<juce::FileOutputStream>(second.createOutputStream());

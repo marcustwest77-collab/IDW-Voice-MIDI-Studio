@@ -5,7 +5,7 @@
 #include "PluginStateData.h"
 namespace idw::daw {
 // Control-thread lifecycle; the caller must stop callbacks before install/clear.
-// Workstation playback uses this slot; offline rendering remains unsupported.
+// Playback and offline export each own a separate instance of this slot.
 class StereoEffectSlot {
 public:
     ~StereoEffectSlot(){clear();}

@@ -6,13 +6,35 @@
 #include <algorithm>
 #include <cmath>
 #include <atomic>
+#include <functional>
 namespace idw::daw {
+// An export-owned processor, prepared for 1024-frame blocks at the export rate.
+// The caller owns its lifetime; the live playback instance must never be used.
+struct OfflineBounceEffect {
+    size_t track=0;
+    std::string preset;
+    int latency=0,tail=0;
+    std::function<bool(juce::AudioBuffer<float>&)> process;
+};
 // Offline stereo bounce. Reads source files into small blocks and sums against
 // the shared beat clock, including the built-in MIDI instruments.
 // Call only from a non-audio thread. Returns false and a readable error.
 inline bool renderSessionWav(const Session& session,const juce::File& destination,
                             juce::String& error,int sampleRate=44100,float masterGain=1.0f,float ceilingDb=-1.0f,float lowDb=0.0f,float highDb=0.0f,
-                            std::atomic<float>* progress=nullptr,std::atomic<bool>* cancel=nullptr){
+                            std::atomic<float>* progress=nullptr,std::atomic<bool>* cancel=nullptr,
+                            const OfflineBounceEffect* effect=nullptr){
+    error.clear();
+    size_t savedEffects=0;
+    for(size_t i=0;i<session.tracks.size();++i)if(!session.tracks[i].effectPreset.empty()){
+        ++savedEffects;
+        if(!effect || session.tracks[i].type!=TrackType::audio || effect->track!=i || effect->preset!=session.tracks[i].effectPreset){
+            error="Saved track effect must be prepared before WAV export.";return false;
+        }
+    }
+    if(savedEffects>1 || (effect && (savedEffects!=1 || !effect->process ||
+        effect->latency<0 || effect->latency>sampleRate*30LL || effect->tail<0 || effect->tail>sampleRate*30LL))){
+        error="Invalid offline effect configuration.";return false;
+    }
     if(!std::isfinite(session.bpm) || session.bpm<=0 || sampleRate<8000 || sampleRate>192000 || !std::isfinite(masterGain) || !std::isfinite(ceilingDb) || !std::isfinite(lowDb) || !std::isfinite(highDb)){
         error="Invalid bounce rate or tempo.";return false;
     }
@@ -50,7 +72,12 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
     if(!std::isfinite(requestedFrames) || requestedFrames<=0 || requestedFrames>(double)sampleRate*60*60*4){
         error="Export duration must be under four hours.";return false;
     }
-    const int64_t frames=(int64_t)requestedFrames;
+    const bool anySolo=std::any_of(session.tracks.begin(),session.tracks.end(),
+        [](const Track& t){return t.solo;});
+    const bool audibleEffect=effect && !session.tracks[effect->track].mute &&
+        (!anySolo || session.tracks[effect->track].solo);
+    const int latency=audibleEffect?effect->latency:0;
+    const int64_t frames=(int64_t)requestedFrames+(audibleEffect?effect->tail:0)+latency;
     if(destination.existsAsFile()){error="Choose a new WAV filename.";return false;}
     auto stream=std::unique_ptr<juce::FileOutputStream>(destination.createOutputStream());
     if(!stream){error="Cannot create WAV output.";return false;}
@@ -61,10 +88,8 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
     stream.release();
     juce::AudioFormatManager formats;formats.registerBasicFormats();
     constexpr int block=1024;
-    juce::AudioBuffer<float> mix(2,block),scratch(2,block);
-    const float* channels[2]={mix.getReadPointer(0),mix.getReadPointer(1)};
-    const bool anySolo=std::any_of(session.tracks.begin(),session.tracks.end(),
-        [](const Track& t){return t.solo;});
+    juce::AudioBuffer<float> mix(2,block),scratch(2,block),wet(2,block),delay(2,std::max(1,latency));
+    delay.clear();int delayPosition=0;
     // Open sources once, before rendering.
     struct ActiveClip {
         std::unique_ptr<juce::AudioFormatReader> reader;
@@ -72,6 +97,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
         double sourceRate=44100.0;
         float left=1,right=1;
         ClipEnvelope envelope;
+        bool effected=false;
     };
     std::vector<ActiveClip> clips;
     for(const auto& track:session.tracks){
@@ -91,7 +117,8 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                 error="Invalid source timing.";writer.reset();destination.deleteFile();return false;
             }
             clips.push_back({std::move(reader),start,start+length,sourceOffset,sourceRate,
-                gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1),envelope});
+                gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1),envelope,
+                audibleEffect && &track==&session.tracks[effect->track]});
         }
     }
     const float outputCeiling=std::pow(10.0f,std::clamp(ceilingDb,-12.0f,-0.1f)/20.0f);
@@ -107,6 +134,7 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
         }
         const int count=(int)std::min<int64_t>(block,frames-pos);
         mix.clear();
+        wet.clear();
         for(auto& clip:clips){
             const int64_t begin=std::max(pos,clip.start),end=std::min(pos+count,clip.end);
             if(end<=begin)continue;
@@ -185,15 +213,39 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
                     }
                 }
                 const float envelopeGain=clip.envelope.gain(begin+i);
-                mix.addSample(0,offset+i,l*clip.left*envelopeGain);
-                mix.addSample(1,offset+i,r*clip.right*envelopeGain);
+                auto& bus=clip.effected?wet:mix;
+                bus.addSample(0,offset+i,l*(clip.effected?1.0f:clip.left)*envelopeGain);
+                bus.addSample(1,offset+i,r*(clip.effected?1.0f:clip.right)*envelopeGain);
             }
         }
         renderMidiSine(session,mix.getWritePointer(0),mix.getWritePointer(1),count,pos,sampleRate);
+        if(audibleEffect){
+            float* pointers[]{wet.getWritePointer(0),wet.getWritePointer(1)};
+            juce::AudioBuffer<float> view(pointers,2,count);
+            bool processed=false;
+            try{processed=effect->process(view);}catch(...){processed=false;}
+            if(processed)for(int ch=0;ch<2;++ch)for(int i=0;i<count;++i)
+                if(!std::isfinite(wet.getSample(ch,i)))processed=false;
+            if(!processed){error="Track effect failed during WAV export.";writer.reset();destination.deleteFile();return false;}
+            const auto& track=session.tracks[effect->track];
+            const float pan=std::clamp(track.pan,-1.0f,1.0f),gain=std::clamp(track.gain,0.0f,2.0f);
+            const float levels[]{gain*(pan>0?1-pan:1),gain*(pan<0?1+pan:1)};
+            // Delay dry tracks to match the plugin, then trim the shared delay
+            // at the writer. This preserves alignment, including MIDI tracks.
+            for(int i=0;i<count;++i){
+                for(int ch=0;ch<2;++ch){
+                    float dry=mix.getSample(ch,i);
+                    if(latency){const float previous=delay.getSample(ch,delayPosition);delay.setSample(ch,delayPosition,dry);dry=previous;}
+                    mix.setSample(ch,i,dry+wet.getSample(ch,i)*levels[ch]);
+                }
+                if(latency)delayPosition=(delayPosition+1)%latency;
+            }
+        }
+        const int skip=(int)std::clamp<int64_t>(latency-pos,0,count);
         for(int ch=0;ch<2;++ch){
             auto* p=mix.getWritePointer(ch);
             float state=filterState[ch];
-            for(int i=0;i<count;++i){
+            for(int i=skip;i<count;++i){
                 const float input=p[i];
                 state=alpha*state+(1.0f-alpha)*input;
                 const float shaped=bassGain*state+trebleGain*(input-state);
@@ -201,7 +253,8 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
             }
             filterState[ch]=state;
         }
-        if(!writer->writeFromFloatArrays(channels,2,count)){
+        const float* channels[2]={mix.getReadPointer(0,skip),mix.getReadPointer(1,skip)};
+        if(count>skip && !writer->writeFromFloatArrays(channels,2,count-skip)){
             error="Failed while writing WAV samples.";writer.reset();destination.deleteFile();return false;
         }
         if(progress)progress->store((float)(pos+count)/(float)frames,std::memory_order_relaxed);
@@ -213,10 +266,11 @@ inline bool renderSessionWav(const Session& session,const juce::File& destinatio
 // that deliberately render a reference mix with different master settings.
 inline bool renderProjectWav(const Session& session,const juce::File& destination,
                              juce::String& error,int sampleRate=44100,
-                             std::atomic<float>* progress=nullptr,std::atomic<bool>* cancel=nullptr){
+                             std::atomic<float>* progress=nullptr,std::atomic<bool>* cancel=nullptr,
+                             const OfflineBounceEffect* effect=nullptr){
     if(!validMasterMix(session.masterMix)){error="Invalid project master mix.";return false;}
     const auto& m=session.masterMix;
     return renderSessionWav(session,destination,error,sampleRate,(float)m.gain,
-                           (float)m.ceilingDb,(float)m.lowDb,(float)m.highDb,progress,cancel);
+                           (float)m.ceilingDb,(float)m.lowDb,(float)m.highDb,progress,cancel,effect);
 }
 }
