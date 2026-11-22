@@ -3108,6 +3108,16 @@ private:
         juce::AlertWindow::showMessageBoxAsync(idw::daw::messageBoxIconFor(plan.icon),
             juce::String(plan.title),ok?(receipt?*receipt:juce::String("WAV written; verify the exported file before using it.")):error);
     }
+    void finishMidiExport(idw::daw::ExportOutcome outcome,const juce::String& error){
+        exportRunning.store(false);bounce.setEnabled(true);cancelBounce.setEnabled(false);
+        cancelBounce.setButtonText("CANCEL EXPORT");
+        if(!playing.load())stopTimer();repaint();
+        const auto plan=idw::daw::exportAlertPlan(idw::daw::ExportMediaKind::midi,outcome);
+        const bool ok=outcome==idw::daw::ExportOutcome::completed;
+        juce::AlertWindow::showMessageBoxAsync(idw::daw::messageBoxIconFor(plan.icon),
+            juce::String(plan.title),
+            ok?"MIDI tracks exported. Open the file in another DAW and choose instruments for its tracks.":error);
+    }
     void renderWavSnapshot(const idw::daw::Session& snapshot,const juce::File& output,
                            const juce::File& sourceProject,std::shared_ptr<idw::daw::OfflineBounceEffect> effect={}){
         if(exportThread.joinable())exportThread.join();
@@ -3208,7 +3218,16 @@ private:
                 const auto output=picker.getResult().withFileExtension(".wav");
                 if(output.exists()){juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,"Choose a new WAV filename","The existing file has been kept.");return;}
                 safe->pianoRoll.setVisible(false);
-                if(!safe->captureProjectEffect())return;
+                bool captured=false;
+                try{
+                    captured=safe->captureProjectEffect();
+                }catch(...){
+                    // Do not terminate the app; nothing is flagged yet, so this
+                    // only reports the failure.
+                    safe->finishWavExport(idw::daw::ExportOutcome::failed,"WAV export failed unexpectedly.");
+                    return;
+                }
+                if(!captured)return;
                 const auto snapshot=safe->session;
                 // Flag the run before enabling the button; otherwise a click
                 // landing between the two statements is ignored as "not running".
@@ -3218,8 +3237,8 @@ private:
                 try{
                     safe->prepareWavSnapshot(snapshot,output,origin);
                 }catch(...){
-                    // Contains this call only: it can throw before any work is
-                    // queued, so abandon the load token and resolve once.
+                    // This call can throw before any work is queued, so abandon
+                    // the load token and resolve the export once.
                     safe->pluginLoadGate.cancel();
                     if(safe->exportRunning.load())
                         safe->finishWavExport(idw::daw::ExportOutcome::failed,"WAV export failed unexpectedly.");
@@ -3279,22 +3298,20 @@ private:
                 safe->bounce.setEnabled(false);safe->cancelBounce.setEnabled(true);
                 safe->startTimerHz(10);
                 auto* owner=safe.getComponent();
-                safe->exportThread=std::thread([owner,safe,snapshot,output]{
-                    juce::String error;auto outcome=idw::daw::ExportOutcome::failed;
-                    try{outcome=idw::daw::exportSessionMidi(snapshot,output,error,&owner->exportProgress,&owner->exportCancel).outcome;}
-                    catch(...){error="Could not complete MIDI export.";outcome=idw::daw::ExportOutcome::failed;}
-                    juce::MessageManager::callAsync([safe,outcome,error]{
-                        if(safe==nullptr)return;
-                        safe->exportRunning.store(false);safe->bounce.setEnabled(true);safe->cancelBounce.setEnabled(false);
-                        safe->cancelBounce.setButtonText("CANCEL EXPORT");
-                        if(!safe->playing.load())safe->stopTimer();safe->repaint();
-                        const auto plan=idw::daw::exportAlertPlan(idw::daw::ExportMediaKind::midi,outcome);
-                        const bool ok=outcome==idw::daw::ExportOutcome::completed;
-                        juce::AlertWindow::showMessageBoxAsync(idw::daw::messageBoxIconFor(plan.icon),
-                            juce::String(plan.title),
-                            ok?"MIDI tracks exported. Open the file in another DAW and choose instruments for its tracks.":error);
+                try{
+                    safe->exportThread=std::thread([owner,safe,snapshot,output]{
+                        juce::String error;auto outcome=idw::daw::ExportOutcome::failed;
+                        try{outcome=idw::daw::exportSessionMidi(snapshot,output,error,&owner->exportProgress,&owner->exportCancel).outcome;}
+                        catch(...){error="Could not complete MIDI export.";outcome=idw::daw::ExportOutcome::failed;}
+                        juce::MessageManager::callAsync([safe,outcome,error]{
+                            if(safe!=nullptr)safe->finishMidiExport(outcome,error);
+                        });
                     });
-                });
+                }catch(...){
+                    // std::thread can refuse to start; without this the run stays
+                    // flagged and the exception terminates the app.
+                    safe->finishMidiExport(idw::daw::ExportOutcome::failed,"Could not start the MIDI export.");
+                }
             });
     }
     void exportProjectFile(){
