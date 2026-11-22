@@ -3105,8 +3105,21 @@ private:
         const juce::Component::SafePointer<Workstation> safe(this);
         exportThread=std::thread([this,safe,snapshot,output,sourceProject,effect]() mutable {
             juce::String error;
-            const auto outcome=idw::daw::renderProjectWav(snapshot,output,error,44100,&exportProgress,&exportCancel,effect.get()).outcome;
-            const auto receipt=outcome==idw::daw::ExportOutcome::completed?idw::daw::wavExportReceipt(sourceProject,output):std::nullopt;
+            auto outcome=idw::daw::ExportOutcome::failed;
+            std::optional<juce::String> receipt;
+            try{
+                outcome=idw::daw::renderProjectWav(snapshot,output,error,44100,&exportProgress,&exportCancel,effect.get()).outcome;
+                if(outcome==idw::daw::ExportOutcome::completed)
+                    receipt=idw::daw::wavExportReceipt(sourceProject,output);
+            }catch(...){
+                if(outcome==idw::daw::ExportOutcome::completed){
+                    receipt.reset(); // The WAV is complete; only its receipt text is missing.
+                }else{
+                    output.deleteFile(); // Never leave a half-written file behind.
+                    error="WAV export failed unexpectedly.";
+                    outcome=idw::daw::ExportOutcome::failed;
+                }
+            }
             // Retain the offline processor until its message-thread callback.
             juce::MessageManager::callAsync([safe,outcome,error,receipt,effect=std::move(effect)]{
                 if(safe!=nullptr)safe->finishWavExport(outcome,error,receipt);
@@ -3169,8 +3182,10 @@ private:
                 safe->pianoRoll.setVisible(false);
                 if(!safe->captureProjectEffect())return;
                 const auto snapshot=safe->session;
-                safe->bounce.setEnabled(false);safe->cancelBounce.setEnabled(true);
+                // Flag the run before enabling the button; otherwise a click
+                // landing between the two statements is ignored as "not running".
                 safe->exportCancel.store(false);safe->exportProgress.store(0.0f);safe->exportRunning.store(true);
+                safe->bounce.setEnabled(false);safe->cancelBounce.setEnabled(true);
                 safe->startTimerHz(10);
                 safe->prepareWavSnapshot(snapshot,output,origin);
             });
@@ -3224,8 +3239,8 @@ private:
                 const auto output=picker.getResult().withFileExtension(".mid");
                 const auto snapshot=safe->session;
                 if(safe->exportThread.joinable())safe->exportThread.join();
-                safe->bounce.setEnabled(false);safe->cancelBounce.setEnabled(true);
                 safe->exportCancel.store(false);safe->exportProgress.store(0);safe->exportRunning.store(true);
+                safe->bounce.setEnabled(false);safe->cancelBounce.setEnabled(true);
                 safe->startTimerHz(10);
                 auto* owner=safe.getComponent();
                 safe->exportThread=std::thread([owner,safe,snapshot,output]{
