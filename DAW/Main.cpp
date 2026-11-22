@@ -3170,10 +3170,10 @@ private:
         const int loadToken=pluginLoadGate.begin();
         // A plugin that never answers must not wedge the export: the deadline
         // resolves it, and a load arriving later is torn down by its callback.
+        const juce::Component::SafePointer<Workstation> safe(this);
         idw::daw::armPluginLoadDeadline(pluginLoadGate,loadToken,idw::daw::pluginInstantiationTimeoutMs,
-            [safe=juce::Component::SafePointer<Workstation>(this)]{return safe!=nullptr;},
-            [safe=juce::Component::SafePointer<Workstation>(this)](idw::daw::PluginLoadGate::Timeout timeout){
-                if(safe==nullptr)return;
+            [safe]{return safe!=nullptr;},
+            [safe](idw::daw::PluginLoadGate::Timeout timeout){
                 if(timeout==idw::daw::PluginLoadGate::Timeout::canceled)
                     safe->finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");
                 else
@@ -3181,13 +3181,12 @@ private:
                         "The track effect did not finish loading within "+
                         juce::String(idw::daw::pluginInstantiationTimeoutMs/1000)+" seconds, so the WAV was not exported.");
             },
-            [safe=juce::Component::SafePointer<Workstation>(this)]{return safe!=nullptr && safe->exportCancel.load();});
+            [safe]{return safe!=nullptr && safe->exportCancel.load();});
         createOfflinePlugin(*chosen,44100,1024,
             idw::daw::wrapPluginLoadCallback<juce::AudioPluginInstance>(pluginLoadGate,loadToken,
-                [safe=juce::Component::SafePointer<Workstation>(this)]{return safe!=nullptr;},
-                [safe=juce::Component::SafePointer<Workstation>(this),snapshot,output,sourceProject,effect,state,identifier]
+                [safe]{return safe!=nullptr;},
+                [safe,snapshot,output,sourceProject,effect,state,identifier]
             (std::unique_ptr<juce::AudioPluginInstance> instance,const juce::String& failure){
-                if(safe==nullptr)return;
                 if(safe->exportCancel.load()){safe->finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");return;}
                 auto slot=std::make_shared<idw::daw::StereoEffectSlot>();juce::String error=failure;
                 if(instance)instance->setNonRealtime(true);

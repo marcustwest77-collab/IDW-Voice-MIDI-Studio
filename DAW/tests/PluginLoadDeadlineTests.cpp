@@ -1,7 +1,7 @@
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <juce_events/juce_events.h>
 #include "PluginLoadDeadline.h"
@@ -55,8 +55,7 @@ int main(){
         const int earlyToken=earlyGate.begin();
         auto callback=wrapPluginLoadCallback<Probe>(earlyGate,earlyToken,[]{return true;},
             [&](std::unique_ptr<Probe> instance,const juce::String&){earlyLoaded=instance!=nullptr;});
-        bool destroyed=false;
-        callback(makeProbe(&destroyed),juce::String());
+        callback(makeProbe(nullptr),juce::String());
         // The accepted path hands ownership on, so only delivery is observable.
         report.require(earlyLoaded,"in-time load was not delivered");
         armPluginLoadDeadline(earlyGate,earlyToken,20,[]{return true;},
