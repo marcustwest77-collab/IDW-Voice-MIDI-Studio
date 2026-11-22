@@ -731,7 +731,6 @@ public:
         bounce.onClick=[this]{bounceMix();};
         cancelBounce.onClick=[this]{
             if(!exportSession.running())return;
-            exportCancel.store(true);
             // A plugin load cannot be interrupted, so the session abandons its
             // token and resolves now; a render is left to finish on its own.
             if(exportSession.cancel()!=idw::daw::ExportSession::Cancel::notRunning){
@@ -1746,7 +1745,7 @@ public:
         }
         if(exportSession.running()){
             g.setColour(juce::Colours::gold);
-            g.drawText(exportCancel.load()?juce::String("Canceling export..."):
+            g.drawText(exportSession.cancelRequested()?juce::String("Canceling export..."):
                 "Export: "+juce::String((int)(exportProgress.load()*100.0f))+"%",getWidth()-230,80,205,24,juce::Justification::centredRight);
         }
         g.setColour(juce::Colours::grey);
@@ -3129,7 +3128,7 @@ private:
             auto outcome=idw::daw::ExportOutcome::failed;
             std::optional<juce::String> receipt;
             try{
-                outcome=idw::daw::renderProjectWav(snapshot,output,error,44100,&exportProgress,&exportCancel,effect.get()).outcome;
+                outcome=idw::daw::renderProjectWav(snapshot,output,error,44100,&exportProgress,&exportSession.cancelFlag(),effect.get()).outcome;
                 if(outcome==idw::daw::ExportOutcome::completed)
                     receipt=idw::daw::wavExportReceipt(sourceProject,output);
             }catch(...){
@@ -3175,13 +3174,13 @@ private:
         idw::daw::armPluginLoadDeadline(exportSession.pluginLoad(),loadToken,idw::daw::pluginInstantiationTimeoutMs,
             [safe]{return safe!=nullptr;},
             [safe](idw::daw::PluginLoadGate::Timeout){safe->exportSession.resolvePluginTimeout();},
-            [safe]{return safe!=nullptr && safe->exportCancel.load();});
+            [safe]{return safe!=nullptr && safe->exportSession.cancelRequested();});
         createOfflinePlugin(*chosen,44100,1024,
             idw::daw::wrapPluginLoadCallback<juce::AudioPluginInstance>(exportSession.pluginLoad(),loadToken,
                 [safe]{return safe!=nullptr;},
                 [safe,snapshot,output,sourceProject,effect,state,identifier]
             (std::unique_ptr<juce::AudioPluginInstance> instance,const juce::String& failure){
-                if(safe->exportCancel.load()){safe->finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");return;}
+                if(safe->exportSession.cancelRequested()){safe->finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");return;}
                 auto slot=std::make_shared<idw::daw::StereoEffectSlot>();juce::String error=failure;
                 if(instance)instance->setNonRealtime(true);
                 if(!instance || !slot->install(std::move(instance),44100,1024,error,&*state,identifier)){
@@ -3223,7 +3222,7 @@ private:
                 const auto snapshot=safe->session;
                 // The session flags the run before enabling the button, so an
                 // early click is honored rather than dropped.
-                safe->exportCancel.store(false);safe->exportProgress.store(0.0f);
+                safe->exportProgress.store(0.0f);
                 if(safe->exportSession.start(idw::daw::ExportMediaKind::wav)!=idw::daw::ExportSession::Start::started)return;
                 safe->startTimerHz(10);
                 try{
@@ -3286,14 +3285,14 @@ private:
                 const auto output=picker.getResult().withFileExtension(".mid");
                 const auto snapshot=safe->session;
                 if(safe->exportThread.joinable())safe->exportThread.join();
-                safe->exportCancel.store(false);safe->exportProgress.store(0);
+                safe->exportProgress.store(0);
                 if(safe->exportSession.start(idw::daw::ExportMediaKind::midi)!=idw::daw::ExportSession::Start::started)return;
                 safe->startTimerHz(10);
                 auto* owner=safe.getComponent();
                 try{
                     safe->exportThread=std::thread([owner,safe,snapshot,output]{
                         juce::String error;auto outcome=idw::daw::ExportOutcome::failed;
-                        try{outcome=idw::daw::exportSessionMidi(snapshot,output,error,&owner->exportProgress,&owner->exportCancel).outcome;}
+                        try{outcome=idw::daw::exportSessionMidi(snapshot,output,error,&owner->exportProgress,&owner->exportSession.cancelFlag()).outcome;}
                         catch(...){error="Could not complete MIDI export.";outcome=idw::daw::ExportOutcome::failed;}
                         juce::MessageManager::callAsync([safe,outcome,error]{
                             if(safe!=nullptr)safe->finishMidiExport(outcome,error);
@@ -4055,7 +4054,7 @@ public:
         return false;
     }
     ~Workstation() override {
-        exportCancel.store(true);
+        exportSession.cancelFlag().store(true);
         projectStatusTimer.stopTimer();
         saveAudioDevicePreferences(false); // Capture the chosen setup before shutting the device down.
         remoteOfferController.stop();
@@ -4072,7 +4071,6 @@ public:
     double lastVocalProgressMs=0.0;
     int activeSkin=0;
     std::thread exportThread;
-    std::atomic<bool> exportCancel{false};
     // Touched only on the message thread: the chooser callback, the plugin-load
     // callback, the deadline and the cancel button all run there.
     idw::daw::ExportSession exportSession{*this,idw::daw::pluginInstantiationTimeoutMs/1000};
