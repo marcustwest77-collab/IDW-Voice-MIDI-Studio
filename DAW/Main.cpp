@@ -726,6 +726,13 @@ public:
             exportCancel.store(true);
             cancelBounce.setButtonText("CANCELING...");
             cancelBounce.setEnabled(false);
+            // A plugin load cannot be interrupted, so stop waiting for it here;
+            // the load's own callback tears the late instance down.
+            if(awaitingPluginInstance){
+                ++pluginInstantiationGeneration;
+                awaitingPluginInstance=false;
+                finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");
+            }
             repaint();
         };
         audio.onClick=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;addAudioTrack();refreshMixer();repaint();};
@@ -3147,10 +3154,28 @@ private:
         for(const auto* type:types)if(!type->isInstrument && idw::daw::pluginStateMatches(*state,type->createIdentifierString())){chosen=type;break;}
         if(!chosen){finishWavExport(idw::daw::ExportOutcome::failed,"The installed effect does not match the saved plugin identity.");return;}
         const auto identifier=chosen->createIdentifierString();
+        const int generation=++pluginInstantiationGeneration;
+        awaitingPluginInstance=true;
+        // A plugin that never answers must not wedge the export: the deadline
+        // resolves it, and a load arriving later is torn down by its callback.
+        juce::Timer::callAfterDelay(pluginInstantiationTimeoutMs,
+            [safe=juce::Component::SafePointer<Workstation>(this),generation]{
+                if(safe==nullptr || !safe->awaitingPluginInstance || generation!=safe->pluginInstantiationGeneration)return;
+                safe->awaitingPluginInstance=false;
+                const bool canceled=safe->exportCancel.load();
+                safe->finishWavExport(canceled?idw::daw::ExportOutcome::canceled:idw::daw::ExportOutcome::failed,
+                    canceled?"Export canceled.":"The track effect did not finish loading within "+
+                        juce::String(pluginInstantiationTimeoutMs/1000)+" seconds, so the WAV was not exported.");
+            });
         effectFormats.createPluginInstanceAsync(*chosen,44100,1024,
-            [safe=juce::Component::SafePointer<Workstation>(this),snapshot,output,sourceProject,effect,state,identifier]
+            [safe=juce::Component::SafePointer<Workstation>(this),snapshot,output,sourceProject,effect,state,identifier,generation]
             (std::unique_ptr<juce::AudioPluginInstance> instance,const juce::String& failure){
                 if(safe==nullptr)return;
+                if(!safe->awaitingPluginInstance || generation!=safe->pluginInstantiationGeneration){
+                    instance.reset(); // A late or superseded load is torn down on this thread.
+                    return;
+                }
+                safe->awaitingPluginInstance=false;
                 if(safe->exportCancel.load()){safe->finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");return;}
                 auto slot=std::make_shared<idw::daw::StereoEffectSlot>();juce::String error=failure;
                 if(instance)instance->setNonRealtime(true);
@@ -4029,6 +4054,11 @@ public:
     std::thread exportThread;
     std::atomic<bool> exportRunning{false};
     std::atomic<bool> exportCancel{false};
+    // Both fields are touched only on the message thread: the chooser callback,
+    // the plugin-load callback, the deadline and the cancel button all run there.
+    bool awaitingPluginInstance=false;
+    int pluginInstantiationGeneration=0;
+    static constexpr int pluginInstantiationTimeoutMs=15000;
     std::atomic<float> exportProgress{0.0f};
     class RecoveryTimer final : public juce::Timer {
     public:
