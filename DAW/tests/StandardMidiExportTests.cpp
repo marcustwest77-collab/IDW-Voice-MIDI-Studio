@@ -132,7 +132,7 @@ int main(){try{
     boundary.tracks[1].notes[0].startBeat=72000;reject(boundary);
     std::atomic<bool> cancel{true};
     const auto canceledMidi=exportSessionMidi(s,rejected,error,nullptr,&cancel);
-    require(canceledMidi==ExportOutcome::canceled,"canceled MIDI export was not reported as canceled");
+    require(canceledMidi.outcome==ExportOutcome::canceled,"canceled MIDI export was not reported as canceled");
     require(!rejected.exists(),"canceled MIDI export published a file");
     const auto blocker=root.getChildFile("blocker");require(blocker.replaceWithText("unchanged"),"blocked-parent fixture");
     require(!exportSessionMidi(s,blocker.getChildFile("failed.mid"),error) && blocker.loadFileAsString()=="unchanged","failed output modified parent");

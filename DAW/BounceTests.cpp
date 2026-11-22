@@ -52,7 +52,7 @@ int main(){
     std::abs(wetAudio.getSample(1,2000)-0.375f)>0.001f)
      throw std::runtime_error("effect must process summed track before gain/pan");
  const auto missingEffectOutput=root.getChildFile("missing-effect.wav");
- if(renderProjectWav(wetSession,missingEffectOutput,effectError)!=ExportOutcome::failed || missingEffectOutput.exists())
+ if(renderProjectWav(wetSession,missingEffectOutput,effectError).outcome!=ExportOutcome::failed || missingEffectOutput.exists())
      throw std::runtime_error("saved effect silently exported dry or was reported as canceled");
  // Delay larger than a render block must align wet and dry tracks and retain
  // the final source samples. A declared tail extends only the output duration.
@@ -108,7 +108,7 @@ int main(){
  effect.process=[&](juce::AudioBuffer<float>&){effectCancel.store(true);return true;};
  const auto canceledEffectOutput=root.getChildFile("canceled-effect.wav");
  const auto effectCancelResult=renderProjectWav(wetSession,canceledEffectOutput,effectError,44100,nullptr,&effectCancel,&effect);
- if(effectCancelResult!=ExportOutcome::canceled || canceledEffectOutput.exists())
+ if(effectCancelResult.outcome!=ExportOutcome::canceled || canceledEffectOutput.exists())
      throw std::runtime_error("canceled effect left an output or was not reported as canceled");
  const auto existingLength=wetOutput.getSize();
  if(renderProjectWav(wetSession,wetOutput,effectError,44100,nullptr,nullptr,&effect) || wetOutput.getSize()!=existingLength)
@@ -513,7 +513,7 @@ int main(){
  std::atomic<bool> cancel{true};
  error.clear();
  const auto cancelResult=renderSessionWav(session,canceledOutput,error,44100,1.0f,-1.0f,0.0f,0.0f,&progress,&cancel);
- if(cancelResult!=ExportOutcome::canceled || canceledOutput.existsAsFile() || error!="Export canceled.")
+ if(cancelResult.outcome!=ExportOutcome::canceled || canceledOutput.existsAsFile() || error!="Export canceled.")
     throw std::runtime_error("canceled bounce left an output or was not reported as canceled");
  reader.reset();root.deleteRecursively();
  std::cout<<"PASS: stereo WAV bounce timeline and signal test\n";
