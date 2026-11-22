@@ -139,7 +139,7 @@ int main(int argc,char** argv){try{
     require(large.replaceWithData(oversized.data(),oversized.size()),"large fixture");
     require(!readStandardMidi(large,unchanged,error) && same(unchanged,seed),"file read bound");
     Session source;source.addTrack(TrackType::midi);source.tracks[0].name="Roundtrip";source.tracks[0].notes=seed.tracks[0].notes;
-    const auto exported=root.getChildFile("export.mid");require(exportSessionMidi(source,exported,error).completed(),"native MIDI export");
+    const auto exported=root.getChildFile("export.mid");require(exportSessionMidi(source,exported,error),"native MIDI export");
     require(readStandardMidi(exported,decoded,error) && decoded.noteCount()==2 && sameMidiNotes(decoded.tracks[0].notes,source.tracks[0].notes),"native MIDI export/import roundtrip");
     const auto project=root.getChildFile("Session.idwproj");Session recalled;
     require(saveSession(session,project) && loadSession(project,recalled) &&

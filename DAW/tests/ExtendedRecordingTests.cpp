@@ -84,7 +84,7 @@ static void run(const juce::File& folder,int rate,int seconds) {
                         "recovery readability under disk load");
                 juce::String error;
                 const auto bounce=folder.getChildFile("snapshot-"+juce::String(revision)+".wav");
-                require(renderSessionWav(reopened,bounce,error,rate).completed(),"independent snapshot bounce under disk load");
+                require(renderSessionWav(reopened,bounce,error,rate),"independent snapshot bounce under disk load");
                 juce::AudioFormatManager formats;formats.registerBasicFormats();
                 std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(bounce));
                 require(reader && reader->numChannels==2 && reader->sampleRate==rate &&

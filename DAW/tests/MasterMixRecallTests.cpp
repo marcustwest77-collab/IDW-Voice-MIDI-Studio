@@ -47,12 +47,12 @@ int main(){try{
     require(renderProjectWav(s,before,error,48000) && renderProjectWav(reopened,after,error,48000),"recalled project export");
     compare(before,after);
     const auto reference=root.getChildFile("explicit.wav");
-    require(renderSessionWav(s,reference,error,48000,0.63f,-2.0f,-3.5f,4.0f).completed(),"explicit master reference");
+    require(renderSessionWav(s,reference,error,48000,0.63f,-2.0f,-3.5f,4.0f),"explicit master reference");
     compare(before,reference);
     auto silent=s;silent.masterMix.gain=0;const auto silence=root.getChildFile("silence.wav");
     require(renderProjectWav(silent,silence,error,48000) && read(silence).getMagnitude(0,12000)==0,"master mute ignored");
     auto limited=s;limited.masterMix={1.5,-6,12,12};const auto ceiling=root.getChildFile("ceiling.wav");
-    require(renderProjectWav(limited,ceiling,error,48000).completed(),"limited export");
+    require(renderProjectWav(limited,ceiling,error,48000),"limited export");
     const float peak=read(ceiling).getMagnitude(0,12000),limit=std::pow(10.0f,-6.0f/20);
     require(std::abs(peak-limit)<0.000001f,"recalled ceiling ignored");
     SessionRecovery recovery(root.getChildFile("recovery"));recovery.begin(s);

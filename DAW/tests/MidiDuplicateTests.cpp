@@ -76,13 +76,13 @@ int main(int argc,char** argv){try{
     require(root.createDirectory().wasOk(),"fixture directory");const auto project=root.getChildFile("Session.idwproj");
     require(saveSession(s,project),"save repeated arrangement");Session reopened;
     require(loadSession(project,reopened) && sameMidiNotes(duplicated,reopened.tracks[0].notes),"reopen repeat data");
-    juce::String error;const auto midi=root.getChildFile("repeats.mid");require(exportSessionMidi(reopened,midi,error).completed(),"export repeats");
+    juce::String error;const auto midi=root.getChildFile("repeats.mid");require(exportSessionMidi(reopened,midi,error),"export repeats");
     juce::MidiFile file;{juce::FileInputStream input(midi);require(file.readFrom(input,false),"MIDI read");}
     std::vector<int> onsets;
     for(int i=0;i<file.getTrack(1)->getNumEvents();++i){const auto& m=file.getTrack(1)->getEventPointer(i)->message;
         if(m.isNoteOn() && m.getNoteNumber()==64){require(m.getVelocity()==73,"repeat MIDI velocity");onsets.push_back((int)m.getTimeStamp());}}
     require(onsets==std::vector<int>{480,1200,1920},"repeat MIDI timing");
-    const auto wav=root.getChildFile("repeats.wav");require(renderProjectWav(reopened,wav,error,48000).completed(),"repeat bounce");
+    const auto wav=root.getChildFile("repeats.wav");require(renderProjectWav(reopened,wav,error,48000),"repeat bounce");
     juce::WavAudioFormat format;auto reader=std::unique_ptr<juce::AudioFormatReader>(format.createReaderFor(wav.createInputStream().release(),true));
     require(reader && reader->lengthInSamples==96000,"repeat bounce duration");juce::AudioBuffer<float> audio(2,96000);
     require(reader->read(&audio,0,96000,0,true,true),"repeat bounce read");reader.reset();

@@ -109,7 +109,7 @@ static void run(const juce::File& root,int rate,int tracks) {
     require(loadSession(project,session) && juce::JSON::toString(sessionToJson(session))==snapshot,
             "multitrack project reopen changed routing/placement");
     const auto bounce=root.getChildFile("Overdub.wav");juce::String error;
-    require(renderSessionWav(session,bounce,error,rate).completed(),"multitrack bounce");
+    require(renderSessionWav(session,bounce,error,rate),"multitrack bounce");
     std::unique_ptr<juce::AudioFormatReader> mix(formats.createReaderFor(bounce));
     require(mix && mix->numChannels==2 && mix->sampleRate==rate && mix->lengthInSamples==3*rate,"mix format/duration");
     juce::AudioBuffer<float> buffer(2,4096);

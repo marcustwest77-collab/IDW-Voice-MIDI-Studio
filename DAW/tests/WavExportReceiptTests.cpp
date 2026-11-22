@@ -17,7 +17,7 @@ int main(){
         const auto source=root.getChildFile("Current Mix.idwproj");
         for(int rate:{44100,48000}){
             const auto output=root.getChildFile("Mix "+juce::String(rate)+".wav");juce::String error;
-            require(renderProjectWav(session,output,error,rate).completed(),"render receipt fixture");
+            require(renderProjectWav(session,output,error,rate),"render receipt fixture");
             juce::MemoryBlock bytes;require(output.loadFileAsData(bytes),"read original bytes");
             const auto receipt=wavExportReceipt(source,output);
             require(receipt && receipt->contains(source.getFullPathName()) && receipt->contains(output.getFullPathName()) &&
@@ -35,7 +35,7 @@ int main(){
         require(!wavExportReceipt(source,invalid),"invalid output receipt");
         // The receipt reads the completed file, not the later editable session.
         session.bpm=93;const auto fractional=root.getChildFile("Fractional.wav");juce::String error;
-        require(renderProjectWav(session,fractional,error,44100).completed(),"fractional fixture");
+        require(renderProjectWav(session,fractional,error,44100),"fractional fixture");
         session.bpm=20;const auto receipt=wavExportReceipt(source,fractional);
         require(receipt && receipt->contains("Duration: 2.581 seconds"),"duration inferred from mutable session");
         require(root.getParentDirectory()==temp && root.deleteRecursively(),"cleanup");

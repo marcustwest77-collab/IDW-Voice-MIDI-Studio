@@ -16,14 +16,13 @@ inline ExportAlertPlan exportAlertPlan(ExportMediaKind media,ExportOutcome outco
         return {ExportAlertIcon::info,wav?"WAV export canceled":"MIDI export canceled"};
     return {ExportAlertIcon::warning,wav?"WAV bounce unavailable":"MIDI export unavailable"};
 }
-// Returned by the renderers. It converts to bool in conditions so existing
-// success checks keep working, but cancellation is distinguishable by value.
+// Returned by the renderers. Converting to bool means "completed", so existing
+// success checks keep working, while cancellation stays distinguishable by value.
 struct ExportResult {
     ExportOutcome outcome=ExportOutcome::failed;
     ExportResult()=default;
     ExportResult(ExportOutcome value):outcome(value){}
-    bool completed() const {return outcome==ExportOutcome::completed;}
-    explicit operator bool() const {return completed();}
+    operator bool() const {return outcome==ExportOutcome::completed;}
     bool operator==(ExportOutcome other) const {return outcome==other;}
     bool operator!=(ExportOutcome other) const {return outcome!=other;}
 };

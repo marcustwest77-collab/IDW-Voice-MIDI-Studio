@@ -47,7 +47,7 @@ int main(){
             compare(synth(reopened,frames,rate,block),reference,0.0000001f);
         const auto output=root.getChildFile("midi-"+juce::String(rate)+"-"+juce::String(preset)+".wav");
         juce::String error;std::atomic<float> progress{0};
-        require(renderSessionWav(reopened,output,error,rate,1,-1,0,0,&progress).completed(),"MIDI-only export");
+        require(renderSessionWav(reopened,output,error,rate,1,-1,0,0,&progress),"MIDI-only export");
         require(progress.load()==1.0f,"completed progress");
         compare(read(output,frames,rate),reference,0.000001f);
         require(reference.getMagnitude(0,frames)>0.01f,"silent MIDI fixture");
@@ -57,13 +57,13 @@ int main(){
         require(output.loadFileAsData(after) && bytes==after,"overwrite changed WAV");
         auto muted=reopened;for(auto& t:muted.tracks)t.mute=true;
         const auto muteFile=root.getChildFile("mute-"+output.getFileName());
-        require(renderSessionWav(muted,muteFile,error,rate).completed(),"muted MIDI export");
+        require(renderSessionWav(muted,muteFile,error,rate),"muted MIDI export");
         require(read(muteFile,frames,rate).getMagnitude(0,frames)==0,"muted MIDI audible");
         auto solo=reopened;solo.tracks[0].solo=true;
         auto only=solo;only.tracks[1].mute=true;
         compare(synth(solo,frames,rate,31),synth(only,frames,rate,128),0);
         const auto soloFile=root.getChildFile("solo-"+output.getFileName());
-        require(renderSessionWav(solo,soloFile,error,rate).completed(),"solo MIDI export");
+        require(renderSessionWav(solo,soloFile,error,rate),"solo MIDI export");
         compare(read(soloFile,frames,rate),synth(only,frames,rate,31),0.000001f);
     }
     // Independent single-tone oracle: pitch, velocity, envelope, pan and level.
@@ -92,7 +92,7 @@ int main(){
     single.addTrack(TrackType::audio);
     require(single.addClip(1,{source.getFullPathName().toStdString(),0,0.125,0}),"audio clip");
     juce::String error;const auto mixed=root.getChildFile("mixed.wav");
-    require(renderSessionWav(single,mixed,error,48000,0.5f).completed(),"mixed export");
+    require(renderSessionWav(single,mixed,error,48000,0.5f),"mixed export");
     auto actual=read(mixed,12000,48000);
     for(int ch=0;ch<2;++ch)for(int i=0;i<12000;++i){
         const float expected=(tone.getSample(ch,i)+(i<6000?0.0625f:0))*0.5f;
@@ -100,7 +100,7 @@ int main(){
     }
     auto audioSolo=single;audioSolo.tracks[1].solo=true;
     const auto audioOnly=root.getChildFile("audio-solo.wav");
-    require(renderSessionWav(audioSolo,audioOnly,error,48000).completed(),"audio solo export");
+    require(renderSessionWav(audioSolo,audioOnly,error,48000),"audio solo export");
     const auto audioResult=read(audioOnly,12000,48000);
     for(int ch=0;ch<2;++ch)for(int i=0;i<12000;++i)
         require(std::abs(audioResult.getSample(ch,i)-(i<6000?0.0625f:0))<0.000001f,

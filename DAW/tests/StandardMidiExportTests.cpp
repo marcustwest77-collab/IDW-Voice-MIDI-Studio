@@ -118,7 +118,7 @@ int main(){try{
     }
     Session many;
     for(int i=0;i<15;++i){many.addTrack(TrackType::midi);require(many.addMidiNote((size_t)i,{60,0,1,100}),"channel fixture");}
-    const auto channels=root.getChildFile("channels.mid");require(exportSessionMidi(many,channels,error).completed(),"15 channel export");
+    const auto channels=root.getChildFile("channels.mid");require(exportSessionMidi(many,channels,error),"15 channel export");
     const auto routed=read(channels);require(routed.getNumTracks()==16,"15 tracks plus conductor");
     std::set<int> used;
     for(int t=1;t<16;++t)for(int i=0;i<routed.getTrack(t)->getNumEvents();++i){const auto& m=routed.getTrack(t)->getEventPointer(i)->message;
@@ -126,7 +126,7 @@ int main(){try{
     require(used.size()==15,"missing melodic channel");
     many.addTrack(TrackType::midi);many.addMidiNote(15,{60,0,1,100});reject(many);
     auto boundary=s;boundary.bpm=300;boundary.tracks[1].notes={{60,71999,1,100}};boundary.tracks[2].notes.clear();
-    const auto longFile=root.getChildFile("four-hours.mid");require(exportSessionMidi(boundary,longFile,error).completed(),"four hour tick boundary");
+    const auto longFile=root.getChildFile("four-hours.mid");require(exportSessionMidi(boundary,longFile,error),"four hour tick boundary");
     const auto longMidi=read(longFile);
     require(longMidi.getTrack(1)->getEndTime()==69120000,"large tick conversion");
     boundary.tracks[1].notes[0].startBeat=72000;reject(boundary);
