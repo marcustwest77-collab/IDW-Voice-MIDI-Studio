@@ -17,9 +17,9 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    # Observed passes take 70-90 minutes; anything still running past 90 is
-    # wedged and should fail rather than hold a runner and the queue.
-    timeout-minutes: 90
+    # A wedged run should fail rather than hold a runner and the queue. Job
+    # time excludes queueing, so the macOS capacity delays do not count here.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Configure V14 DAW
