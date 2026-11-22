@@ -59,6 +59,21 @@ int main(){
         require(view.alerts.size()==1,"late finish produced a second alert");
         require(view.alerts[0].outcome==ExportOutcome::canceled,"wrong outcome alerted");
     }
+    // A cancel that arrives too late must not turn a completed export into a
+    // failure: the renderer's outcome is the truth.
+    {
+        FakeView view;ExportSession session(view,15);
+        session.start(ExportMediaKind::wav);
+        require(session.cancel()==ExportSession::Cancel::requested,"render cancel resolved early");
+        require(session.finish(ExportOutcome::completed,"WAV written."),
+            "completed finish was refused after a cancel request");
+        require(view.alerts.size()==1,"late cancel raised more than one alert");
+        require(view.alerts[0].outcome==ExportOutcome::completed,
+            "late cancel turned a completed export into a failure");
+        require(view.alerts[0].message=="WAV written.","completed message was replaced");
+        require(!session.running(),"completed export still running");
+        require(!session.cancelRequested(),"cancel request survived completion");
+    }
     // A silent plugin is reported as a failed export after the configured bound.
     {
         FakeView view;ExportSession session(view,15);

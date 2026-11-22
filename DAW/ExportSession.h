@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <string>
 #include "ExportOutcome.h"
 #include "PluginLoadGate.h"
@@ -23,19 +24,20 @@ public:
     ExportSession(ExportView& view,int pluginLoadTimeoutSeconds)
         : view(view),timeoutSeconds(pluginLoadTimeoutSeconds){}
     Start start(ExportMediaKind kind){
-        if(runningState)return Start::alreadyRunning;
-        mediaKind=kind;runningState=true;cancelRequestedState=false;
+        if(runningState.load())return Start::alreadyRunning;
+        mediaKind=kind;runningState.store(true);cancelRequestedState=false;
         view.exportRunningChanged(true);
         view.exportCancelText("CANCEL EXPORT");
         return Start::started;
     }
-    bool running() const {return runningState;}
+    // Safe to read from any thread; the window polls it from paint and timers.
+    bool running() const {return runningState.load();}
     bool cancelRequested() const {return cancelRequestedState;}
     ExportMediaKind media() const {return mediaKind;}
     // A pending plugin load cannot be interrupted, so this abandons it and
     // resolves now; a running render is left to observe the flag and finish.
     Cancel cancel(){
-        if(!runningState)return Cancel::notRunning;
+        if(!runningState.load())return Cancel::notRunning;
         cancelRequestedState=true;
         view.exportCancelText("CANCELING...");
         if(!gate.cancel())return Cancel::requested;
@@ -52,14 +54,14 @@ public:
     // Resolves a run exactly once. A late render callback or a second deadline
     // cannot alert over the outcome that already happened.
     bool finish(ExportOutcome outcome,std::string message){
-        if(!runningState)return false;
+        if(!runningState.load())return false;
         resolve(outcome,std::move(message));
         return true;
     }
     PluginLoadGate& pluginLoad(){return gate;}
 private:
     void resolve(ExportOutcome outcome,const std::string& message){
-        runningState=false;cancelRequestedState=false;
+        runningState.store(false);cancelRequestedState=false;
         view.exportRunningChanged(false);
         view.exportCancelText("CANCEL EXPORT");
         view.exportAlert(mediaKind,outcome,message);
@@ -68,6 +70,7 @@ private:
     PluginLoadGate gate;
     int timeoutSeconds;
     ExportMediaKind mediaKind=ExportMediaKind::wav;
-    bool runningState=false,cancelRequestedState=false;
+    std::atomic<bool> runningState{false};
+    bool cancelRequestedState=false;
 };
 }
