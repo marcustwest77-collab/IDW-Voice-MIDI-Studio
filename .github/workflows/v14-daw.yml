@@ -19,7 +19,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     # A wedged run should fail rather than hold a runner and the queue. Job
     # time excludes queueing, so the macOS capacity delays do not count here.
-    timeout-minutes: 60
+    # #1014's uncapped Windows job (100 tests) took 68m55s end to end.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - name: Configure V14 DAW
