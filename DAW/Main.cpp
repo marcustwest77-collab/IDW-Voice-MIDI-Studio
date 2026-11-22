@@ -42,6 +42,7 @@
 #include "OfflineBounce.h"
 #include "StandardMidiExport.h"
 #include "ExportAlertMessageBox.h"
+#include "PluginLoadDeadline.h"
 #include "PluginLoadGate.h"
 #include "StandardMidiImport.h"
 #include "AudioDevicePreferences.h"
@@ -3169,26 +3170,24 @@ private:
         const int loadToken=pluginLoadGate.begin();
         // A plugin that never answers must not wedge the export: the deadline
         // resolves it, and a load arriving later is torn down by its callback.
-        juce::Timer::callAfterDelay(pluginInstantiationTimeoutMs,
-            [safe=juce::Component::SafePointer<Workstation>(this),loadToken]{
+        idw::daw::armPluginLoadDeadline(pluginLoadGate,loadToken,idw::daw::pluginInstantiationTimeoutMs,
+            [safe=juce::Component::SafePointer<Workstation>(this)]{return safe!=nullptr;},
+            [safe=juce::Component::SafePointer<Workstation>(this)](idw::daw::PluginLoadGate::Timeout timeout){
                 if(safe==nullptr)return;
-                const auto timeout=safe->pluginLoadGate.expire(loadToken,safe->exportCancel.load());
-                if(timeout==idw::daw::PluginLoadGate::Timeout::ignored)return;
                 if(timeout==idw::daw::PluginLoadGate::Timeout::canceled)
                     safe->finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");
                 else
                     safe->finishWavExport(idw::daw::ExportOutcome::failed,
                         "The track effect did not finish loading within "+
-                        juce::String(pluginInstantiationTimeoutMs/1000)+" seconds, so the WAV was not exported.");
-            });
+                        juce::String(idw::daw::pluginInstantiationTimeoutMs/1000)+" seconds, so the WAV was not exported.");
+            },
+            [safe=juce::Component::SafePointer<Workstation>(this)]{return safe!=nullptr && safe->exportCancel.load();});
         createOfflinePlugin(*chosen,44100,1024,
-            [safe=juce::Component::SafePointer<Workstation>(this),snapshot,output,sourceProject,effect,state,identifier,loadToken]
+            idw::daw::wrapPluginLoadCallback<juce::AudioPluginInstance>(pluginLoadGate,loadToken,
+                [safe=juce::Component::SafePointer<Workstation>(this)]{return safe!=nullptr;},
+                [safe=juce::Component::SafePointer<Workstation>(this),snapshot,output,sourceProject,effect,state,identifier]
             (std::unique_ptr<juce::AudioPluginInstance> instance,const juce::String& failure){
                 if(safe==nullptr)return;
-                if(!safe->pluginLoadGate.complete(loadToken).accepted){
-                    instance.reset(); // A late or superseded load is torn down on this thread.
-                    return;
-                }
                 if(safe->exportCancel.load()){safe->finishWavExport(idw::daw::ExportOutcome::canceled,"Export canceled.");return;}
                 auto slot=std::make_shared<idw::daw::StereoEffectSlot>();juce::String error=failure;
                 if(instance)instance->setNonRealtime(true);
@@ -3205,7 +3204,7 @@ private:
                     return slot->latencySamples()==latency && slot->process(buffer) && slot->latencySamples()==latency;
                 };
                 safe->renderWavSnapshot(snapshot,output,sourceProject,effect);
-            });
+            }));
     }
     void bounceMix(){
         if(!recoveryIdle() || projectEffectSnapshotPending)return;
@@ -4085,7 +4084,6 @@ public:
     // Touched only on the message thread: the chooser callback, the plugin-load
     // callback, the deadline and the cancel button all run there.
     idw::daw::PluginLoadGate pluginLoadGate;
-    static constexpr int pluginInstantiationTimeoutMs=15000;
     // Injected so a harness can drive a load that never answers or answers late.
     using OfflinePluginCreate=std::function<void(const juce::PluginDescription&,double,int,
         std::function<void(std::unique_ptr<juce::AudioPluginInstance>,const juce::String&)>)>;
