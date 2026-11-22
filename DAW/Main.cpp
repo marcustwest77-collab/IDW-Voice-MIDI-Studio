@@ -3218,8 +3218,8 @@ private:
                 try{
                     safe->prepareWavSnapshot(snapshot,output,origin);
                 }catch(...){
-                    // Nothing may escape the message thread: abandon any load this
-                    // attempt started and report the export as failed once.
+                    // Contains this call only: it can throw before any work is
+                    // queued, so abandon the load token and resolve once.
                     safe->pluginLoadGate.cancel();
                     if(safe->exportRunning.load())
                         safe->finishWavExport(idw::daw::ExportOutcome::failed,"WAV export failed unexpectedly.");
