@@ -720,7 +720,13 @@ public:
         openProject.onClick=[this]{showProjectMenu();};
         exportProject.onClick=[this]{exportProjectFile();};
         bounce.onClick=[this]{bounceMix();};
-        cancelBounce.onClick=[this]{exportCancel.store(true);};
+        cancelBounce.onClick=[this]{
+            if(!exportRunning.load())return;
+            exportCancel.store(true);
+            cancelBounce.setButtonText("CANCELING...");
+            cancelBounce.setEnabled(false);
+            repaint();
+        };
         audio.onClick=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;addAudioTrack();refreshMixer();repaint();};
         midi.onClick=[this]{if(playing.load() || (recorder.isRecording() || multiRecorder.isRecording()) || exportRunning.load())return;session.addTrack(idw::daw::TrackType::midi);refreshMixer();repaint();};
         tempo.setRange(20,300,1);tempo.setValue(120);tempo.setTextBoxStyle(juce::Slider::TextBoxRight,false,70,28);
@@ -1728,7 +1734,8 @@ public:
         }
         if(exportRunning.load()){
             g.setColour(juce::Colours::gold);
-            g.drawText("Export: "+juce::String((int)(exportProgress.load()*100.0f))+"%",getWidth()-230,80,205,24,juce::Justification::centredRight);
+            g.drawText(exportCancel.load()?juce::String("Canceling export..."):
+                "Export: "+juce::String((int)(exportProgress.load()*100.0f))+"%",getWidth()-230,80,205,24,juce::Justification::centredRight);
         }
         g.setColour(juce::Colours::grey);
         g.drawFittedText(!sources.empty() ? "Loaded audio tracks: " + juce::String(loadedCount()) + "  |  Timeline playback prototype; drag clips to move or resize their right edge." : "Add an audio track and open WAV/AIFF files to mix their playback.",25,getHeight()-44,getWidth()-50,35,juce::Justification::centredLeft,1);
@@ -3084,9 +3091,11 @@ private:
     }
     void finishWavExport(bool ok,const juce::String& error,const std::optional<juce::String>& receipt={}){
         exportRunning.store(false);bounce.setEnabled(true);cancelBounce.setEnabled(false);
+        cancelBounce.setButtonText("CANCEL EXPORT");
         if(!playing.load())stopTimer();repaint();
-        juce::AlertWindow::showMessageBoxAsync(ok?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
-            ok?"WAV export complete":"WAV bounce unavailable",ok?(receipt?*receipt:juce::String("WAV written; verify the exported file before using it.")):error);
+        const bool canceled=!ok && error=="Export canceled.";
+        juce::AlertWindow::showMessageBoxAsync(ok || canceled?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
+            ok?"WAV export complete":canceled?"WAV export canceled":"WAV bounce unavailable",ok?(receipt?*receipt:juce::String("WAV written; verify the exported file before using it.")):error);
     }
     void renderWavSnapshot(const idw::daw::Session& snapshot,const juce::File& output,
                            const juce::File& sourceProject,std::shared_ptr<idw::daw::OfflineBounceEffect> effect={}){
@@ -3224,9 +3233,11 @@ private:
                     juce::MessageManager::callAsync([safe,ok,error]{
                         if(safe==nullptr)return;
                         safe->exportRunning.store(false);safe->bounce.setEnabled(true);safe->cancelBounce.setEnabled(false);
+                        safe->cancelBounce.setButtonText("CANCEL EXPORT");
                         if(!safe->playing.load())safe->stopTimer();safe->repaint();
-                        juce::AlertWindow::showMessageBoxAsync(ok?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
-                            ok?"MIDI export complete":"MIDI export unavailable",
+                        const bool canceled=!ok && error=="MIDI export canceled.";
+                        juce::AlertWindow::showMessageBoxAsync(ok || canceled?juce::MessageBoxIconType::InfoIcon:juce::MessageBoxIconType::WarningIcon,
+                            ok?"MIDI export complete":canceled?"MIDI export canceled":"MIDI export unavailable",
                             ok?"MIDI tracks exported. Open the file in another DAW and choose instruments for its tracks.":error);
                     });
                 });
@@ -4133,4 +4144,3 @@ private:
     std::unique_ptr<MainWindow> window;
 };
 START_JUCE_APPLICATION(DAWApplication)
-
