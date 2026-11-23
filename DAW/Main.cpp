@@ -134,6 +134,9 @@ public:
         };
         remoteReviewPanel.onRevokeControl=[this] {
             const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
+            // Explicit local revocation also terminates the socket listener.
+            // Restart requires a fresh (larger) epoch to prevent stale replay.
+            if (localIpcReceiver) { localIpcReceiver->stop(); localIpcReceiver.reset(); }
             // Discard commands waiting in the transport mailbox as well as reviewed requests.
             remoteReviewMailbox.clear();
             remoteReviewPanel.setApprovalEnabled(false);
