@@ -216,6 +216,13 @@ if(IDW_BUILD_DAW)
         add_executable(IDWDAWSessionReviewCoordinatorTests DAW/tests/RemoteSessionReviewCoordinatorTests.cpp)
         target_compile_features(IDWDAWSessionReviewCoordinatorTests PRIVATE cxx_std_17)
         add_test(NAME IDWDAWSessionReviewCoordinator COMMAND IDWDAWSessionReviewCoordinatorTests)
+        add_executable(IDWDAWLocalIpcSocketTests DAW/tests/RemoteLocalIpcSocketReceiverTests.cpp)
+        target_compile_features(IDWDAWLocalIpcSocketTests PRIVATE cxx_std_17)
+        target_include_directories(IDWDAWLocalIpcSocketTests PRIVATE
+            DAW "$<TARGET_PROPERTY:IDWDAW,JUCE_GENERATED_SOURCES_DIRECTORY>")
+        target_link_libraries(IDWDAWLocalIpcSocketTests PRIVATE juce::juce_audio_utils)
+        target_compile_definitions(IDWDAWLocalIpcSocketTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+        add_test(NAME IDWDAWLocalIpcSocket COMMAND IDWDAWLocalIpcSocketTests)
         # Compile-check the experimental JUCE review panel independently of the DAW UI.
         add_executable(IDWDAWHostReviewPanelCompile DAW/tests/RemoteHostReviewPanelCompile.cpp)
         target_compile_features(IDWDAWHostReviewPanelCompile PRIVATE cxx_std_17)
