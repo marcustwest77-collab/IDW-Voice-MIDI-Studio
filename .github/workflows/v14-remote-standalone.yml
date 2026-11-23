@@ -25,6 +25,8 @@ jobs:
           set -euo pipefail
           mkdir -p remote-test-bin
           for source in DAW/tests/Remote*Tests.cpp DAW/tests/ValidatedControlReceiverTests.cpp; do
+            # Requires JUCE; compiled and exercised by v14-daw.yml on both platforms.
+            case "$source" in *RemoteLocalIpcSocketReceiverTests.cpp) continue;; esac
             name="$(basename "${source%.cpp}")"
             echo "Compiling ${name}"
             g++ -std=c++17 -O2 -DNDEBUG -Wall -Wextra -Werror "$source" -o "remote-test-bin/$name"

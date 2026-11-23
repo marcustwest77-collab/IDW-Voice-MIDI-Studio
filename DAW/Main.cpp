@@ -29,6 +29,7 @@
 #include "RemoteTransportSessionLifecycle.h"
 #include "RemoteTrustedTransportEventQueue.h"
 #include "RemoteVerifiedLocalCommandQueueAdapter.h"
+#include "RemoteLocalIpcSocketReceiver.h"
 #include "RemoteReviewMailbox.h"
 #include "RemoteValidatedCommandReviewReceiver.h"
 #include "RemoteTrackControlAdapter.h"
@@ -124,6 +125,8 @@ public:
         addChildComponent(remoteReviewPanel);
         remoteReviewPanel.setApprovalEnabled(false); // no verified session or dispatcher yet
         remoteReviewButton.onClick=[this] {
+            // Local host must explicitly open Remote Review to start IPC.
+            startLocalIpcIfConfigured();
             drainTrustedTransportEventsOnMessageThread();
             drainRemoteReviewMailbox();
             remoteReviewPanel.setVisible(!remoteReviewPanel.isVisible());
@@ -131,6 +134,9 @@ public:
         };
         remoteReviewPanel.onRevokeControl=[this] {
             const bool revoked=remoteTransportLifecycle.onHostRevokedControl();
+            // Explicit local revocation also terminates the socket listener.
+            // Restart requires a fresh (larger) epoch to prevent stale replay.
+            if (localIpcReceiver) { localIpcReceiver->stop(); localIpcReceiver.reset(); }
             // Discard commands waiting in the transport mailbox as well as reviewed requests.
             remoteReviewMailbox.clear();
             remoteReviewPanel.setApprovalEnabled(false);
@@ -1984,6 +1990,36 @@ private:
         juce::Logger::writeToLog("IDW command: "+command+" -> "+feedback);
         voiceCommandInput.selectAll();
     }
+    // Opt-in localhost receiver: environment configuration is deliberately
+    // ignored until the host clicks REMOTE REVIEW. The token is never logged.
+    // No secret is generated from a weak UI RNG or accepted from a remote peer.
+    void startLocalIpcIfConfigured() {
+        if (localIpcReceiver) return;
+        const auto portText=juce::SystemStats::getEnvironmentVariable("IDW_LOCAL_IPC_PORT","");
+        const auto epochText=juce::SystemStats::getEnvironmentVariable("IDW_LOCAL_IPC_EPOCH","");
+        const auto secret=juce::SystemStats::getEnvironmentVariable("IDW_LOCAL_IPC_TOKEN","").toStdString();
+        if (portText.isEmpty() && epochText.isEmpty() && secret.empty()) return;
+        if (!portText.containsOnly("0123456789") || portText.length()>5 ||
+            !epochText.containsOnly("0123456789") || epochText.length()>18 ||
+            !idw::daw::remote::LocalIpcAuthenticator::validSecret(secret)) {
+            remoteReviewPanel.setConnectionStatus("Local IPC configuration rejected");
+            return;
+        }
+        const auto port=portText.getIntValue();
+        const auto epoch=static_cast<std::uint64_t>(epochText.getLargeIntValue());
+        if (port<1024 || port>65535 || epoch==0) {
+            remoteReviewPanel.setConnectionStatus("Local IPC port or epoch rejected");
+            return;
+        }
+        auto receiver=std::make_unique<idw::daw::remote::LocalIpcSocketReceiver>(
+            remoteTransportEvents,static_cast<unsigned short>(port),secret,epoch);
+        if (!receiver->start()) {
+            remoteReviewPanel.setConnectionStatus("Local IPC could not start");
+            return;
+        }
+        localIpcReceiver=std::move(receiver);
+        remoteReviewPanel.setConnectionStatus("Local IPC start requested (localhost only)");
+    }
     // Trusted message-thread intake for a command already authenticated by the
     // transport. No network listener calls this yet. Never use peer-supplied DAW state.
     bool stageAuthenticatedTrackRequest(const idw::daw::remote::CommandMessage& command) {
@@ -2052,7 +2088,7 @@ private:
         for (auto& event : remoteTransportEvents.drain()) {
             if (event.kind==Event::Kind::connected) {
                 onVerifiedRemoteSessionConnectedOnMessageThread(
-                    event.epoch,event.tlsVerified,event.hostConsented,
+                    event.epoch,(event.tlsVerified || event.localTokenVerified),event.hostConsented,
                     event.trackControlGranted);
             } else if (event.kind==Event::Kind::command) {
                 receiveVerifiedRemoteTrackCommandForReview(event.wire,event.epoch);
@@ -3249,7 +3285,7 @@ public:
         return false;
     }
     ~Workstation() override {
-        remoteEventPollTimer.stopTimer();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
+        remoteEventPollTimer.stopTimer();if(localIpcReceiver)localIpcReceiver->stop();remoteTransportLifecycle.onPeerDisconnected();remoteReviewMailbox.clear();recoveryTimer.stopTimer();voiceListening.store(false);if(voiceListenThread.joinable())voiceListenThread.join();setLookAndFeel(nullptr);if(exportThread.joinable())exportThread.join();recorder.stop();multiRecorder.stop();loopbackCapture.cancel();deviceManager.removeAudioCallback(&loopbackCapture);deviceManager.removeAudioCallback(&multiRecorder);deviceManager.removeAudioCallback(&recorder);deviceManager.removeChangeListener(this);shutdownAudio();for(auto& slot:sources)slot->transport.setSource(nullptr);sources.clear();}
     IDWNeoLookAndFeel neoTheme;
     juce::ComboBox skinSelector;
     juce::TextButton customAccentButton,customBackgroundButton,customPanelButton,saveSkinButton,loadSkinButton,deleteSkinButton,exportSkinButton,importSkinButton,skinToolsButton;
@@ -3324,6 +3360,7 @@ public:
     idw::daw::remote::SessionReviewCoordinator remoteSessionReviews; // disconnected by default
     idw::daw::remote::RemoteReviewMailbox remoteReviewMailbox;
     idw::daw::remote::TrustedTransportEventQueue remoteTransportEvents;
+    std::unique_ptr<idw::daw::remote::LocalIpcSocketReceiver> localIpcReceiver;
     // Independent UI-thread poll remains active even when playback is stopped.
     struct RemoteEventPollTimer final : juce::Timer {
         Workstation& owner;

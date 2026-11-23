@@ -16,6 +16,7 @@ struct TrustedTransportEvent {
  bool hostConsented=false;
  bool trackControlGranted=false;
  std::string wire;
+ bool localTokenVerified=false; // appended to preserve existing aggregate initialization
 };
 class TrustedTransportEventQueue {
 public:
@@ -25,7 +26,7 @@ public:
   if (event.kind==TrustedTransportEvent::Kind::command && event.wire.empty()) return false;
   if (event.kind!=TrustedTransportEvent::Kind::command && !event.wire.empty()) return false;
   if (event.kind==TrustedTransportEvent::Kind::connected &&
-      (!event.tlsVerified || !event.hostConsented)) return false;
+      (!(event.tlsVerified || event.localTokenVerified) || !event.hostConsented)) return false;
   std::lock_guard<std::mutex> lock(mutex_);
   if ((event.kind==TrustedTransportEvent::Kind::command ||
        event.kind==TrustedTransportEvent::Kind::connected) &&
