@@ -13,6 +13,7 @@ struct TrustedTransportEvent {
  Kind kind=Kind::disconnected;
  std::uint64_t epoch=0;
  bool tlsVerified=false;
+ bool localTokenVerified=false; // set only by the native loopback token verifier
  bool hostConsented=false;
  bool trackControlGranted=false;
  std::string wire;
@@ -25,7 +26,7 @@ public:
   if (event.kind==TrustedTransportEvent::Kind::command && event.wire.empty()) return false;
   if (event.kind!=TrustedTransportEvent::Kind::command && !event.wire.empty()) return false;
   if (event.kind==TrustedTransportEvent::Kind::connected &&
-      (!event.tlsVerified || !event.hostConsented)) return false;
+      (!(event.tlsVerified || event.localTokenVerified) || !event.hostConsented)) return false;
   std::lock_guard<std::mutex> lock(mutex_);
   if ((event.kind==TrustedTransportEvent::Kind::command ||
        event.kind==TrustedTransportEvent::Kind::connected) &&
