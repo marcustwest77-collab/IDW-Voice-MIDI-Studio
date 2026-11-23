@@ -13,10 +13,10 @@ struct TrustedTransportEvent {
  Kind kind=Kind::disconnected;
  std::uint64_t epoch=0;
  bool tlsVerified=false;
- bool localTokenVerified=false; // set only by the native loopback token verifier
  bool hostConsented=false;
  bool trackControlGranted=false;
  std::string wire;
+ bool localTokenVerified=false; // appended to preserve existing aggregate initialization
 };
 class TrustedTransportEventQueue {
 public:
