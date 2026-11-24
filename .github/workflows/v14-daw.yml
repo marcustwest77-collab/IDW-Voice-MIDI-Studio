@@ -22,12 +22,39 @@ jobs:
     # Identical Windows builds have run 65m44s to 77m55s+; #1021 was cancelled
     # at 80 with the build unfinished. 100 keeps the wedged-job guard realistic.
     timeout-minutes: 100
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_VERSION: v1
     steps:
       - uses: actions/checkout@v4
+      # MSBuild ran one project per process: 103 `MSBuild version` banners in
+      # #1022, one per --target, back to back, so the leg never had two cl.exe
+      # in flight. Ninja builds the whole target list as one graph with -j and
+      # is also the only generator family where CMake honours
+      # CMAKE_<LANG>_COMPILER_LAUNCHER, which is what sccache needs. Multi-Config
+      # keeps the Release/ artefact paths the packaging step expects.
+      - name: Set up MSVC environment
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Set up sccache
+        if: matrix.os == 'windows-latest'
+        uses: mozilla-actions/sccache-action@v0.0.11
       - name: Configure V14 DAW
+        if: matrix.os != 'windows-latest'
         run: cmake -S . -B build-v14 -DIDW_BUILD_DAW=ON -DBUILD_TESTING=ON -DIDW_BUILD_VST3_PROBE=ON
+      - name: Configure V14 DAW with sccache
+        if: matrix.os == 'windows-latest'
+        run: >-
+          cmake -S . -B build-v14 -G "Ninja Multi-Config"
+          -DCMAKE_CONFIGURATION_TYPES=Release
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          -DIDW_BUILD_DAW=ON -DBUILD_TESTING=ON -DIDW_BUILD_VST3_PROBE=ON
       - name: Build workstation and test
         run: cmake --build build-v14 --config Release --target IDWDAW IDWVst3EffectProbe IDWDAWStereoEffectSlotTests IDWDAWTrackAudioBusTests IDWDAWExperimentalEffectPolicyTests IDWDAWEffectDiagnosticMetricsTests IDWDAWPluginStateDataTests IDWDAWDimensionalControlsTests IDWDAWPianoRollCloseTests IDWDAWPianoRollDragThresholdTests IDWDAWPianoRollSnapTests IDWDAWMidiNoteDeleteTests IDWDAWMidiNoteSelectionTests IDWDAWPianoRollLayoutTests IDWDAWPlaybackLoopTests IDWDAWLivePlaybackLoopTests IDWDAWWavExportReceiptTests IDWDAWClipSplitDialogTests IDWDAWClipPositionDialogTests IDWDAWAudioClipIdentityTests IDWDAWArmedRecordingPreflightTests IDWDAWRecordingPreflightTests IDWDAWAudioDeviceRecallStatusTests IDWDAWAudioDeviceRecallIntegrationTests IDWDAWAudioDevicePreferencesTests IDWDAWMidiLengthTests IDWDAWMidiQuantizeTests IDWDAWMidiTransposeTests IDWDAWMidiTrackVelocityTests IDWDAWMidiTrackRepeatTests IDWDAWMidiNudgeTests IDWDAWMidiDuplicateTests IDWDAWMidiVelocityTests IDWDAWStandardMidiImportTests IDWDAWStandardMidiExportTests IDWDAWMasterMixRecallTests IDWDAWPianoRollNavigationTests IDWDAWMidiEditHistoryTests IDWDAWMidiBounceTests IDWDAWPortableProjectTests IDWDAWProjectIntegerTests IDWDAWSessionSaveTests IDWDAWMultitrackOverdubTests IDWDAWExtendedRecordingTests IDWDAWAudioCallbackIsolationTests IDWDAWAudioBackendTests IDWDAWRecordEditRoundtripTests IDWDAWWindowsCommandReviewOperationTests IDWDAWLocalCommandConsentTests IDWDAWWindowsCommandReviewTests IDWDAWCommandReviewWireTests IDWDAWTLSOfferWireTests IDWDAWBridgeReadyWireTests IDWDAWPrivateReadinessTests IDWDAWLocalOfferConsentTests IDWDAWManagedOfferControllerTests IDWDAWTransportDispatchGuardTests IDWDAWWindowsBridgeSessionTests IDWDAWWindowsBootstrapChannelTests IDWDAWLocalSessionOwnerTests IDWDAWLocalSocketReceiverTests IDWDAWSessionTests IDWDAWTimelineTests IDWDAWPersistenceTests IDWDAWBounceTests IDWDAWExportOutcomeTests IDWDAWExportAlertMessageBoxTests IDWDAWPluginLoadGateTests IDWDAWPluginLoadDeadlineTests IDWDAWExportSessionTests IDWDAWExportSessionStressTests IDWDAWMidiBenchmark IDWDAWClipEditingTests IDWDAWMultiClipTests IDWDAWClipFadeTests IDWDAWClipTransportTests IDWDAWWaveformTests IDWDAWZoomTests IDWDAWSnapTests IDWDAWClipHistoryTests IDWDAWRecoveryTests IDWDAWNewProjectTests IDWDAWProjectDocumentStatusTests IDWDAWProjectSaveDestinationTests IDWDAWTrackRenameTests IDWDAWRecentProjectsTests IDWDAWRelinkTests IDWDAWRecordingTests IDWDAWRemotePermissionTests IDWDAWRemoteCommandTests IDWDAWRemoteSessionControllerTests IDWDAWRemoteHandshakeTests IDWDAWRemoteWireFrameTests IDWDAWRemoteStreamDecoderTests IDWDAWRemoteReceivePipelineTests IDWDAWRemoteParserTests IDWDAWValidatedReceiverTests IDWDAWHostApprovalTests IDWDAWControllerViewTests IDWDAWRemoteReceiptTests IDWDAWHostReviewPanelCompile IDWDAWHostReviewControllerTests IDWDAWSessionReviewCoordinatorTests --parallel 4
+      - name: Report sccache statistics
+        if: always() && matrix.os == 'windows-latest'
+        run: sccache --show-stats
       - name: Upload experimental VST3 probe
         uses: actions/upload-artifact@v4
         with:
