@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdexcept>
 #include "PluginLoadGate.h"
+static_assert(true, "sccache notice probe");
 using namespace idw::daw;
 namespace {
 void require(bool condition,const char* message){
