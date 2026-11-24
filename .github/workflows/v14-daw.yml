@@ -104,14 +104,14 @@ jobs:
         if: always() && matrix.os == 'macos-latest'
         shell: bash
         run: '"${SCCACHE_PATH:-sccache}" --show-stats'
-      # A warm run should miss only the 60 juce_core_CompilationTime copies. More
-      # than that is a new always-missing source or an evicted cache, so warn here
-      # instead of requiring an sccache_debug dispatch, which costs a cold branch
-      # build. An ordinary source-changing push also adds misses, but it drags the
-      # hit rate down with them, so the warning additionally requires the run to
-      # still be nearly as warm as a no-change run: 90%, against the 92.81%
-      # steady state. A run with no hits is a cold cache and is skipped, and the
-      # two report steps above are left untouched.
+      # A warm run should miss only the 60 juce_core_CompilationTime copies. A
+      # source-changing push also adds misses, but it recompiles the same 834
+      # translation units, so its request count stays at the 834 baseline. A new
+      # always-missing file looks the other way round: it adds a compile request
+      # per target and misses each one, which is why it drops the hit rate to
+      # about 86% and still needs a warning. So the guard warns only when the
+      # misses beyond the 60 are matched by compile requests beyond 834. A cold
+      # cache is skipped, and the two report steps above are left untouched.
       - name: Check sccache miss count
         if: always()
         shell: bash
@@ -125,7 +125,7 @@ jobs:
           hits="$(printf '%s\n' "$stats" | awk '$1=="Cache" && $2=="hits" && $3 ~ /^[0-9]+$/ {print $3; exit}')"
           misses="$(printf '%s\n' "$stats" | awk '$1=="Cache" && $2=="misses" && $3 ~ /^[0-9]+$/ {print $3; exit}')"
           expected=60
-          rate_min=90
+          baseline_requests=834
           if [ -z "$hits" ] || [ -z "$misses" ]; then
             echo "::warning::could not read the sccache hit/miss counts"
             exit 0
@@ -134,11 +134,14 @@ jobs:
             echo "cold cache: $hits hits, $misses misses; no warm baseline to compare"
             exit 0
           fi
+          requests=$(( hits + misses ))
+          extra_misses=$(( misses - expected ))
+          extra_requests=$(( requests - baseline_requests ))
           rate="$(awk -v h="$hits" -v m="$misses" 'BEGIN { if (h + m > 0) printf "%d", (100 * h) / (h + m); else print 0 }')"
-          if [ "$misses" -gt "$expected" ] && [ "$rate" -ge "$rate_min" ]; then
-            echo "::warning::warm sccache run on ${{ matrix.os }} reported $misses misses at a $rate% hit rate, against the expected $expected misses at $rate_min% or better (one juce_core_CompilationTime copy per target plus juceaide); a new always-missing file or an evicted cache"
+          if [ "$extra_misses" -gt 0 ] && [ "$extra_requests" -ge "$extra_misses" ]; then
+            echo "::warning::warm sccache run on ${{ matrix.os }} reported $misses misses at a $rate% hit rate, with $extra_requests more compile requests than the $baseline_requests baseline, so every miss beyond the expected $expected is a new compile rather than a recompiled source; a newly always-missing file, or a newly added target. Set the SCCACHE_DEBUG repository variable and push to get the per-compile listing from a warm run"
           else
-            echo "warm cache: $misses misses at a $rate% hit rate (hits $hits), within the expected $expected misses and $rate_min% floor"
+            echo "warm cache: $misses misses at a $rate% hit rate (hits $hits, requests $requests); $extra_misses misses beyond the expected $expected against $extra_requests requests beyond $baseline_requests, so any extra misses are recompiled sources"
           fi
       - name: List sccache cache misses
         if: always() && matrix.os == 'windows-latest' && (github.event.inputs.sccache_debug == 'true' || vars.SCCACHE_DEBUG == 'true')
