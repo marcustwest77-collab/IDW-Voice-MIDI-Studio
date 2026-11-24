@@ -57,21 +57,30 @@ jobs:
         run: |
           echo "SCCACHE_LOG=debug" >> "$GITHUB_ENV"
           echo "SCCACHE_ERROR_LOG=${GITHUB_WORKSPACE}/sccache.log" >> "$GITHUB_ENV"
+      # Both legs cache now. Windows needed it because MSBuild ran one project per
+      # process; macOS had no compiler cache at all, and it pays the same
+      # duplication (820 compiles for 103 targets, 684 of them JUCE module
+      # recompiles), which made its ~14m35s build the PR's critical path.
       - name: Set up sccache
-        if: matrix.os == 'windows-latest'
         uses: mozilla-actions/sccache-action@v0.0.11
       # sccache's GitHub Actions backend needs these two tokens in the process
       # environment; the runner does not hand them to run steps on its own.
       - name: Export sccache cache tokens
-        if: matrix.os == 'windows-latest'
         uses: actions/github-script@v7
         with:
           script: |
             core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      # macOS uses the default Makefile generator, which honours
+      # CMAKE_<LANG>_COMPILER_LAUNCHER (MSBuild does not), so the same two flags
+      # apply here. No other configure option changes.
       - name: Configure V14 DAW
         if: matrix.os != 'windows-latest'
-        run: cmake -S . -B build-v14 -DIDW_BUILD_DAW=ON -DBUILD_TESTING=ON -DIDW_BUILD_VST3_PROBE=ON
+        run: >-
+          cmake -S . -B build-v14
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          -DIDW_BUILD_DAW=ON -DBUILD_TESTING=ON -DIDW_BUILD_VST3_PROBE=ON
       - name: Configure V14 DAW with sccache
         if: matrix.os == 'windows-latest'
         run: >-
@@ -82,9 +91,12 @@ jobs:
           -DIDW_BUILD_DAW=ON -DBUILD_TESTING=ON -DIDW_BUILD_VST3_PROBE=ON
       - name: Build workstation and test
         run: cmake --build build-v14 --config Release --target IDWDAW IDWVst3EffectProbe IDWDAWStereoEffectSlotTests IDWDAWTrackAudioBusTests IDWDAWExperimentalEffectPolicyTests IDWDAWEffectDiagnosticMetricsTests IDWDAWPluginStateDataTests IDWDAWDimensionalControlsTests IDWDAWPianoRollCloseTests IDWDAWPianoRollDragThresholdTests IDWDAWPianoRollSnapTests IDWDAWMidiNoteDeleteTests IDWDAWMidiNoteSelectionTests IDWDAWPianoRollLayoutTests IDWDAWPlaybackLoopTests IDWDAWLivePlaybackLoopTests IDWDAWWavExportReceiptTests IDWDAWClipSplitDialogTests IDWDAWClipPositionDialogTests IDWDAWAudioClipIdentityTests IDWDAWArmedRecordingPreflightTests IDWDAWRecordingPreflightTests IDWDAWAudioDeviceRecallStatusTests IDWDAWAudioDeviceRecallIntegrationTests IDWDAWAudioDevicePreferencesTests IDWDAWMidiLengthTests IDWDAWMidiQuantizeTests IDWDAWMidiTransposeTests IDWDAWMidiTrackVelocityTests IDWDAWMidiTrackRepeatTests IDWDAWMidiNudgeTests IDWDAWMidiDuplicateTests IDWDAWMidiVelocityTests IDWDAWStandardMidiImportTests IDWDAWStandardMidiExportTests IDWDAWMasterMixRecallTests IDWDAWPianoRollNavigationTests IDWDAWMidiEditHistoryTests IDWDAWMidiBounceTests IDWDAWPortableProjectTests IDWDAWProjectIntegerTests IDWDAWSessionSaveTests IDWDAWMultitrackOverdubTests IDWDAWExtendedRecordingTests IDWDAWAudioCallbackIsolationTests IDWDAWAudioBackendTests IDWDAWRecordEditRoundtripTests IDWDAWWindowsCommandReviewOperationTests IDWDAWLocalCommandConsentTests IDWDAWWindowsCommandReviewTests IDWDAWCommandReviewWireTests IDWDAWTLSOfferWireTests IDWDAWBridgeReadyWireTests IDWDAWPrivateReadinessTests IDWDAWLocalOfferConsentTests IDWDAWManagedOfferControllerTests IDWDAWTransportDispatchGuardTests IDWDAWWindowsBridgeSessionTests IDWDAWWindowsBootstrapChannelTests IDWDAWLocalSessionOwnerTests IDWDAWLocalSocketReceiverTests IDWDAWSessionTests IDWDAWTimelineTests IDWDAWPersistenceTests IDWDAWBounceTests IDWDAWExportOutcomeTests IDWDAWExportAlertMessageBoxTests IDWDAWPluginLoadGateTests IDWDAWPluginLoadDeadlineTests IDWDAWExportSessionTests IDWDAWExportSessionStressTests IDWDAWMidiBenchmark IDWDAWClipEditingTests IDWDAWMultiClipTests IDWDAWClipFadeTests IDWDAWClipTransportTests IDWDAWWaveformTests IDWDAWZoomTests IDWDAWSnapTests IDWDAWClipHistoryTests IDWDAWRecoveryTests IDWDAWNewProjectTests IDWDAWProjectDocumentStatusTests IDWDAWProjectSaveDestinationTests IDWDAWTrackRenameTests IDWDAWRecentProjectsTests IDWDAWRelinkTests IDWDAWRecordingTests IDWDAWRemotePermissionTests IDWDAWRemoteCommandTests IDWDAWRemoteSessionControllerTests IDWDAWRemoteHandshakeTests IDWDAWRemoteWireFrameTests IDWDAWRemoteStreamDecoderTests IDWDAWRemoteReceivePipelineTests IDWDAWRemoteParserTests IDWDAWValidatedReceiverTests IDWDAWHostApprovalTests IDWDAWControllerViewTests IDWDAWRemoteReceiptTests IDWDAWHostReviewPanelCompile IDWDAWHostReviewControllerTests IDWDAWSessionReviewCoordinatorTests --parallel 4
+      # Both legs cache, so both report. SCCACHE_PATH is exported by the action;
+      # fall back to the binary's PATH entry for runners that only install it.
       - name: Report sccache statistics
-        if: always() && matrix.os == 'windows-latest'
-        run: sccache --show-stats
+        if: always()
+        shell: bash
+        run: '"${SCCACHE_PATH:-sccache}" --show-stats'
       - name: List sccache cache misses
         if: always() && matrix.os == 'windows-latest' && github.event.inputs.sccache_debug == 'true'
         shell: bash
