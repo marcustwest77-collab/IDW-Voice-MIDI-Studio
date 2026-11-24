@@ -138,10 +138,12 @@ jobs:
           extra_misses=$(( misses - expected ))
           extra_requests=$(( requests - baseline_requests ))
           rate="$(awk -v h="$hits" -v m="$misses" 'BEGIN { if (h + m > 0) printf "%d", (100 * h) / (h + m); else print 0 }')"
-          if [ "$extra_misses" -gt 0 ] && [ "$extra_requests" -ge "$extra_misses" ]; then
+          if [ "$extra_misses" -le 0 ]; then
+            echo "warm cache: $misses misses at a $rate% hit rate (hits $hits, requests $requests), within the expected $expected"
+          elif [ "$extra_requests" -ge "$extra_misses" ]; then
             echo "::warning::warm sccache run on ${{ matrix.os }} reported $misses misses at a $rate% hit rate, with $extra_requests more compile requests than the $baseline_requests baseline, so every miss beyond the expected $expected is a new compile rather than a recompiled source; a newly always-missing file, or a newly added target. Set the SCCACHE_DEBUG repository variable and push to get the per-compile listing from a warm run"
           else
-            echo "warm cache: $misses misses at a $rate% hit rate (hits $hits, requests $requests); $extra_misses misses beyond the expected $expected against $extra_requests requests beyond $baseline_requests, so any extra misses are recompiled sources"
+            echo "warm cache: $misses misses at a $rate% hit rate (hits $hits, requests $requests); $extra_misses beyond the expected $expected against $extra_requests requests beyond $baseline_requests, so the extra misses are recompiled sources"
           fi
       - name: List sccache cache misses
         if: always() && matrix.os == 'windows-latest' && (github.event.inputs.sccache_debug == 'true' || vars.SCCACHE_DEBUG == 'true')
