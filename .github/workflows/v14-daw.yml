@@ -112,7 +112,9 @@ jobs:
       # always-missing file looks the other way round: it adds a compile request
       # per target and misses each one, which is why it drops the hit rate to
       # about 86% and still needs a warning. So the guard warns only when the
-      # misses beyond the 60 are matched by compile requests beyond 834. A cold
+      # misses beyond the 60 are matched by compile requests beyond 834. When
+      # they are not matched, the counts cannot name a cause, so the guard
+      # prints a notice and compares the compile inputs with the PR base. A cold
       # cache is skipped, and the two report steps above are left untouched.
       - name: Check sccache miss count
         if: always()
@@ -139,15 +141,16 @@ jobs:
           requests=$(( hits + misses ))
           extra_misses=$(( misses - expected ))
           extra_requests=$(( requests - baseline_requests ))
-          rate="$(awk -v h="$hits" -v m="$misses" 'BEGIN { if (h + m > 0) printf "%d", (100 * h) / (h + m); else print 0 }')"
+          rate=$(( 100 * hits / requests ))
           if [ "$extra_misses" -le 0 ]; then
             echo "warm cache: $misses misses at a $rate% hit rate (hits $hits, requests $requests), within the expected $expected"
           elif [ "$extra_requests" -ge "$extra_misses" ]; then
             echo "::warning::warm sccache run on ${{ matrix.os }} reported $misses misses at a $rate% hit rate, with $extra_requests more compile requests than the $baseline_requests baseline, so every miss beyond the expected $expected is a new compile rather than a recompiled source; a newly always-missing file, or a newly added target. Set the SCCACHE_DEBUG repository variable and push to get the per-compile listing from a warm run"
-          elif [ $(( extra_misses * 4 )) -ge "$baseline_requests" ]; then
-            # A source change that recompiles a large part of the tree and a
-            # partly cold cache produce the same counts, so ask the one question
-            # that separates them: did a compile input change between the PR's
+          else
+            # The extra misses are not matched by extra compile requests, so
+            # they are either keys this ref's cache did not hold or sources this
+            # commit recompiled, and the counts cannot separate the two. Ask the
+            # one question that can: did a compile input change between the PR's
             # base and this commit? The depth-1 checkout has no base commit, so
             # fetch just that one; a dispatch has no base at all, and any
             # failure here leaves the cause unjudged rather than guessed.
@@ -159,14 +162,12 @@ jobs:
               fi
             fi
             if [ "$changed" = "0" ]; then
-              echo "::notice::partly cold cache on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), no compile requests beyond the $baseline_requests baseline, and no compile input differs from the PR base ${base:0:12}, so the $extra_misses misses beyond the expected $expected are keys this ref's cache did not hold rather than recompiles. A warm re-run should return to the expected $expected, and the SCCACHE_DEBUG listing names them"
+              echo "::notice::partly cold cache on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), and no compile input differs from the PR base ${base:0:12}, so every miss beyond the expected $expected is a key this ref's cache did not hold rather than a recompile. A warm re-run should return to the expected $expected, and the SCCACHE_DEBUG listing names them"
             elif [ -n "$changed" ]; then
-              echo "::notice::warm-run misses on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests) with no compile requests beyond the $baseline_requests baseline, and $changed compile inputs differ from the PR base ${base:0:12}. That is either those sources recompiled or a partly cold cache compiling them for the first time; these counts cannot separate the two, and the SCCACHE_DEBUG listing names the sources"
+              echo "::notice::warm-run misses on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), with $changed compile input(s) differing from the PR base ${base:0:12}. That is either those sources recompiled or a partly cold cache compiling them for the first time, and these counts cannot separate the two; the SCCACHE_DEBUG listing names the sources"
             else
-              echo "::notice::warm-run misses on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests) with no compile requests beyond the $baseline_requests baseline. A partly cold cache and a source change that touches a large part of the tree look identical in these counts, and without a base commit to compare this run cannot say which it was. The SCCACHE_DEBUG listing names the sources"
+              echo "::notice::warm-run misses on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), with no base commit available to compare against, so this run cannot say whether those are recompiled sources or keys this ref's cache did not hold; the SCCACHE_DEBUG listing names the sources"
             fi
-          else
-            echo "warm cache: $misses misses at a $rate% hit rate (hits $hits, requests $requests); $extra_misses beyond the expected $expected against $extra_requests requests beyond $baseline_requests, so the extra misses are recompiled sources"
           fi
       # Both legs: `--show-stats` only counts, so on macOS a warning from the
       # guard above is as unactionable as it was on Windows without this list.
