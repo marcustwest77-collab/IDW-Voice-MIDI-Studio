@@ -5,6 +5,12 @@ on:
   pull_request:
     branches: [v14-daw-foundation, 'feature/**', 'fix/**', 'test/**', 'ci/**']
   workflow_dispatch:
+    inputs:
+      sccache_debug:
+        # Off by default: SCCACHE_LOG also pins sccache out of client-side mode.
+        description: "Log sccache per-compile cache decisions"
+        type: boolean
+        default: false
 # Newer pushes supersede older ones: without this, every sync queued another
 # two-runner matrix and the backlog starved the head that mattered.
 concurrency:
@@ -25,13 +31,6 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_VERSION: v1
-      # `sccache --show-stats` only aggregates, so it cannot say which
-      # translation unit missed. debug level adds one
-      # `[<object>]: Cache hit|miss in <n>s` line per compile; the daemonised
-      # server has no stderr, so it writes those to SCCACHE_ERROR_LOG. Setting
-      # SCCACHE_LOG also keeps sccache in the server-side mode that owns it.
-      SCCACHE_LOG: debug
-      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
     steps:
       - uses: actions/checkout@v4
       # MSBuild ran one project per process: 103 `MSBuild version` banners in
@@ -43,6 +42,17 @@ jobs:
       - name: Set up MSVC environment
         if: matrix.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
+      # Opt-in only. `sccache --show-stats` aggregates and cannot say which
+      # translation unit missed, but setting SCCACHE_LOG also pins sccache out
+      # of client-side mode, so it must not be on by default. It has to be set
+      # before the action starts the server, and a daemonised server has no
+      # stderr, so the per-compile lines only exist via SCCACHE_ERROR_LOG.
+      - name: Enable sccache debug logging
+        if: matrix.os == 'windows-latest' && github.event.inputs.sccache_debug == 'true'
+        shell: bash
+        run: |
+          echo "SCCACHE_LOG=debug" >> "$GITHUB_ENV"
+          echo "SCCACHE_ERROR_LOG=${GITHUB_WORKSPACE}/sccache.log" >> "$GITHUB_ENV"
       - name: Set up sccache
         if: matrix.os == 'windows-latest'
         uses: mozilla-actions/sccache-action@v0.0.11
@@ -72,7 +82,7 @@ jobs:
         if: always() && matrix.os == 'windows-latest'
         run: sccache --show-stats
       - name: List sccache cache misses
-        if: always() && matrix.os == 'windows-latest'
+        if: always() && matrix.os == 'windows-latest' && github.event.inputs.sccache_debug == 'true'
         shell: bash
         run: |
           log="${GITHUB_WORKSPACE}/sccache.log"
