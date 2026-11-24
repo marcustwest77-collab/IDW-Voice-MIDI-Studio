@@ -25,8 +25,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     # A wedged run should fail rather than hold a runner and the queue. Job
     # time excludes queueing, so the macOS capacity delays do not count here.
-    # Identical Windows builds have run 65m44s to 77m55s+; #1021 was cancelled
-    # at 80 with the build unfinished. 100 keeps the wedged-job guard realistic.
+    # On the current Ninja + sccache leg a cold cache costs a 42m41s build and a
+    # ~46m job with 834 misses and no hits (#1031, workflow_dispatch on the
+    # branch), while a warm run is about 5m. 100 covers the one cold run that
+    # repopulates the cache, with room to spare, and keeps the wedged-job guard
+    # realistic. The 65m44s-77m55s figures were the MSBuild leg and no longer
+    # describe this job.
     timeout-minutes: 100
     env:
       SCCACHE_GHA_ENABLED: "true"
