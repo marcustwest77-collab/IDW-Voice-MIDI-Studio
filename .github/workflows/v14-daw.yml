@@ -25,6 +25,13 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_VERSION: v1
+      # `sccache --show-stats` only aggregates, so it cannot say which
+      # translation unit missed. debug level adds one
+      # `[<object>]: Cache hit|miss in <n>s` line per compile; the daemonised
+      # server has no stderr, so it writes those to SCCACHE_ERROR_LOG. Setting
+      # SCCACHE_LOG also keeps sccache in the server-side mode that owns it.
+      SCCACHE_LOG: debug
+      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
     steps:
       - uses: actions/checkout@v4
       # MSBuild ran one project per process: 103 `MSBuild version` banners in
@@ -64,6 +71,21 @@ jobs:
       - name: Report sccache statistics
         if: always() && matrix.os == 'windows-latest'
         run: sccache --show-stats
+      - name: List sccache cache misses
+        if: always() && matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          log="${GITHUB_WORKSPACE}/sccache.log"
+          if [ ! -f "$log" ]; then
+            echo "sccache log missing at $log"
+            exit 0
+          fi
+          echo "log lines: $(wc -l < "$log")"
+          echo "hits:   $(grep -ac 'Cache hit in ' "$log" || true)"
+          echo "misses: $(grep -ac 'Cache miss in ' "$log" || true)"
+          echo
+          echo "== cache misses =="
+          grep -a 'Cache miss in ' "$log" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' || true
       - name: Upload experimental VST3 probe
         uses: actions/upload-artifact@v4
         with:
