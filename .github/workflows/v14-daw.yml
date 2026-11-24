@@ -164,7 +164,12 @@ jobs:
             if [ "$changed" = "0" ]; then
               echo "::notice::partly cold cache on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), and no compile input differs from the PR base ${base:0:12}, so every miss beyond the expected $expected is a key this ref's cache did not hold rather than a recompile. A warm re-run should return to the expected $expected, and the SCCACHE_DEBUG listing names them"
             elif [ -n "$changed" ]; then
-              echo "::notice::warm-run misses on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), with $changed compile input(s) differing from the PR base ${base:0:12}. That is either those sources recompiled or a partly cold cache compiling them for the first time, and these counts cannot separate the two; the SCCACHE_DEBUG listing names the sources"
+              if [ "$changed" -eq 1 ]; then
+                inputs="1 compile input differing"
+              else
+                inputs="$changed compile inputs differing"
+              fi
+              echo "::notice::warm-run misses on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), with $inputs from the PR base ${base:0:12}. That is either those sources recompiled or a partly cold cache compiling them for the first time, and these counts cannot separate the two; the SCCACHE_DEBUG listing names the sources"
             else
               echo "::notice::warm-run misses on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), with no base commit available to compare against, so this run cannot say whether those are recompiled sources or keys this ref's cache did not hold; the SCCACHE_DEBUG listing names the sources"
             fi
