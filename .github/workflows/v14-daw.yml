@@ -55,8 +55,10 @@ jobs:
       # listing: a normal pull_request run then logs per-compile decisions without
       # the cold branch build a dispatch pays for. Unset it again afterwards; while
       # set, SCCACHE_LOG also pins sccache out of client-side mode.
+      # Both legs: macOS daemonises the server too, so its per-compile lines
+      # are only in the file named by SCCACHE_ERROR_LOG as well.
       - name: Enable sccache debug logging
-        if: matrix.os == 'windows-latest' && (github.event.inputs.sccache_debug == 'true' || vars.SCCACHE_DEBUG == 'true')
+        if: github.event.inputs.sccache_debug == 'true' || vars.SCCACHE_DEBUG == 'true'
         shell: bash
         run: |
           echo "SCCACHE_LOG=debug" >> "$GITHUB_ENV"
@@ -145,8 +147,12 @@ jobs:
           else
             echo "warm cache: $misses misses at a $rate% hit rate (hits $hits, requests $requests); $extra_misses beyond the expected $expected against $extra_requests requests beyond $baseline_requests, so the extra misses are recompiled sources"
           fi
+      # Both legs: `--show-stats` only counts, so on macOS a warning from the
+      # guard above is as unactionable as it was on Windows without this list.
+      # The object extension in each line (`.obj` / `.o`) is the only other
+      # difference between the two legs' output.
       - name: List sccache cache misses
-        if: always() && matrix.os == 'windows-latest' && (github.event.inputs.sccache_debug == 'true' || vars.SCCACHE_DEBUG == 'true')
+        if: always() && (github.event.inputs.sccache_debug == 'true' || vars.SCCACHE_DEBUG == 'true')
         shell: bash
         run: |
           log="${GITHUB_WORKSPACE}/sccache.log"
@@ -158,7 +164,7 @@ jobs:
           echo "hits:   $(grep -ac 'Cache hit in ' "$log" || true)"
           echo "misses: $(grep -ac 'Cache miss in ' "$log" || true)"
           echo
-          echo "== cache misses =="
+          echo "== cache misses (${{ matrix.os }}) =="
           grep -a 'Cache miss in ' "$log" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' || true
       - name: Upload experimental VST3 probe
         uses: actions/upload-artifact@v4
