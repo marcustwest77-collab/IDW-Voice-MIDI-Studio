@@ -145,7 +145,26 @@ jobs:
           elif [ "$extra_requests" -ge "$extra_misses" ]; then
             echo "::warning::warm sccache run on ${{ matrix.os }} reported $misses misses at a $rate% hit rate, with $extra_requests more compile requests than the $baseline_requests baseline, so every miss beyond the expected $expected is a new compile rather than a recompiled source; a newly always-missing file, or a newly added target. Set the SCCACHE_DEBUG repository variable and push to get the per-compile listing from a warm run"
           elif [ $(( extra_misses * 4 )) -ge "$baseline_requests" ]; then
-            echo "::notice::partly cold cache on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), with no compile requests beyond the $baseline_requests baseline. The $extra_misses misses beyond the expected $expected are more than a quarter of the build, which a source change at that request count cannot explain, so this ref's cache did not hold those keys and the run compiled them for the first time; a warm re-run should return to the expected $expected. The SCCACHE_DEBUG listing names which sources missed"
+            # A source change that recompiles a large part of the tree and a
+            # partly cold cache produce the same counts, so ask the one question
+            # that separates them: did a compile input change between the PR's
+            # base and this commit? The depth-1 checkout has no base commit, so
+            # fetch just that one; a dispatch has no base at all, and any
+            # failure here leaves the cause unjudged rather than guessed.
+            base="${{ github.event.pull_request.base.sha }}"
+            changed=""
+            if [ -n "$base" ] && git fetch --no-tags --depth=1 origin "$base" >/dev/null 2>&1; then
+              if diff_out="$(git diff --name-only FETCH_HEAD HEAD -- '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx' '*.m' '*.mm' '*.cmake' 'CMakeLists.txt' 2>/dev/null)"; then
+                changed="$(printf '%s\n' "$diff_out" | grep -c . || true)"
+              fi
+            fi
+            if [ "$changed" = "0" ]; then
+              echo "::notice::partly cold cache on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests), no compile requests beyond the $baseline_requests baseline, and no compile input differs from the PR base ${base:0:12}, so the $extra_misses misses beyond the expected $expected are keys this ref's cache did not hold rather than recompiles. A warm re-run should return to the expected $expected, and the SCCACHE_DEBUG listing names them"
+            elif [ -n "$changed" ]; then
+              echo "::notice::warm-run misses on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests) with no compile requests beyond the $baseline_requests baseline, and $changed compile inputs differ from the PR base ${base:0:12}. That is either those sources recompiled or a partly cold cache compiling them for the first time; these counts cannot separate the two, and the SCCACHE_DEBUG listing names the sources"
+            else
+              echo "::notice::warm-run misses on ${{ matrix.os }}: $misses misses at a $rate% hit rate (hits $hits, requests $requests) with no compile requests beyond the $baseline_requests baseline. A partly cold cache and a source change that touches a large part of the tree look identical in these counts, and without a base commit to compare this run cannot say which it was. The SCCACHE_DEBUG listing names the sources"
+            fi
           else
             echo "warm cache: $misses misses at a $rate% hit rate (hits $hits, requests $requests); $extra_misses beyond the expected $expected against $extra_requests requests beyond $baseline_requests, so the extra misses are recompiled sources"
           fi
