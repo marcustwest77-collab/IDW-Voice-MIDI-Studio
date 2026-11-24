@@ -8,6 +8,7 @@ void require(bool condition,const char* message){
 }
 }
 int main(){
+    static_assert(true, "sccache notice probe");
     // A load that completes in time is accepted exactly once.
     {
         PluginLoadGate gate;
