@@ -51,8 +51,12 @@ jobs:
       # of client-side mode, so it must not be on by default. It has to be set
       # before the action starts the server, and a daemonised server has no
       # stderr, so the per-compile lines only exist via SCCACHE_ERROR_LOG.
+      # The repository variable SCCACHE_DEBUG=true is the warm path to the same
+      # listing: a normal pull_request run then logs per-compile decisions without
+      # the cold branch build a dispatch pays for. Unset it again afterwards; while
+      # set, SCCACHE_LOG also pins sccache out of client-side mode.
       - name: Enable sccache debug logging
-        if: matrix.os == 'windows-latest' && github.event.inputs.sccache_debug == 'true'
+        if: matrix.os == 'windows-latest' && (github.event.inputs.sccache_debug == 'true' || vars.SCCACHE_DEBUG == 'true')
         shell: bash
         run: |
           echo "SCCACHE_LOG=debug" >> "$GITHUB_ENV"
@@ -101,11 +105,13 @@ jobs:
         shell: bash
         run: '"${SCCACHE_PATH:-sccache}" --show-stats'
       # A warm run should miss only the 60 juce_core_CompilationTime copies. More
-      # than that means a new always-missing source or an evicted cache, so warn
-      # here instead of requiring an sccache_debug dispatch, which costs a cold
-      # branch build. A run with no hits is a cold cache and is skipped, and a
-      # source change legitimately adds misses, so treat this as "go look" rather
-      # than a failure. The two report steps above are left untouched.
+      # than that is a new always-missing source or an evicted cache, so warn here
+      # instead of requiring an sccache_debug dispatch, which costs a cold branch
+      # build. An ordinary source-changing push also adds misses, but it drags the
+      # hit rate down with them, so the warning additionally requires the run to
+      # still be nearly as warm as a no-change run: 90%, against the 92.81%
+      # steady state. A run with no hits is a cold cache and is skipped, and the
+      # two report steps above are left untouched.
       - name: Check sccache miss count
         if: always()
         shell: bash
@@ -119,6 +125,7 @@ jobs:
           hits="$(printf '%s\n' "$stats" | awk '$1=="Cache" && $2=="hits" && $3 ~ /^[0-9]+$/ {print $3; exit}')"
           misses="$(printf '%s\n' "$stats" | awk '$1=="Cache" && $2=="misses" && $3 ~ /^[0-9]+$/ {print $3; exit}')"
           expected=60
+          rate_min=90
           if [ -z "$hits" ] || [ -z "$misses" ]; then
             echo "::warning::could not read the sccache hit/miss counts"
             exit 0
@@ -127,13 +134,14 @@ jobs:
             echo "cold cache: $hits hits, $misses misses; no warm baseline to compare"
             exit 0
           fi
-          if [ "$misses" -gt "$expected" ]; then
-            echo "::warning::warm sccache run on ${{ matrix.os }} reported $misses misses, expected at most $expected (one juce_core_CompilationTime copy per target plus juceaide); a new always-missing file, a source change, or an evicted cache"
+          rate="$(awk -v h="$hits" -v m="$misses" 'BEGIN { if (h + m > 0) printf "%d", (100 * h) / (h + m); else print 0 }')"
+          if [ "$misses" -gt "$expected" ] && [ "$rate" -ge "$rate_min" ]; then
+            echo "::warning::warm sccache run on ${{ matrix.os }} reported $misses misses at a $rate% hit rate, against the expected $expected misses at $rate_min% or better (one juce_core_CompilationTime copy per target plus juceaide); a new always-missing file or an evicted cache"
           else
-            echo "warm cache: $misses misses, within the expected $expected (hits $hits)"
+            echo "warm cache: $misses misses at a $rate% hit rate (hits $hits), within the expected $expected misses and $rate_min% floor"
           fi
       - name: List sccache cache misses
-        if: always() && matrix.os == 'windows-latest' && github.event.inputs.sccache_debug == 'true'
+        if: always() && matrix.os == 'windows-latest' && (github.event.inputs.sccache_debug == 'true' || vars.SCCACHE_DEBUG == 'true')
         shell: bash
         run: |
           log="${GITHUB_WORKSPACE}/sccache.log"
