@@ -100,6 +100,38 @@ jobs:
         if: always() && matrix.os == 'macos-latest'
         shell: bash
         run: '"${SCCACHE_PATH:-sccache}" --show-stats'
+      # A warm run should miss only the 60 juce_core_CompilationTime copies. More
+      # than that means a new always-missing source or an evicted cache, so warn
+      # here instead of requiring an sccache_debug dispatch, which costs a cold
+      # branch build. A run with no hits is a cold cache and is skipped, and a
+      # source change legitimately adds misses, so treat this as "go look" rather
+      # than a failure. The two report steps above are left untouched.
+      - name: Check sccache miss count
+        if: always()
+        shell: bash
+        run: |
+          if command -v sccache >/dev/null 2>&1; then
+            bin=sccache
+          else
+            bin="${SCCACHE_PATH:-sccache}"
+          fi
+          stats="$("$bin" --show-stats 2>&1 || true)"
+          hits="$(printf '%s\n' "$stats" | awk '$1=="Cache" && $2=="hits" && $3 ~ /^[0-9]+$/ {print $3; exit}')"
+          misses="$(printf '%s\n' "$stats" | awk '$1=="Cache" && $2=="misses" && $3 ~ /^[0-9]+$/ {print $3; exit}')"
+          expected=60
+          if [ -z "$hits" ] || [ -z "$misses" ]; then
+            echo "::warning::could not read the sccache hit/miss counts"
+            exit 0
+          fi
+          if [ "$hits" -eq 0 ]; then
+            echo "cold cache: $hits hits, $misses misses; no warm baseline to compare"
+            exit 0
+          fi
+          if [ "$misses" -gt "$expected" ]; then
+            echo "::warning::warm sccache run on ${{ matrix.os }} reported $misses misses, expected at most $expected (one juce_core_CompilationTime copy per target plus juceaide); a new always-missing file, a source change, or an evicted cache"
+          else
+            echo "warm cache: $misses misses, within the expected $expected (hits $hits)"
+          fi
       - name: List sccache cache misses
         if: always() && matrix.os == 'windows-latest' && github.event.inputs.sccache_debug == 'true'
         shell: bash
