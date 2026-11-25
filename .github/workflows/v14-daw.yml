@@ -67,8 +67,28 @@ jobs:
       # process; macOS had no compiler cache at all, and it pays the same
       # duplication (820 compiles for 103 targets, 684 of them JUCE module
       # recompiles), which made its ~14m35s build the PR's critical path.
+      # Pinned, not latest. Without `version` the action asks mozilla/sccache for
+      # its newest release at run time, and every release changes the version
+      # string every cache entry is filed under, so it silently starts both legs
+      # cold. That is what hit #1047 attempt 2: v0.20.1 was published
+      # 2026-11-24T17:08Z between that run's two attempts, and attempt 2 missed
+      # all 834 keys attempt 1 had stored (0eed6758 was v0.20.0, bf80abec v0.20.1).
+      # Bumping this pin is a deliberate cache reset; the step below prints the
+      # version so the log records which one ran.
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: v0.20.1
+      # sccache files every entry under `sccache-v<version>-<SCCACHE_GHA_VERSION>`
+      # and the cache service stores that string's hash as the entry's version,
+      # so an unrecorded version change looks exactly like a cache that lost its
+      # entries. Print both halves of the key the cache identity is built from.
+      - name: Report sccache version
+        shell: bash
+        run: |
+          version="$("${SCCACHE_PATH:-sccache}" --version | head -n 1)"
+          echo "$version"
+          echo "cache version key: sccache-v${version#sccache }-${SCCACHE_GHA_VERSION}"
       # sccache's GitHub Actions backend needs these two tokens in the process
       # environment; the runner does not hand them to run steps on its own.
       - name: Export sccache cache tokens
