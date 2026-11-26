@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "InstrumentPanel.h"
 #include "ConnectionPanel.h"
+#include "IDWLookAndFeel.h"
 class IDWVoiceMIDIStudioAudioProcessorEditor : public juce::AudioProcessorEditor,private juce::Timer {
 public:
     explicit IDWVoiceMIDIStudioAudioProcessorEditor(IDWVoiceMIDIStudioAudioProcessor&);
@@ -24,7 +25,8 @@ private:
     bool writeMidi(const juce::File&);
     static juce::String manualText();
     IDWVoiceMIDIStudioAudioProcessor& p;
-    juce::LookAndFeel_V4 theme;
+    IDWLookAndFeel theme;
+    juce::Image logoImage;
     juce::Label title,readout,status,diagnostics,traceLabel,drumLabel,captureLabel,setupStatus;
     juce::TextButton copyDiagnostics{"Copy diagnostics"};
     unsigned int lastCallbacks=0;

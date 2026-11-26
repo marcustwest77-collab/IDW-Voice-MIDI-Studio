@@ -2,6 +2,7 @@
 #include "MidiExport.h"
 #include "SetupDiagnostics.h"
 #include "VoiceProfiles.h"
+#include "BinaryData.h"
 #include <cmath>
 namespace {
 const juce::Colour background{0xff0b0e14},card{0xff141a24},gold{0xffeac36c},muted{0xff9aabc2},mint{0xff68dfbd};
@@ -18,7 +19,8 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     theme.setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff76602d));
     theme.setColour(juce::ComboBox::backgroundColourId,card);
     theme.setColour(juce::ToggleButton::tickColourId,mint);
-    setLookAndFeel(&theme);setResizable(true,true);setResizeLimits(1040,890,1600,1200);setSize(1120,900);
+    logoImage=juce::ImageCache::getFromMemory(BinaryData::idw_logo_png,BinaryData::idw_logo_pngSize);
+    setLookAndFeel(&theme);setResizable(true,true);setResizeLimits(1040,922,1600,1232);setSize(1120,932);
     title.setText("IDW / VOICE MIDI STUDIO",juce::dontSendNotification);title.setFont(juce::FontOptions(25.0f,juce::Font::bold));
     readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));readout.setColour(juce::Label::textColourId,mint);
     traceLabel.setText("LIVE PITCH  /  7 SECONDS",juce::dontSendNotification);traceLabel.setColour(juce::Label::textColourId,muted);
@@ -114,18 +116,22 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
         g.setColour(gold.withAlpha(0.30f));g.drawLine(r.getX()+14,r.getY()+1.2f,r.getRight()-14,r.getY()+1.2f,1.2f);
     };
     auto drawBrandHeader=[&]{
-        const float iconX=26,iconY=24,iconSize=28;
-        juce::Path bars;const float barW=4.2f;const float heights[4]={0.45f,0.85f,0.62f,1.0f};
-        for(int i=0;i<4;++i){const float h=iconSize*heights[i];bars.addRoundedRectangle(iconX+i*(barW+3.4f),iconY+(iconSize-h),barW,h,1.4f);}
-        g.setColour(gold);g.fillPath(bars);
-        g.setColour(muted);g.setFont(juce::FontOptions(10.5f,juce::Font::bold));
-        g.drawText("IDW ENT.",(int)iconX-2,(int)(iconY+iconSize+3),80,12,juce::Justification::centredLeft);
+        // Logo sits in its own dedicated top strip (y 0-50), centred directly
+        // above the main readout -- per Resources/UI_SPEC.md's "logo slot
+        // centered above main readout". Centring is computed from the
+        // readout's actual current bounds so it stays correct across both
+        // the compact Performance layout and the wider Studio layout.
+        const float logoSize=46.0f;
+        const float centreX=(float)readout.getBounds().getCentreX();
+        const juce::Rectangle<float> logoBounds(centreX-logoSize*0.5f,2.0f,logoSize,logoSize);
+        if(logoImage.isValid())
+            g.drawImage(logoImage,logoBounds,juce::RectanglePlacement::centred);
         const float rowRight=juce::jmin((float)getWidth()-155.0f,970.0f);
         const float meterLeft=juce::jmax(title.getRight()+20.0f,545.0f)+48.0f,meterRight=rowRight;
         if(meterRight>meterLeft+50){
             g.setColour(muted);g.setFont(juce::FontOptions(9.5f,juce::Font::bold));
-            g.drawText("MIC",(int)meterLeft-46,64,40,10,juce::Justification::centredLeft);
-            const juce::Rectangle<float> meter(meterLeft,64,meterRight-meterLeft,9);
+            g.drawText("MIC",(int)meterLeft-46,96,40,10,juce::Justification::centredLeft);
+            const juce::Rectangle<float> meter(meterLeft,96,meterRight-meterLeft,9);
             g.setColour(juce::Colour(0xff1b2130));g.fillRoundedRectangle(meter,4.5f);
             const float db=juce::Decibels::gainToDecibels(meterSmoothed,-60.0f);
             const float norm=juce::jlimit(0.0f,1.0f,(db+60.0f)/60.0f);
@@ -137,16 +143,16 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
         }
     };
     if(performanceView){
-        for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,250,w-48,165},{24,435,w-48,190},{24,646,w-48,145}})drawPanel(r);
+        for(auto r:{juce::Rectangle<float>(24,110,w-48,150),{24,282,w-48,165},{24,467,w-48,190},{24,678,w-48,145}})drawPanel(r);
         drawBrandHeader();
-        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V9.2",getWidth()-355,22,330,30,juce::Justification::centredRight);
+        g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V9.2",getWidth()-355,54,330,30,juce::Justification::centredRight);
         g.setColour(muted);g.setFont(juce::FontOptions(12));g.drawText("IN DA WIND ENTERTAINMENT / PERFORMANCE",30,getHeight()-24,650,22,juce::Justification::centredLeft);
         return;
     }
-    for(auto r:{juce::Rectangle<float>(24,78,w-48,150),{24,242,w-48,170},{24,592,w-48,198}})drawPanel(r);
+    for(auto r:{juce::Rectangle<float>(24,110,w-48,150),{24,274,w-48,170},{24,624,w-48,198}})drawPanel(r);
     drawBrandHeader();
-    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V9.2",getWidth()-335,22,310,30,juce::Justification::centredRight);
-    const juce::Rectangle<float> plot(365,110,w-420,93);
+    g.setColour(gold);g.setFont(juce::FontOptions(12,juce::Font::bold));g.drawText("V9.2",getWidth()-335,54,310,30,juce::Justification::centredRight);
+    const juce::Rectangle<float> plot(365,142,w-420,93);
     g.setColour(juce::Colour(0xff263144));for(int j=0;j<=4;++j){const float y=plot.getY()+j*plot.getHeight()/4;g.drawHorizontalLine((int)y,plot.getX(),plot.getRight());}
     float centre=60;const float current=history[(size_t)((historyPos+219)%220)];if(current>=0)centre=std::round(current/12)*12;
     juce::Path path;bool pen=false;
@@ -158,21 +164,21 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
 }
 void IDWVoiceMIDIStudioAudioProcessorEditor::resized(){
     const int w=getWidth(),inner=w-64;
-    title.setBounds(64,18,611,40);readout.setBounds(42,98,305,48);traceLabel.setBounds(367,84,360,22);status.setBounds(42,157,310,53);
+    title.setBounds(64,50,611,40);readout.setBounds(42,130,305,48);traceLabel.setBounds(367,116,360,22);status.setBounds(42,189,310,53);
     const int knobW=(inner-300)/4;
     juce::Slider* ss[]={&gateSlider,&confidenceSlider,&bendSlider,&tuneSlider};juce::Label* ls[]={&gateLabel,&confidenceLabel,&bendLabel,&tuneLabel};
-    for(int i=0;i<4;++i){ls[i]->setBounds(35+i*knobW,252,knobW,23);ss[i]->setBounds(35+i*knobW,277,knobW,121);}
-    const int right=w-310;calibrate.setBounds(right,261,270,32);inputSelector.setBounds(right,303,270,30);melody.setBounds(right,346,110,26);mpeToggle.setBounds(right+150,346,100,26);
-    scaleLock.setBounds(29,426,112,28);rootSelector.setBounds(149,426,75,28);expressionSelector.setBounds(236,426,165,28);
-    const int keyW=(w-440)/12;for(int i=0;i<12;++i)scaleButtons[i].setBounds(420+i*keyW,426,keyW-5,29);
-    presetSelector.setBounds(32,472,265,30);save.setBounds(307,472,123,30);learnTarget.setBounds(447,472,145,30);learn.setBounds(601,472,98,30);clearLearn.setBounds(708,472,92,30);help.setBounds(w-182,472,150,30);
-    record.setBounds(32,527,135,34);exportMidi.setBounds(178,527,135,34);bpmLabel.setBounds(326,531,40,25);bpmSlider.setBounds(367,527,180,34);captureLabel.setBounds(565,527,w-597,38);
-    drumLabel.setBounds(40,601,570,28);beatbox.setBounds(w-155,601,115,28);
-    const int padW=inner/8;for(int i=0;i<8;++i){drumPads[i].setBounds(32+i*padW,644,padW-10,43);drumNotes[i].setBounds(38+i*padW,695,padW-22,25);}
-    trainTarget.setBounds(40,745,110,28);train.setBounds(160,745,125,28);cancelTrain.setBounds(295,745,80,28);clearTrain.setBounds(385,745,105,28);beatLabel.setBounds(510,745,112,28);beatSlider.setBounds(624,745,w-670,28);
-    preview.setBounds(30,804,145,28);monitor.setBounds(185,804,165,28);test.setBounds(369,802,116,32);panic.setBounds(496,802,105,32);diagnostics.setBounds(617,796,w-642,50);
-    setupStatus.setBounds(30,836,w-235,25);copyDiagnostics.setBounds(w-195,836,163,25);
-    helpText.setBounds(25,76,w-50,getHeight()-128);closeHelp.setBounds(w-152,86,108,30);
+    for(int i=0;i<4;++i){ls[i]->setBounds(35+i*knobW,284,knobW,23);ss[i]->setBounds(35+i*knobW,309,knobW,121);}
+    const int right=w-310;calibrate.setBounds(right,293,270,32);inputSelector.setBounds(right,335,270,30);melody.setBounds(right,378,110,26);mpeToggle.setBounds(right+150,378,100,26);
+    scaleLock.setBounds(29,458,112,28);rootSelector.setBounds(149,458,75,28);expressionSelector.setBounds(236,458,165,28);
+    const int keyW=(w-440)/12;for(int i=0;i<12;++i)scaleButtons[i].setBounds(420+i*keyW,458,keyW-5,29);
+    presetSelector.setBounds(32,504,265,30);save.setBounds(307,504,123,30);learnTarget.setBounds(447,504,145,30);learn.setBounds(601,504,98,30);clearLearn.setBounds(708,504,92,30);help.setBounds(w-182,504,150,30);
+    record.setBounds(32,559,135,34);exportMidi.setBounds(178,559,135,34);bpmLabel.setBounds(326,563,40,25);bpmSlider.setBounds(367,559,180,34);captureLabel.setBounds(565,559,w-597,38);
+    drumLabel.setBounds(40,633,570,28);beatbox.setBounds(w-155,633,115,28);
+    const int padW=inner/8;for(int i=0;i<8;++i){drumPads[i].setBounds(32+i*padW,676,padW-10,43);drumNotes[i].setBounds(38+i*padW,727,padW-22,25);}
+    trainTarget.setBounds(40,777,110,28);train.setBounds(160,777,125,28);cancelTrain.setBounds(295,777,80,28);clearTrain.setBounds(385,777,105,28);beatLabel.setBounds(510,777,112,28);beatSlider.setBounds(624,777,w-670,28);
+    preview.setBounds(30,836,145,28);monitor.setBounds(185,836,165,28);test.setBounds(369,834,116,32);panic.setBounds(496,834,105,32);diagnostics.setBounds(617,828,w-642,50);
+    setupStatus.setBounds(30,868,w-235,25);copyDiagnostics.setBounds(w-195,868,163,25);
+    helpText.setBounds(25,108,w-50,getHeight()-128);closeHelp.setBounds(w-152,118,108,30);
     layoutV5();
 }
 void IDWVoiceMIDIStudioAudioProcessorEditor::beginCapture(){
@@ -377,23 +383,23 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::layoutV5(){
     const int w=getWidth();
     for(auto* child:getChildren())child->setVisible(!performanceView);
     for(auto* c:std::initializer_list<juce::Component*>{&harmonyMode,&harmonyVoicing,&bassLayer,&arrangementTitle,&arrangementStatus,&profileTitle,&profileSelector,&saveProfile,&learnRange,&voiceLow,&voiceHigh,&lowLabel,&highLabel,&recover})c->setVisible(performanceView);
-    title.setBounds(64,18,461,40);viewButton.setBounds(545,24,140,30);viewButton.setVisible(true);viewButton.setButtonText(performanceView?"Studio controls":"Performance view");
+    title.setBounds(64,50,461,40);viewButton.setBounds(545,56,140,30);viewButton.setVisible(true);viewButton.setButtonText(performanceView?"Studio controls":"Performance view");
     if(performanceView){
         for(auto* c:std::initializer_list<juce::Component*>{&title,&readout,&status,&diagnostics,&setupStatus,&copyDiagnostics,&preview,&test,&panic,&record,&exportMidi,&captureLabel,&bpmLabel,&bpmSlider,&help,&rootSelector,&calibrate})c->setVisible(true);
-        readout.setBounds(42,100,w-84,58);readout.setFont(juce::FontOptions(36.0f,juce::Font::bold));status.setBounds(42,164,w-84,45);
-        arrangementTitle.setBounds(40,260,w-80,30);harmonyMode.setBounds(42,306,210,36);rootSelector.setBounds(267,306,90,36);harmonyVoicing.setBounds(372,306,170,36);bassLayer.setBounds(563,306,140,36);arrangementStatus.setBounds(42,355,w-84,46);
-        profileTitle.setBounds(40,446,w-80,28);profileSelector.setBounds(42,485,350,34);saveProfile.setBounds(405,485,130,34);learnRange.setBounds(548,485,140,34);calibrate.setBounds(w-295,485,250,34);
-        lowLabel.setBounds(42,544,110,28);voiceLow.setBounds(152,540,270,36);highLabel.setBounds(452,544,110,28);voiceHigh.setBounds(562,540,270,36);
-        record.setBounds(42,667,190,45);exportMidi.setBounds(245,667,150,45);recover.setBounds(408,667,155,45);bpmLabel.setBounds(587,674,40,28);bpmSlider.setBounds(629,667,200,45);
-        captureLabel.setBounds(42,727,w-84,45);preview.setBounds(32,801,145,34);test.setBounds(190,801,140,34);panic.setBounds(344,801,135,34);help.setBounds(w-205,801,165,34);diagnostics.setBounds(498,792,w-720,45);
+        readout.setBounds(42,132,w-84,58);readout.setFont(juce::FontOptions(36.0f,juce::Font::bold));status.setBounds(42,196,w-84,45);
+        arrangementTitle.setBounds(40,292,w-80,30);harmonyMode.setBounds(42,338,210,36);rootSelector.setBounds(267,338,90,36);harmonyVoicing.setBounds(372,338,170,36);bassLayer.setBounds(563,338,140,36);arrangementStatus.setBounds(42,387,w-84,46);
+        profileTitle.setBounds(40,478,w-80,28);profileSelector.setBounds(42,517,350,34);saveProfile.setBounds(405,517,130,34);learnRange.setBounds(548,517,140,34);calibrate.setBounds(w-295,517,250,34);
+        lowLabel.setBounds(42,576,110,28);voiceLow.setBounds(152,572,270,36);highLabel.setBounds(452,576,110,28);voiceHigh.setBounds(562,572,270,36);
+        record.setBounds(42,699,190,45);exportMidi.setBounds(245,699,150,45);recover.setBounds(408,699,155,45);bpmLabel.setBounds(587,706,40,28);bpmSlider.setBounds(629,699,200,45);
+        captureLabel.setBounds(42,759,w-84,45);preview.setBounds(32,833,145,34);test.setBounds(190,833,140,34);panic.setBounds(344,833,135,34);help.setBounds(w-205,833,165,34);diagnostics.setBounds(498,824,w-720,45);
     }else{readout.setFont(juce::FontOptions(31.0f,juce::Font::bold));}
     rememberMidi.setVisible(performanceView);saveRecent.setVisible(performanceView);
-    if(performanceView){saveRecent.setBounds(w-195,670,150,38);rememberMidi.setBounds(w-250,737,210,28);captureLabel.setBounds(42,727,w-330,45);}
-    audioLabButton.setVisible(true);audioLabButton.setBounds(865,24,105,30);
-    instrumentButton.setVisible(true);instrumentButton.setBounds(700,24,150,30);
-    if(instrumentPanel){instrumentPanel->setBounds(25,78,w-50,getHeight()-128);instrumentPanel->setVisible(instrumentVisible);}
+    if(performanceView){saveRecent.setBounds(w-195,702,150,38);rememberMidi.setBounds(w-250,769,210,28);captureLabel.setBounds(42,759,w-330,45);}
+    audioLabButton.setVisible(true);audioLabButton.setBounds(865,56,105,30);
+    instrumentButton.setVisible(true);instrumentButton.setBounds(700,56,150,30);
+    if(instrumentPanel){instrumentPanel->setBounds(25,110,w-50,getHeight()-128);instrumentPanel->setVisible(instrumentVisible);}
     if(instrumentVisible&&instrumentPanel)instrumentPanel->toFront(false);
-    if(connectionPanel){connectionPanel->setBounds(25,78,w-50,getHeight()-128);connectionPanel->setVisible(connectionVisible);if(connectionVisible)connectionPanel->toFront(false);}
+    if(connectionPanel){connectionPanel->setBounds(25,110,w-50,getHeight()-128);connectionPanel->setVisible(connectionVisible);if(connectionVisible)connectionPanel->toFront(false);}
     helpText.setVisible(helpVisible);closeHelp.setVisible(helpVisible);if(helpVisible){helpText.toFront(false);closeHelp.toFront(false);}
 }
 

@@ -48,6 +48,10 @@ juce_add_plugin(IDWVoiceMIDIStudio
 # The source files use <JuceHeader.h>; generate JUCE's compatibility header.
 juce_generate_juce_header(IDWVoiceMIDIStudio)
 
+# Embed brand assets (logo, etc.) as compiled-in binary data.
+juce_add_binary_data(IDWAssets SOURCES Resources/idw_logo.png)
+set_target_properties(IDWAssets PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 target_sources(IDWVoiceMIDIStudio PRIVATE
     Source/PluginProcessor.cpp Source/PluginProcessor.h
     Source/PluginEditor.cpp Source/PluginEditor.h
@@ -66,6 +70,7 @@ target_compile_definitions(IDWVoiceMIDIStudio PRIVATE
 )
 
 target_link_libraries(IDWVoiceMIDIStudio PRIVATE
+    IDWAssets
     juce::juce_audio_utils
     juce::juce_audio_processors
     juce::juce_dsp

@@ -224,7 +224,7 @@ void testConnectionCheck(){
 }
 void renderEditor(){
     auto p=processor(48000,128);std::vector<float> before;for(auto* parameter:p->getParameters())before.push_back(parameter->getValue());std::unique_ptr<juce::AudioProcessorEditor> editor(p->createEditor());for(int i=0;i<p->getParameters().size();++i)check(std::abs(before[(size_t)i]-p->getParameters()[i]->getValue())<1.0e-6f,"Opening editor modifies processor parameters");editor->setVisible(true);
-    for(auto size:{std::pair<int,int>{1120,900},{1040,890}}){
+    for(auto size:{std::pair<int,int>{1120,932},{1040,922}}){
         editor->setSize(size.first,size.second);editor->resized();
         for(auto* child:editor->getChildren())if(child->isVisible())check(editor->getLocalBounds().contains(child->getBounds()),"Visible control outside editor bounds");
         juce::Image image(juce::Image::ARGB,editor->getWidth(),editor->getHeight(),true,juce::SoftwareImageType());{juce::Graphics graphics(image);editor->paintEntireComponent(graphics,true);}
