@@ -4,7 +4,7 @@
 - [x] macOS Release standalone, VST3 and AU compile
 - [x] Automated C++ processor regressions pass (IDWProcessorRegression, IDWSetupDiagnostics, IDWHarmony, IDWStudioSynth, IDWRetrospective)
 - [x] V9.2 editor UI implemented — custom `IDWLookAndFeel` rotary knobs and an IDW logo header embedded via JUCE binary data and drawn centred above the main readout
-- [ ] V9.2 editor UI build and render test confirmed on Windows and macOS at 1120x932 (default) and 1040x922 (minimum) — CI run [45829332986](https://github.com/marcustwest77-collab/IDW-Voice-MIDI-Studio/actions/runs/45829332986) was still in progress when this was recorded
+- [x] V9.2 editor UI build and render test confirmed on Windows and macOS at 1120x932 (default) and 1040x922 (minimum) — green CI run [45831350866](https://github.com/marcustwest77-collab/IDW-Voice-MIDI-Studio/actions/runs/45831350866) passed both platform builds, the C++ regressions (including the editor render and bounds checks), pluginval and auval, and uploaded the `editor-renders-Windows` and `editor-renders-macOS` artifacts
 - [x] Automated Audio Lab companion regressions pass (47 Python tests, wired into CI on every push/PR to `main`)
 - [x] pluginval strictness 5 passes on Windows and macOS
 - [x] Audio Unit validated with `auval` on macOS
