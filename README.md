@@ -35,10 +35,13 @@ IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and stand
 - Live Responsive
 
 ## User Experience
+- Custom black-gloss / gold-trim look-and-feel, including brushed-metal rotary knobs
+- Embedded IDW logo header centred above the main pitch readout
 - Built-in **HELP / QUICK START** manual
 - Hover tooltips for the main performance controls
 - Factory preset browser
 - Saved user presets appear in the same browser
+- Editor render regression at the 1120x932 default and 1040x922 minimum window sizes, with visible-control bounds checks
 - Full written manual in `docs/USER_MANUAL.md` and release packages
 
 ## Quick Start in FL Studio
@@ -83,4 +86,4 @@ Linux (for running the C++ test suite; JUCE plugin formats on Linux are not part
     ./scripts/build-linux.sh
 
 ## Continuous Integration
-`.github/workflows/build.yml` runs on every push and pull request to `main`: it builds Windows and macOS Release binaries, runs the C++ regression suite, validates the VST3/AU with pluginval/auval, runs the full Python companion test suite, and packages installers as build artifacts.
+`.github/workflows/build.yml` runs on every push and pull request to `main`: it builds Windows and macOS Release binaries, runs the C++ regression suite (including an editor render at 1120x932 and 1040x922 that checks every visible control stays in bounds), validates the VST3/AU with pluginval/auval, runs the full Python companion test suite, and packages installers as build artifacts.

@@ -1,5 +1,7 @@
 # IDW Voice MIDI Studio V4 - validation
 
+> Historical V4 record. Window sizes and results below describe that build. Current editor sizes are 1120x932 (default) and 1040x922 (minimum); see `RELEASE_CHECKLIST.md`.
+
 Built on Windows x64 on September 22, 2026 using the supplied JUCE 9.0.2 checkout and MSVC 19.44.35229. Windows app and VST3 use a static C++ runtime.
 
 ## Passed
@@ -15,7 +17,7 @@ Built on Windows x64 on September 22, 2026 using the supplied JUCE 9.0.2 checkou
 - Five-hit drum training, profile persistence and recognition of a matching synthetic hit.
 - Nonzero preview audio, right-channel microphone analysis and default raw-input muting.
 - Editor creation preserves all parameter values.
-- Default (1120x900) and minimum (1040x890) editor renderings; all visible controls inside bounds; images visually inspected.
+- Default and minimum editor renderings at the sizes tested for V4 (1120x900 and 1040x890; current V9.2 sizes are 1120x932 and 1040x922); all visible controls inside bounds; images visually inspected.
 - pluginval 1.0.4, strictness level 5: SUCCESS. Includes parameter/state, automation, editor and bus-layout checks.
 
 ## Practical limits

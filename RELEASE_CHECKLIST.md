@@ -3,6 +3,8 @@
 - [x] Windows Release standalone and VST3 compile
 - [x] macOS Release standalone, VST3 and AU compile
 - [x] Automated C++ processor regressions pass (IDWProcessorRegression, IDWSetupDiagnostics, IDWHarmony, IDWStudioSynth, IDWRetrospective)
+- [x] V9.2 editor UI implemented — custom `IDWLookAndFeel` rotary knobs and an IDW logo header embedded via JUCE binary data and drawn centred above the main readout
+- [ ] V9.2 editor UI build and render test confirmed on Windows and macOS at 1120x932 (default) and 1040x922 (minimum) — CI run [45829332986](https://github.com/marcustwest77-collab/IDW-Voice-MIDI-Studio/actions/runs/45829332986) was still in progress when this was recorded
 - [x] Automated Audio Lab companion regressions pass (47 Python tests, wired into CI on every push/PR to `main`)
 - [x] pluginval strictness 5 passes on Windows and macOS
 - [x] Audio Unit validated with `auval` on macOS
@@ -11,4 +13,4 @@
 - [ ] Hands-on microphone and FL Studio listening test — CI validates that the plugin builds and loads, not that it sounds correct with a real voice/mic; still needs a manual pass per release.
 - [ ] Broader real-voice drum recognition corpus — beatbox-to-drum detection is only covered by synthetic/unit-level tests, not a varied real-voice corpus.
 - [ ] `docs/USER_MANUAL.md` refresh — it still opens with "IDW Voice MIDI Studio 4.0" / V5 setup instructions and doesn't reflect the current feature set (Studio Instrument, Audio Lab, retrospective capture, scenes). `README.md` and `docs/V6.x-UPGRADE.md` are current; the manual is not.
-- [ ] Editor screenshots inspected — no automated visual check exists; still a manual step before each release.
+- [ ] Editor screenshots visually inspected — CI renders and bounds-checks the editor at 1120x932 and 1040x922, but pixel-level appearance still needs a manual look before each release.
