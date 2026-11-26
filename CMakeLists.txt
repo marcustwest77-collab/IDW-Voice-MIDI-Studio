@@ -83,7 +83,9 @@ if(BUILD_TESTING)
     add_executable(IDWTests Tests/ProcessorTests.cpp)
     target_include_directories(IDWTests PRIVATE Source "$<TARGET_PROPERTY:IDWVoiceMIDIStudio,JUCE_GENERATED_SOURCES_DIRECTORY>")
     target_compile_definitions(IDWTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
-    target_link_libraries(IDWTests PRIVATE IDWVoiceMIDIStudio juce::juce_audio_utils juce::juce_dsp)
+    # The tests include the plugin's generated JuceHeader.h, which pulls in
+    # BinaryData.h; IDWAssets supplies that header's include directory.
+    target_link_libraries(IDWTests PRIVATE IDWVoiceMIDIStudio IDWAssets juce::juce_audio_utils juce::juce_dsp)
     add_test(NAME IDWProcessorRegression COMMAND IDWTests)
     add_executable(IDWSetupTests Tests/SetupDiagnosticsTests.cpp)
     target_include_directories(IDWSetupTests PRIVATE Source)

@@ -47,6 +47,15 @@ jobs:
       - name: Run regression tests
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Upload editor renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-renders-${{ runner.os }}
+          path: build/IDW-V6-*.png
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Download pluginval on Windows
         if: runner.os == 'Windows'
         shell: pwsh
