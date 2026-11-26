@@ -36,7 +36,7 @@ IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and stand
 
 ## User Experience
 - Custom black-gloss / gold-trim look-and-feel, including brushed-metal rotary knobs
-- Embedded IDW logo header centred above the main pitch readout
+- Embedded IDW logo header centred in the header strip (above the main pitch readout on the Performance view), keyed to transparent so it has no dark plate
 - Built-in **HELP / QUICK START** manual
 - Hover tooltips for the main performance controls
 - Factory preset browser
