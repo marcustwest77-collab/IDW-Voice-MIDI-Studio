@@ -116,13 +116,14 @@ void IDWVoiceMIDIStudioAudioProcessorEditor::paint(juce::Graphics& g){
         g.setColour(gold.withAlpha(0.30f));g.drawLine(r.getX()+14,r.getY()+1.2f,r.getRight()-14,r.getY()+1.2f,1.2f);
     };
     auto drawBrandHeader=[&]{
-        // Logo sits in its own dedicated top strip (y 0-50), centred directly
-        // above the main readout -- per Resources/UI_SPEC.md's "logo slot
-        // centered above main readout". Centring is computed from the
-        // readout's actual current bounds so it stays correct across both
-        // the compact Performance layout and the wider Studio layout.
+        // Logo sits in its own dedicated top strip (y 0-50), centred on the
+        // header row -- per Resources/UI_SPEC.md's "logo slot centered in the
+        // header strip". The readout is only centred in the Performance
+        // layout, so centring on the window keeps the logo in the same place
+        // in Performance, Studio, Instrument and Connection views instead of
+        // following the readout into the left column.
         const float logoSize=46.0f;
-        const float centreX=(float)readout.getBounds().getCentreX();
+        const float centreX=(float)getWidth()*0.5f;
         const juce::Rectangle<float> logoBounds(centreX-logoSize*0.5f,2.0f,logoSize,logoSize);
         if(logoImage.isValid())
             g.drawImage(logoImage,logoBounds,juce::RectanglePlacement::centred);
