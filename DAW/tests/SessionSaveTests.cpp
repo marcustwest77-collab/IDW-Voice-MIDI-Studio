@@ -84,6 +84,30 @@ int main() {
             }),"valid replacement failed");
         require(loadSession(project,loaded) && loaded.bpm==137.5 && bytes(project)!=original,"replacement unreadable");
         require(saveSession(session,project),"repeat public save");
+        // Exercise the real loader boundary, including UTF-8 metadata. A save
+        // must never replace a readable project with one the loader rejects.
+        {
+            Session boundary;require(boundary.addTrack(TrackType::midi),"boundary track");
+            boundary.tracks[0].name=u8"\u03b2";
+            const auto overhead=juce::JSON::toString(sessionToJson(boundary),true).getNumBytesAsUTF8();
+            boundary.tracks[0].name.append(static_cast<std::size_t>(maxSessionFileBytes)-overhead,'x');
+            const auto large=root.getChildFile("Boundary.idwproj");
+            juce::String error="stale error";
+            require(saveSession(boundary,large,&error) && error.isEmpty() &&
+                    large.getSize()==maxSessionFileBytes,"exact limit save rejected");
+            Session restored;require(loadSession(large,restored) &&
+                restored.tracks[0].name==boundary.tracks[0].name,"exact limit save cannot reopen");
+            boundary.tracks[0].name+='x';
+            const auto before=bytes(project);
+            bool wrote=false;
+            require(!persistence_detail::saveValidated(boundary,project,
+                [&](const juce::File&,const juce::String&){wrote=true;return true;},&error) &&
+                !wrote && error.contains("32 MiB") && bytes(project)==before,
+                "oversized save staged output or changed existing project");
+            const auto absent=root.getChildFile("TooLarge.idwproj");
+            require(!saveSession(boundary,absent,&error) && !absent.exists(),
+                "oversized save created unreadable project");
+        }
         require(root.findChildFiles(juce::File::findFiles,false,"*temp*").isEmpty(),"temporary save files leaked");
         require(root.deleteRecursively(),"fixture cleanup");
         std::cout << "PASS: validated save preserves prior project on failed/partial/wrong writes and invalid models\n";

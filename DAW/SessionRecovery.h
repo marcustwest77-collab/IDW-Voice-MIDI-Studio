@@ -47,7 +47,7 @@ public:
         nextSlot=0;return a && b;
     }
     static bool read(const juce::File& file,Session& output,juce::File& project) {
-        if(!file.existsAsFile() || file.getSize()>32*1024*1024)return false;
+        if(!file.existsAsFile() || file.getSize()>maxSessionFileBytes)return false;
         const auto data=juce::JSON::parse(file);
         auto* root=data.getDynamicObject();
         if(!root || !root->getProperty("recoveryVersion").isInt() ||
