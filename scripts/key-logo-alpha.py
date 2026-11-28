@@ -17,9 +17,10 @@ channel is ignored, so running it again on an already keyed asset is a no-op:
 the RGB channels are untouched by keying, only alpha is written.
 
 CI runs it with --check, which writes nothing and exits non-zero unless the
-checked-in logo is exactly what the ramp produces and its four corner alphas
-are 0, so an opaque asset replaced without keying fails the build instead of
-shipping the dark plate. --check also writes an opaque copy of the logo to a
+checked-in logo is exactly what the ramp produces and every pixel of its outer
+border is fully transparent, so an opaque asset replaced without keying, or one
+whose padding stops short of the edge, fails the build instead of shipping the
+dark plate. --check also writes an opaque copy of the logo to a
 temporary file and fails if that copy is accepted, so a check that quietly
 passes everything cannot go green.
 
@@ -55,12 +56,24 @@ def key_alpha(image, low=TRANSPARENT_AT_OR_BELOW, high=OPAQUE_AT_OR_ABOVE):
     return keyed
 
 
-def corner_alphas(keyed):
-    """Alpha at the four corners of the keyed tile, where its padding sits."""
+def border_alphas(keyed):
+    """Alpha along the keyed tile's outer border, where its padding sits.
+
+    Corners alone are not enough: an edge that is dark rather than black keys to
+    partial alpha and would still draw a plate along that side.
+    """
     alpha = keyed.getchannel('A')
-    last_x, last_y = keyed.width - 1, keyed.height - 1
-    return [alpha.getpixel(point)
-            for point in ((0, 0), (last_x, 0), (0, last_y), (last_x, last_y))]
+    width, height = keyed.size
+    border = []
+    for x in range(width):
+        border.append(alpha.getpixel((x, 0)))
+    for y in range(1, height - 1):
+        border.append(alpha.getpixel((width - 1, y)))
+    for x in range(width - 1, -1, -1):
+        border.append(alpha.getpixel((x, height - 1)))
+    for y in range(height - 2, 0, -1):
+        border.append(alpha.getpixel((0, y)))
+    return border
 
 
 def keying_problem(source, low=TRANSPARENT_AT_OR_BELOW, high=OPAQUE_AT_OR_ABOVE):
@@ -72,10 +85,13 @@ def keying_problem(source, low=TRANSPARENT_AT_OR_BELOW, high=OPAQUE_AT_OR_ABOVE)
     if current.size != keyed.size or current.tobytes() != keyed.tobytes():
         return (f'{source} is not keyed the way this ramp produces; '
                 f'run: python scripts/key-logo-alpha.py {source}')
-    corners = corner_alphas(keyed)
-    if any(corners):
-        return (f'{source} matches the ramp but its corner alpha is {corners}, not 0; '
-                f'the padding is not black, so the editor would still draw a plate')
+    border = border_alphas(keyed)
+    visible = [value for value in border if value]
+    if visible:
+        return (f'{source} matches the ramp but {len(visible)} of its {len(border)} '
+                f'outer-border pixels have alpha up to {max(visible)}, not 0; '
+                f'the padding does not reach the edge, so the editor would still '
+                f'draw a plate')
     return None
 
 
@@ -120,7 +136,7 @@ def main():
         reject_unkeyed_copy(source, args.low, args.high)
         with Image.open(source) as artwork:
             size = f'{artwork.width}x{artwork.height}'
-        print(f'{source} is keyed ({size}, alpha 0 at the tile corners); '
+        print(f'{source} is keyed ({size}, alpha 0 along its whole outer border); '
               f'an opaque copy of it is rejected')
         return
 
@@ -140,11 +156,13 @@ def main():
           f'{keyed.width * keyed.height - transparent - opaque} ramped)')
     if not transparent:
         print('warning: no fully transparent pixels; check the artwork really sits on black')
-    # The tile's corners sit in the padding: they must end up fully clear or the
-    # editor draws a plate again.
-    corners = corner_alphas(keyed)
-    if any(corners):
-        print(f'warning: corner alpha is {corners}, expected 0; the padding is not black')
+    # The tile's outer border sits in the padding: it must end up fully clear,
+    # or the editor draws a plate again.
+    border = border_alphas(keyed)
+    visible = [value for value in border if value]
+    if visible:
+        print(f'warning: {len(visible)} of {len(border)} outer-border pixels have alpha '
+              f'up to {max(visible)}, expected 0; the padding does not reach the edge')
 
 
 if __name__ == '__main__':
