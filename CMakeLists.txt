@@ -405,7 +405,9 @@ if(IDW_BUILD_DAW)
         target_link_libraries(IDWDAWSessionSaveTests PRIVATE juce::juce_core)
         target_compile_definitions(IDWDAWSessionSaveTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
         add_test(NAME IDWDAWSessionSave COMMAND IDWDAWSessionSaveTests)
-        set_tests_properties(IDWDAWSessionSave PROPERTIES TIMEOUT 30)
+        # Includes real 32 MiB save/readback/reopen boundary coverage. The macOS
+        # build needs more than the small-fixture timeout for repeated JSON passes.
+        set_tests_properties(IDWDAWSessionSave PROPERTIES TIMEOUT 120)
         target_include_directories(IDWDAWPersistenceTests PRIVATE DAW)
         target_link_libraries(IDWDAWPersistenceTests PRIVATE juce::juce_core juce::juce_audio_formats juce::juce_audio_devices)
         target_compile_definitions(IDWDAWPersistenceTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
