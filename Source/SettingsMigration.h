@@ -1,5 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
+#include <vector>
 
 // The standalone's settings file name is part of its path: on Windows the app
 // name is also the folder JUCE stores the file in. Renaming it therefore starts
@@ -8,7 +9,12 @@
 namespace idw
 {
 inline constexpr const char* currentSettingsName = "IDW Voice MIDI Studio V9.2";
+// The released V4 build.
 inline constexpr const char* legacySettingsName = "IDW Voice MIDI Studio V4";
+// Unreleased V9.2 development builds asked JUCE for a dotted suffix, which
+// replaced everything after the last dot of the application name. The folder
+// still came from the whole name, so that file sits beside the current one.
+inline constexpr const char* devBuildSettingsFileName = "IDW Voice MIDI Studio V9.settings";
 
 inline juce::PropertiesFile::Options settingsOptions(const juce::String& applicationName)
 {
@@ -38,9 +44,23 @@ inline bool copyLegacySettings(const juce::File& currentFile, const juce::File& 
     return legacyFile.copyFileTo(currentFile);
 }
 
+// Copies the first of the previous files that exists, in the order given.
+inline bool copyFirstLegacySettings(const juce::File& currentFile,
+                                    const std::vector<juce::File>& legacyFiles)
+{
+    for (const auto& legacyFile : legacyFiles)
+        if (copyLegacySettings(currentFile, legacyFile))
+            return true;
+
+    return false;
+}
+
 inline bool adoptLegacySettings()
 {
-    return copyLegacySettings(defaultSettingsFile(currentSettingsName),
-                              defaultSettingsFile(legacySettingsName));
+    const auto current = defaultSettingsFile(currentSettingsName);
+
+    // Newest first: the unreleased dev build's file is the more recent setup.
+    return copyFirstLegacySettings(current, {current.getSiblingFile(devBuildSettingsFileName),
+                                             defaultSettingsFile(legacySettingsName)});
 }
 }

@@ -182,15 +182,36 @@ void testSettingsMigration(){
     current.deleteFile();legacy.deleteFile();
     check(!idw::copyLegacySettings(current,legacy),"Missing previous settings reported a copy");
     check(!current.existsAsFile(),"Missing previous settings created a file");
+    // An unreleased V9.2 dev build wrote JUCE's dotted-suffix name beside the
+    // current one: same folder, file named "... V9.settings".
+    const auto dev=current.getSiblingFile("IDW Voice MIDI Studio V9.settings");
+    check(dev.replaceWithText("<PROPERTIES audioDevice=\"Dev build device\"/>"),"Cannot write dev settings");
+    check(legacy.replaceWithText("<PROPERTIES audioDevice=\"IDW test device\"/>"),"Cannot rewrite legacy settings");
+    check(idw::copyFirstLegacySettings(current,{dev,legacy}),"Dev-build settings were not migrated");
+    check(current.loadFileAsString().contains("Dev build device"),"Dev-build settings lost their contents");
+    check(dev.existsAsFile(),"Migration removed the dev-build settings file");
+    check(legacy.existsAsFile(),"Migration removed the V4 settings file");
+    // With the dev-build file gone, the released V4 file is still migrated.
+    current.deleteFile();dev.deleteFile();
+    check(idw::copyFirstLegacySettings(current,{dev,legacy}),"V4 settings were not migrated");
+    check(current.loadFileAsString().contains("IDW test device"),"V4 settings lost their contents");
+    check(!idw::copyFirstLegacySettings(current,{dev,legacy}),"Dev-build file was copied over an existing settings file");
+    check(current.loadFileAsString().contains("IDW test device"),"Existing settings changed");
+    current.deleteFile();legacy.deleteFile();
+    check(!idw::copyFirstLegacySettings(current,{dev,legacy}),"Missing previous settings reported a copy");
+    check(!current.existsAsFile(),"Missing previous settings created a file");
     root.deleteRecursively();
-    std::cout<<"PASS standalone settings rename / first-run copy / previous file kept / existing file preserved\n";
+    std::cout<<"PASS standalone settings rename / first-run copy / previous file kept / existing file preserved / dev-build name\n";
 }
 void testSettingsPaths(){
     const auto current=idw::defaultSettingsFile(idw::currentSettingsName);
     const auto legacy=idw::defaultSettingsFile(idw::legacySettingsName);
+    const auto dev=current.getSiblingFile(idw::devBuildSettingsFileName);
     const auto path=[](const juce::File& file){return file.getFullPathName().trimCharactersAtEnd("\\/");};
     check(current.getFileName()==juce::String(idw::currentSettingsName)+".settings","V9.2 settings file is not named after the application");
     check(legacy.getFileName()==juce::String(idw::legacySettingsName)+".settings","V4 settings file is not named after the application");
+    check(dev.getFileName()==idw::devBuildSettingsFileName,"Dev-build settings file is not the name the dotted suffix wrote");
+    check(dev.getParentDirectory()==current.getParentDirectory(),"Dev-build settings are not beside the V9.2 file");
    #if JUCE_WINDOWS
     // %APPDATA%\<application name>\<application name>.settings
     const auto roaming=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
@@ -204,8 +225,8 @@ void testSettingsPaths(){
     check(path(current.getParentDirectory())==path(support),"V9.2 settings file is not in ~/Library/Application Support");
     check(path(legacy.getParentDirectory())==path(support),"V4 settings file is not in ~/Library/Application Support");
    #endif
-    check(current!=legacy,"V4 and V9.2 settings resolve to the same file");
-    std::cout<<"PASS standalone V4/V9.2 settings file and folder paths\n";
+    check(current!=legacy && current!=dev && legacy!=dev,"Two settings names resolve to the same file");
+    std::cout<<"PASS standalone V4/dev/V9.2 settings file and folder paths\n";
 }
 void testStudioInstrument(){
     auto p=processor(48000,256);parameter(*p,"synthEnabled",1);parameter(*p,"melody",0);parameter(*p,"synthDelay",0);
