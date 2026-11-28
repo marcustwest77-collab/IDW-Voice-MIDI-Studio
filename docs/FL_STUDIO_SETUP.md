@@ -1,8 +1,6 @@
-# V5 additions
+# IDW V9.2 + FL Studio
 
-See ../START-HERE.html for the performance view, channel-separated arrangement, voice profiles and recovery workflow. See V5-VALIDATION.md for current build status. The following earlier setup instructions still apply except that MIDI takes now survive editor closure.
-
-# IDW V4 + FL Studio
+Current feature set: `USER_MANUAL.md`. Current build status: `RELEASE_CHECKLIST.md`. The routing steps below date from V4 and still apply; since V5 the Performance view adds channel-separated harmony, voice profiles and recoverable takes.
 
 ## Try the standalone first
 
@@ -16,7 +14,7 @@ See ../START-HERE.html for the performance view, channel-separated arrangement, 
 
 1. Close the DAW before replacing an installed plugin. Save a backup of the previous VST3 bundle.
 2. Copy the entire `Windows/VST3/IDW Voice MIDI Studio.vst3` directory into a VST3 folder scanned by FL Studio. The standard system folder is `C:/Program Files/Common Files/VST3/` and may require Windows administrator permission. Do not copy only the inner binary.
-3. In FL Studio, use **Options > Manage plugins > Find installed plugins** to rescan. This V4 keeps the same plugin identity as V3; avoid duplicate installations of both versions.
+3. In FL Studio, use **Options > Manage plugins > Find installed plugins** to rescan. The plugin keeps the same identity across releases; avoid duplicate installations of two versions.
 4. Put IDW on the Mixer insert receiving your microphone. Select **Input: Left / mono**, **Right**, or **L + R** to match the input.
 5. In IDW's plugin wrapper Settings, assign **MIDI Output port = 10**.
 6. Load the destination instrument in the Channel Rack. In its wrapper, assign **MIDI Input port = 10**.

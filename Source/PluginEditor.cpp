@@ -53,7 +53,7 @@ IDWVoiceMIDIStudioAudioProcessorEditor::IDWVoiceMIDIStudioAudioProcessorEditor(I
     learn.onClick=[this]{p.learn.arm(p.learn.destinations()[learnTarget.getSelectedId()-1]);status.setText("Move a hardware MIDI controller to map it.",juce::dontSendNotification);};
     clearLearn.onClick=[this]{p.learn.clear();status.setText("MIDI controller mappings cleared.",juce::dontSendNotification);};
     presetSelector.onChange=[this]{loadPreset();};
-    save.onClick=[this]{p.saveExtraState();const auto name="IDW V4 "+juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S");
+    save.onClick=[this]{p.saveExtraState();const auto name="IDW V9.2 "+juce::Time::getCurrentTime().formatted("%Y%m%d-%H%M%S");
         if(p.presets.save(name)){refreshPresets();status.setText("Saved settings, controller mappings and drum profiles.",juce::dontSendNotification);}else status.setText("Could not save preset.",juce::dontSendNotification);};
     copyDiagnostics.onClick=[this]{juce::SystemClipboard::copyTextToClipboard(diagnosticReport());status.setText("Diagnostics copied. Paste them into your support chat.",juce::dontSendNotification);};
     setupStatus.setColour(juce::Label::textColourId,gold);

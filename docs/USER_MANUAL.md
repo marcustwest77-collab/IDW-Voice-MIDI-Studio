@@ -57,7 +57,7 @@ Map any of the main performance parameters (noise gate, confidence, bend range, 
 
 IDW includes a compact 32-voice synthesizer so you can perform without loading a separate instrument:
 - Independent **Lead**, **Chords** and **Bass** parts, each choosing from five patches (Sub/sine, Saw lead, Pulse, Warm keys, FM bell).
-- Volume, brightness, attack, release and a feedback echo (up to ~600 ms).
+- Volume, brightness, attack, release and a 250 ms feedback echo with an adjustable amount.
 - Drums are synthesized on channel 10 alongside the pitched parts.
 - Enabling the Studio Instrument automatically stops microphone monitoring and the simple preview, so you always know which sound path is live.
 - It's an original compact synth, not a sample library, voice clone, or emulation of any commercial instrument.

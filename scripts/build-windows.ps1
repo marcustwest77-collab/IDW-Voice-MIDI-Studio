@@ -25,7 +25,7 @@ $artefacts = Join-Path $BuildDirectory 'IDWVoiceMIDIStudio_artefacts\Release'
 $exe = Join-Path $artefacts 'Standalone\IDW Voice MIDI Studio.exe'
 $vst = Join-Path $artefacts 'VST3\IDW Voice MIDI Studio.vst3'
 if (-not (Test-Path $exe) -or -not (Test-Path $vst)) { throw 'Build outputs missing.' }
-$release = Join-Path (Get-Location) ('IDW-V6-Windows-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$release = Join-Path (Get-Location) ('IDW-V9.2-Windows-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Path "$release\Windows\Standalone", "$release\Windows\VST3" | Out-Null
 Copy-Item $exe "$release\Windows\Standalone"
 Copy-Item $vst "$release\Windows\VST3" -Recurse
@@ -40,7 +40,7 @@ New-Item -ItemType Directory -Path "$release\ThirdPartyNotices" | Out-Null
 $juceLicense = if ($JucePath) { Join-Path $JucePath 'LICENSE.md' } elseif (Test-Path 'ThirdParty/JUCE/LICENSE.md') { 'ThirdParty/JUCE/LICENSE.md' } else { Join-Path $BuildDirectory '_deps/juce-src/LICENSE.md' }
 Copy-Item $juceLicense "$release\ThirdPartyNotices\JUCE-LICENSE.md"
 Copy-Item "$BuildDirectory\Testing\Temporary\LastTest.log" "$release\Build-Tests.log"
-'@echo off', 'start "IDW V6" "%~dp0Windows\Standalone\IDW Voice MIDI Studio.exe"' | Set-Content "$release\Run-IDW.cmd"
+'@echo off', 'start "IDW V9.2" "%~dp0Windows\Standalone\IDW Voice MIDI Studio.exe"' | Set-Content "$release\Run-IDW.cmd"
 Compress-Archive -Path $release -DestinationPath "$release.zip"
 Write-Host "SUCCESS: $release.zip"
 Write-Host "Run: $release\Run-IDW.cmd"
