@@ -1,6 +1,12 @@
 # IDW Voice MIDI Studio — User Manual
 
-IDW Voice MIDI Studio turns a live singing or beatboxing voice into MIDI in real time. It ships as a native C++/JUCE plugin (Standalone, VST3, and on macOS also Audio Unit) plus an optional Python companion, Audio Lab, for lyrics, dictation and take editing. This manual covers the plugin; see [Audio Lab](#audio-lab-companion) below for the companion app, and `docs/FL_STUDIO_SETUP.md` for FL Studio-specific routing.
+IDW Voice MIDI Studio turns a live singing or beatboxing voice into MIDI in real time. It ships as a native C++/JUCE plugin (Standalone, VST3, and on macOS also Audio Unit) plus an optional Python companion, Audio Lab, for lyrics, dictation and take editing. This manual covers the plugin; see [Audio Lab](#audio-lab-companion) below for the companion app, and `docs/FL_STUDIO_SETUP.md` for FL Studio-specific routing. It documents version 9.2.
+
+## The editor at a glance
+
+- Two screens, switched by the button in the top right: **Performance view** (large pitch readout, status line, harmony, voice profiles, voice range and the record / export / recover row) and **Studio controls** (gate, confidence, bend and tune knobs, the scale strip, drum pads and MIDI Learn). Both keep the logo header, and the **Studio instrument** and **Setup / Help** panels open over whichever screen is showing.
+- The header strip carries the IDW logo, centred above the main pitch readout and held in the same place on every screen. The artwork is drawn on black, so its padding is keyed to transparency with a luminance ramp when it is prepared (`scripts/key-logo-alpha.py`): the glow fades into the panel instead of sitting in a dark rectangle, and the whole outer edge of the logo tile is fully transparent, so it leaves no plate and no hairline against the panel.
+- The editor opens at 1120x932 and can be resized down to 1040x922; the logo stays centred and its tile edge stays clear at both sizes.
 
 ## First sound
 
@@ -18,15 +24,17 @@ IDW Voice MIDI Studio turns a live singing or beatboxing voice into MIDI in real
 - **Bend range** — semitone range for the pitch-bend messages IDW sends (1–24 semitones, default 2). Match this to your destination instrument's own bend range.
 - **Voice range (Lowest/Highest Voice Note)** — restricts note generation to the octave range you actually sing in.
 - **Scale Lock and the 12-key scale strip** — enable Scale Lock, pick a root note, then toggle the twelve buttons (labelled relative to that root) to build a custom scale. Notes outside the lit keys are pulled to the nearest allowed note.
-- **Scale Expression** — when Scale Lock is on: **Off** clips hard to the locked note; **Natural** keeps up to ~45 cents of your original pitch deviation around it, for a more human, less quantized feel.
+- **Scale Expression** — when Scale Lock is on: **Strict scale** locks both the note and its sounding pitch to the selected scale; **Natural vibrato** keeps up to ~45 cents of your original pitch deviation around the scale note, for a more human, less quantized feel.
 - **Melody Tracking** — the master on/off for monophonic voice-to-MIDI note generation.
 
 ## Harmony
 
 Enable harmony to generate extra MIDI notes that turn your lead line into a chord:
-- **Harmony Scale** — Major or Minor.
+- **Harmony Scale** — Harmony off, Major scale or Natural minor.
 - **Chord Voicing** — triads or sevenths.
 - **Bass Layer** — adds a bass-register doubling of the chord root.
+- Lead notes go out on MIDI channel 1, harmony on channel 2 and the bass layer on channel 3, so a multitimbral instrument can give each part its own sound. Harmony follows the nearest scale degree (ties take the lower note); your bend and vibrato stay on the lead.
+- MPE suppresses the chord and bass layers, since its member channels would collide with them.
 
 ## Beatbox drums
 
@@ -34,11 +42,12 @@ Enable **Beatbox** to trigger MIDI drum notes from vocal percussion instead of p
 - **Beat Threshold** sets the onset sensitivity.
 - Kick, snare and hat each map to a configurable MIDI note (defaults 36/38/42, General MIDI-compatible), plus five additional drum pads for a fuller kit.
 - Beatbox notes are sent on MIDI channel 10 alongside melody on channel 1, so both can go to the same destination track if it separates by channel.
+- **Drum Lab** — with nothing trained, the engine uses basic kick/snare/hat spectral rules. Select a pad, press **Train 5 hits**, and perform five distinct examples with pauses between them; melody and drum output are muted while it learns. Once any pad has a profile, only trained pads are classified and unfamiliar hits are rejected. **Reset pads** clears every profile and restores the basic three-sound detection. These are local spectral templates, not a neural model, so accuracy depends on your microphone, background noise and how distinct the sounds are — and they are saved with your user presets.
 
 ## Gesture MIDI CC and MPE
 
 - **Gesture CC** turns expressive vocal movement into a continuous MIDI CC message (default CC74) with adjustable sensitivity — useful for driving a filter or expression parameter on your destination synth.
-- **MPE** sends each active note on its own MIDI channel across a configurable channel zone (default channels 2–16), for MPE-compatible synths. Harmony is disabled while MPE is active, since MPE is inherently monophonic per channel.
+- **MPE** sends each active note on its own MIDI channel across a configurable channel zone (default channels 2–16), for MPE-compatible synths. Harmony is disabled while MPE is active, since MPE is inherently monophonic per channel, and drum notes stay on channel 10, which the MPE zone leaves free.
 
 ## MIDI Learn
 
@@ -68,13 +77,20 @@ Notes on how it behaves:
 - The buffer follows audio-processing time, not wall-clock time; it stops advancing if your DAW stops processing.
 - It's a creative recovery aid with a bounded internal buffer, not a crash-proof recorder — extremely dense MIDI can shorten the effective window, and a stalled host can cause a gap (flagged with a warning) rather than silent data loss.
 
+## Recording and exporting a take
+
+- **Record MIDI** captures what you perform; **Stop recording** closes the take. The take belongs to the plugin rather than the editor window, so closing the editor does not end it, and starting a new take first preserves the previous one.
+- A take is limited to ten minutes or 250,000 events, and overflow is shown in the status line. Set **BPM** to your DAW tempo before recording — tempo is fixed for each take.
+- **Export MIDI** writes notes, drums, bends and controller expression to a `.mid` file you can drag into your DAW. Capture starts from new MIDI events, so begin recording before you sing; notes still held when you stop are closed in the exported file without cutting your live instrument.
+- **Recover take** opens the Recovered Takes folder. Backups are checkpointed roughly every five seconds while the host stays responsive, and at stop/close, so a crash costs at most the latest checkpoint: pick a backup and export it. If a backup cannot be written, export manually.
+
 ## Song scenes
 
 Save a named scene (e.g. "Verse", "Hook", "Bridge") to recall your Studio Instrument sound, harmony/scale, bend range, and beatbox/drum-note settings in one click. Scenes deliberately do **not** touch microphone calibration, voice range, tempo, or MIDI routing — those stay as you last set them so switching scenes mid-song doesn't undo your calibration. Scenes are stored as local XML files under `IDW Voice MIDI Studio/Song Scenes` in your user application-data folder; saving over an existing name replaces it atomically.
 
 ## Voice profiles
 
-Save and recall calibration/voice-range settings per singer, isolated from the musical settings (harmony, scale, instrument) so multiple vocalists can share one project without re-calibrating each time.
+Save and recall calibration/voice-range settings per singer, isolated from the musical settings (harmony, scale, instrument) so multiple vocalists can share one project without re-calibrating each time. **Save voice** stores the input mode, noise gate, confidence, pitch calibration and low/high voice limits, never the musical settings. **Learn range** listens for 12 seconds while you sing your comfortable low and high notes and then fills in the limits; **Cancel range** keeps the existing range. Reversed limits are swapped automatically. Profiles do not choose the microphone device, so keep one named profile per microphone.
 
 ## Setup / Help panel
 
@@ -86,6 +102,8 @@ Open **Setup / Help** for a live diagnostics view: whether audio is processing, 
 2. Set IDW's MIDI Output Port (in the plugin wrapper settings) to an unused port such as 10.
 3. Set your destination instrument's MIDI Input Port to the same number.
 4. Calibrate noise while the room is quiet, load a preset such as Clean Vocal, and sing.
+
+In the standalone there is no built-in virtual MIDI driver: create a virtual port (loopMIDI on Windows works well), enable that port as an input in FL Studio, set the receiving instrument's Input port to match, then select the same port as the standalone's MIDI output.
 
 Full DAW-specific routing steps (including Pro Tools via loopMIDI) are in `docs/FL_STUDIO_SETUP.md`. `Integrations/FL-Studio/IDW-Performance/device_IDW_Performance.py` is an optional FL Studio controller script for routing.
 
