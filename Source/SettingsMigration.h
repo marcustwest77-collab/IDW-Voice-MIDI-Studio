@@ -14,7 +14,10 @@ inline juce::PropertiesFile::Options settingsOptions(const juce::String& applica
 {
     juce::PropertiesFile::Options options;
     options.applicationName = applicationName;
-    options.filenameSuffix = ".settings";
+    // No leading dot on purpose: JUCE treats a dotted suffix as replacing the
+    // application name's extension, which would store "... V9.2" as
+    // "... V9.settings". An undotted suffix is appended, keeping the whole name.
+    options.filenameSuffix = "settings";
     options.osxLibrarySubFolder = "Application Support";
     return options;
 }

@@ -172,6 +172,7 @@ void testSettingsMigration(){
     check(!current.existsAsFile(),"Test setup left a current settings file");
     check(idw::copyLegacySettings(current,legacy),"First run did not copy the previous settings");
     check(current.existsAsFile(),"Copied settings file missing");
+    check(legacy.existsAsFile(),"First-run copy removed the previous settings file");
     check(current.loadFileAsString().contains("IDW test device"),"Copied settings lost their contents");
     // A current file is the user's own setup and must survive the next launch.
     check(current.replaceWithText("<PROPERTIES audioDevice=\"Current device\"/>"),"Cannot write current settings");
@@ -182,7 +183,29 @@ void testSettingsMigration(){
     check(!idw::copyLegacySettings(current,legacy),"Missing previous settings reported a copy");
     check(!current.existsAsFile(),"Missing previous settings created a file");
     root.deleteRecursively();
-    std::cout<<"PASS standalone settings rename / first-run copy / existing file preserved\n";
+    std::cout<<"PASS standalone settings rename / first-run copy / previous file kept / existing file preserved\n";
+}
+void testSettingsPaths(){
+    const auto current=idw::defaultSettingsFile(idw::currentSettingsName);
+    const auto legacy=idw::defaultSettingsFile(idw::legacySettingsName);
+    const auto path=[](const juce::File& file){return file.getFullPathName().trimCharactersAtEnd("\\/");};
+    check(current.getFileName()==juce::String(idw::currentSettingsName)+".settings","V9.2 settings file is not named after the application");
+    check(legacy.getFileName()==juce::String(idw::legacySettingsName)+".settings","V4 settings file is not named after the application");
+   #if JUCE_WINDOWS
+    // %APPDATA%\<application name>\<application name>.settings
+    const auto roaming=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+    check(path(current.getParentDirectory().getParentDirectory())==path(roaming),"V9.2 settings folder is not under %APPDATA%");
+    check(current.getParentDirectory().getFileName()==idw::currentSettingsName,"V9.2 settings folder is not named after the application");
+    check(path(legacy.getParentDirectory().getParentDirectory())==path(roaming),"V4 settings folder is not under %APPDATA%");
+    check(legacy.getParentDirectory().getFileName()==idw::legacySettingsName,"V4 settings folder is not named after the application");
+   #elif JUCE_MAC
+    // ~/Library/Application Support/<application name>.settings
+    const auto support=juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Application Support");
+    check(path(current.getParentDirectory())==path(support),"V9.2 settings file is not in ~/Library/Application Support");
+    check(path(legacy.getParentDirectory())==path(support),"V4 settings file is not in ~/Library/Application Support");
+   #endif
+    check(current!=legacy,"V4 and V9.2 settings resolve to the same file");
+    std::cout<<"PASS standalone V4/V9.2 settings file and folder paths\n";
 }
 void testStudioInstrument(){
     auto p=processor(48000,256);parameter(*p,"synthEnabled",1);parameter(*p,"melody",0);parameter(*p,"synthDelay",0);
@@ -280,5 +303,5 @@ void renderEditor(){
     std::cout<<"PASS V6 performance/default/minimum, Studio and Instrument editor render / bounds\n";
 }
 }
-int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testSettingsMigration();testStudioInstrument();testRetrospectiveCapture();testSongScenes();testConnectionCheck();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
+int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testSettingsMigration();testSettingsPaths();testStudioInstrument();testRetrospectiveCapture();testSongScenes();testConnectionCheck();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
 
