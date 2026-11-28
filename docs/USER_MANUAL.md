@@ -148,4 +148,5 @@ Run the companion's own automated test suite anytime with:
 
 - Song scenes: `IDW Voice MIDI Studio/Song Scenes` (user application-data folder).
 - Lyrics, history, and checkpoints: `IDW Audio Lab/Lyrics` (user home folder).
+- Standalone audio and MIDI device settings: `IDW Voice MIDI Studio V9.2.settings` — Windows keeps it in `%APPDATA%\IDW Voice MIDI Studio V9.2\`, macOS in `~/Library/Application Support/`. On its first run this version copies an existing `IDW Voice MIDI Studio V4.settings` to the new name, so your device setup carries over, and leaves the old file in place for going back to an earlier build. In a DAW, device and routing settings live in the project rather than in this file.
 - Setup reports and MIDI Learn mappings never leave your machine unless you explicitly export or share them.
