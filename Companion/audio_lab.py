@@ -153,7 +153,7 @@ def main(gui_smoke=False, preview_path=None):
     import threading
     import webbrowser
     root = tk.Tk()
-    root.title('IDW Audio Lab — V6.7')
+    root.title('IDW Audio Lab — V9.2')
     start_height=max(640,min(900,root.winfo_screenheight()-100))
     root.geometry(f'{max(800,min(1020,root.winfo_screenwidth()-40))}x{start_height}+10+10')
     root.minsize(800, 640)
@@ -338,13 +338,13 @@ def main(gui_smoke=False, preview_path=None):
         assert lyrics.winfo_rooty()+lyrics.winfo_height()<=root.winfo_screenheight()-40, 'Lyrics extend outside visible desktop'
         if preview_path:
             root.update();x,y=lyrics.winfo_rootx(),lyrics.winfo_rooty()
-            ImageGrab.grab(bbox=(x,y,x+lyrics.winfo_width(),y+lyrics.winfo_height())).save(preview_path.with_name('IDW-V6-Lyrics.png'))
+            ImageGrab.grab(bbox=(x,y,x+lyrics.winfo_width(),y+lyrics.winfo_height())).save(preview_path.with_name('IDW-V9.2-Lyrics.png'))
         root.after(1000, root.destroy)
     root.mainloop()
 
 def cli():
     import argparse
-    parser = argparse.ArgumentParser(description='IDW Audio Lab 6.7')
+    parser = argparse.ArgumentParser(description='IDW Audio Lab 9.2')
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--gui-smoke', action='store_true')
     parser.add_argument('--test-report', type=Path)

@@ -57,7 +57,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: editor-renders-${{ runner.os }}
-          path: build/IDW-V6-*.png
+          path: build/IDW-V9.2-*.png
           if-no-files-found: warn
           retention-days: 14
 

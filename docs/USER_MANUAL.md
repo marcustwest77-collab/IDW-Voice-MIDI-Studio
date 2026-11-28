@@ -109,7 +109,7 @@ Full DAW-specific routing steps (including Pro Tools via loopMIDI) are in `docs/
 
 ## Audio Lab companion
 
-`Companion/` is a separate, optional Python 3.10 application launched with `Companion/Run-Audio-Lab.cmd`. It does not run inside the plugin and nothing recorded or typed there leaves your machine. Audio Lab is at version 6.7, its own release number, and ships with IDW Voice MIDI Studio V9.2; its release notes are in `docs/V6.7-UPGRADE.md`.
+`Companion/` is a separate, optional Python 3.10 application launched with `Companion/Run-Audio-Lab.cmd`. It does not run inside the plugin and nothing recorded or typed there leaves your machine. Audio Lab ships inside this V9.2 package and reports the same version; its details and limits are in `docs/V9.2-AUDIO-LAB.md`.
 
 **Lyrics and dictation**
 - A distraction-free lyrics editor with autosave, section-heading shortcuts (Intro/Verse/Hook/Bridge/Outro), and Undo/Redo.

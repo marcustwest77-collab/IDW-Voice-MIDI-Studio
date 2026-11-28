@@ -35,7 +35,7 @@ Copy-Item 'docs' "$release\docs" -Recurse
 Copy-Item 'START-HERE.html' $release
 Copy-Item 'START-HERE.txt' $release
 New-Item -ItemType Directory -Path "$release\Previews" | Out-Null
-Get-ChildItem "$BuildDirectory\IDW-V6-*.png" | Copy-Item -Destination "$release\Previews"
+Get-ChildItem "$BuildDirectory\IDW-V9.2-*.png" | Copy-Item -Destination "$release\Previews"
 New-Item -ItemType Directory -Path "$release\ThirdPartyNotices" | Out-Null
 $juceLicense = if ($JucePath) { Join-Path $JucePath 'LICENSE.md' } elseif (Test-Path 'ThirdParty/JUCE/LICENSE.md') { 'ThirdParty/JUCE/LICENSE.md' } else { Join-Path $BuildDirectory '_deps/juce-src/LICENSE.md' }
 Copy-Item $juceLicense "$release\ThirdPartyNotices\JUCE-LICENSE.md"

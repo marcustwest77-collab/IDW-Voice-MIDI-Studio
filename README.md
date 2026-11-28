@@ -55,7 +55,7 @@ IDW Voice MIDI Studio is a clean-room voice-to-MIDI performance plugin and stand
 See `docs/USER_MANUAL.md`, `docs/FL_STUDIO_SETUP.md`, or press **HELP / QUICK START** inside the plugin for the full guide. `Integrations/FL-Studio/IDW-Performance/device_IDW_Performance.py` is an optional FL Studio controller script for routing.
 
 ## Audio Lab (Python companion)
-`Companion/` is a separate, optional Python 3.10 application — it does not run inside the plugin and is not required to use the plugin. Audio Lab is at version 6.7, its own release number, and ships with IDW Voice MIDI Studio V9.2; its release notes are in `docs/V6.7-UPGRADE.md`.
+`Companion/` is a separate, optional Python 3.10 application — it does not run inside the plugin and is not required to use the plugin. Audio Lab ships inside this V9.2 package and reports the same version; its details and limits are in `docs/V9.2-AUDIO-LAB.md`.
 
 - Offline lyric dictation and a distraction-free lyrics editor with autosave, previous-version recovery, named checkpoints (up to 100 per song) and plain-text import/export
 - Non-destructive MIDI take editor with a piano-roll view, undo/redo, and take recovery/archiving
