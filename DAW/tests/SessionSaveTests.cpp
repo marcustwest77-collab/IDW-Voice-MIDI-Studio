@@ -87,16 +87,25 @@ int main() {
         // Exercise the real loader boundary, including UTF-8 metadata. A save
         // must never replace a readable project with one the loader rejects.
         {
-            Session boundary;require(boundary.addTrack(TrackType::midi),"boundary track");
+            Session boundary;
+            for(int i=0;i<128;++i)require(boundary.addTrack(TrackType::midi),"boundary track");
             boundary.tracks[0].name=u8"\u03b2";
             const auto overhead=juce::JSON::toString(sessionToJson(boundary),true).getNumBytesAsUTF8();
-            boundary.tracks[0].name.append(static_cast<std::size_t>(maxSessionFileBytes)-overhead,'x');
+            // Avoid pathological parsing of one 32 MiB string while retaining
+            // the exact on-disk boundary and the production save/load paths.
+            auto padding=static_cast<std::size_t>(maxSessionFileBytes)-overhead;
+            for(std::size_t i=0;i<boundary.tracks.size();++i){
+                const auto count=padding/(boundary.tracks.size()-i);
+                boundary.tracks[i].name.append(count,'x');padding-=count;
+            }
             const auto large=root.getChildFile("Boundary.idwproj");
             juce::String error="stale error";
             require(saveSession(boundary,large,&error) && error.isEmpty() &&
                     large.getSize()==maxSessionFileBytes,"exact limit save rejected");
             Session restored;require(loadSession(large,restored) &&
-                restored.tracks[0].name==boundary.tracks[0].name,"exact limit save cannot reopen");
+                restored.tracks.size()==boundary.tracks.size(),"exact limit save cannot reopen");
+            for(std::size_t i=0;i<boundary.tracks.size();++i)
+                require(restored.tracks[i].name==boundary.tracks[i].name,"boundary metadata changed");
             boundary.tracks[0].name+='x';
             const auto before=bytes(project);
             bool wrote=false;
