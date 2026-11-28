@@ -4,6 +4,7 @@
 #include "SongScenes.h"
 #include "MidiExport.h"
 #include "VoiceProfiles.h"
+#include "SettingsMigration.h"
 #include <iostream>
 #include <random>
 #include <chrono>
@@ -159,6 +160,30 @@ void testTakeRecovery(){
     const auto before=restored->takes.size();check(!restored->takes.recover(file.getSiblingFile("nonexistent.mid")),"Invalid recovery file accepted");check(restored->takes.size()==before,"Failed recovery destroyed take");
     std::cout<<"PASS V5 recording survives editor close / MIDI recovery / tempo / failed-load preservation\n";
 }
+void testSettingsMigration(){
+    auto root=juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("IDW settings migration "+juce::Uuid().toString());
+    check(root.createDirectory(),"Cannot create settings test folder");
+    // Windows layout: the app name is also the folder the file lives in, and that
+    // folder does not exist yet on the first run under the new name.
+    const auto legacy=root.getChildFile("IDW Voice MIDI Studio V4").getChildFile("IDW Voice MIDI Studio V4.settings");
+    const auto current=root.getChildFile("IDW Voice MIDI Studio V9.2").getChildFile("IDW Voice MIDI Studio V9.2.settings");
+    check(legacy.getParentDirectory().createDirectory(),"Cannot create legacy settings folder");
+    check(legacy.replaceWithText("<PROPERTIES audioDevice=\"IDW test device\"/>"),"Cannot write legacy settings");
+    check(!current.existsAsFile(),"Test setup left a current settings file");
+    check(idw::copyLegacySettings(current,legacy),"First run did not copy the previous settings");
+    check(current.existsAsFile(),"Copied settings file missing");
+    check(current.loadFileAsString().contains("IDW test device"),"Copied settings lost their contents");
+    // A current file is the user's own setup and must survive the next launch.
+    check(current.replaceWithText("<PROPERTIES audioDevice=\"Current device\"/>"),"Cannot write current settings");
+    check(!idw::copyLegacySettings(current,legacy),"Existing settings were copied over");
+    check(current.loadFileAsString().contains("Current device"),"Existing settings changed");
+    // Nothing to migrate: no copy reported and no file invented.
+    current.deleteFile();legacy.deleteFile();
+    check(!idw::copyLegacySettings(current,legacy),"Missing previous settings reported a copy");
+    check(!current.existsAsFile(),"Missing previous settings created a file");
+    root.deleteRecursively();
+    std::cout<<"PASS standalone settings rename / first-run copy / existing file preserved\n";
+}
 void testStudioInstrument(){
     auto p=processor(48000,256);parameter(*p,"synthEnabled",1);parameter(*p,"melody",0);parameter(*p,"synthDelay",0);
     juce::AudioBuffer<float> buffer(2,256);buffer.clear();juce::MidiBuffer notes;
@@ -255,5 +280,5 @@ void renderEditor(){
     std::cout<<"PASS V6 performance/default/minimum, Studio and Instrument editor render / bounds\n";
 }
 }
-int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testStudioInstrument();testRetrospectiveCapture();testSongScenes();testConnectionCheck();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
+int main(){juce::ScopedJuceInitialiser_GUI init;try{testPitchAndBuffers();testScale();testMpePanic();testMidiLearnState();testCapture();testMidiExport();testDrums();testPreviewAndStereo();testArrangement();testLegacyState();testVoiceProfiles();testTakeRecovery();testSettingsMigration();testStudioInstrument();testRetrospectiveCapture();testSongScenes();testConnectionCheck();renderEditor();std::cout<<"ALL REGRESSIONS PASSED\n";return 0;}catch(const std::exception& e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}
 
