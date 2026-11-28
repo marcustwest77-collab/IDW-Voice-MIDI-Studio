@@ -10,7 +10,10 @@ struct ImportedMidiTrack {
     std::vector<MidiNote> notes;
 };
 struct ImportedMidiFile {
-    static constexpr size_t maxBytes=1024*1024,maxEvents=100000,maxNotes=50000,maxTracks=128;
+    // Match the exporter's 15 melodic tracks of 100,000 notes each, with
+    // room for note pairs and conductor/track metadata. Keep parsing bounded.
+    static constexpr size_t maxBytes=32*1024*1024,maxNotes=15*100000,
+        maxEvents=2*maxNotes+1024,maxTracks=128;
     int format=1,ticksPerQuarter=960,numerator=4,denominator=4;
     double bpm=120;
     std::vector<ImportedMidiTrack> tracks;
@@ -34,7 +37,7 @@ struct Meter {uint64_t tick;int numerator,denominator;};
 inline bool decodeStandardMidi(const void* bytes,size_t size,ImportedMidiFile& output,juce::String& error){
     using namespace midi_import_detail;
     error.clear();const auto fail=[&](const char* message){error=message;return false;};
-    if(!bytes || size<14 || size>ImportedMidiFile::maxBytes)return fail("Choose a MIDI file between 14 bytes and 1 MiB.");
+    if(!bytes || size<14 || size>ImportedMidiFile::maxBytes)return fail("Choose a MIDI file between 14 bytes and 32 MiB.");
     Reader r{static_cast<const uint8_t*>(bytes),size};
     uint32_t magic,length;uint16_t format,count,division;
     if(!r.u32(magic)||magic!=0x4d546864u||!r.u32(length)||length!=6||
@@ -54,7 +57,7 @@ inline bool decodeStandardMidi(const void* bytes,size_t size,ImportedMidiFile& o
         std::map<int,std::vector<MidiNote>> channels;
         while(track.remaining()){
             if(ended)return fail("MIDI data follows an end-of-track event.");
-            if(++eventCount>ImportedMidiFile::maxEvents)return fail("MIDI file exceeds 100000 events.");
+            if(++eventCount>ImportedMidiFile::maxEvents)return fail("MIDI file exceeds 3001024 events.");
             uint32_t delta;if(!track.vlq(delta))return fail("Invalid MIDI delta time.");
             tick+=delta;
             if(tick>72000ULL*division)return fail("MIDI timeline exceeds the supported duration.");
@@ -86,7 +89,7 @@ inline bool decodeStandardMidi(const void* bytes,size_t size,ImportedMidiFile& o
             if(!track.byte(pitch)||!track.byte(velocity)||pitch>127||velocity>127)return fail("Invalid or truncated MIDI note.");
             const int key=channel*128+pitch;
             if(kind==144 && velocity){
-                if(++noteCount>ImportedMidiFile::maxNotes)return fail("MIDI import supports up to 50000 notes.");
+                if(++noteCount>ImportedMidiFile::maxNotes)return fail("MIDI import supports up to 1500000 notes.");
                 active[key].push_back({tick,velocity});
             }else{
                 auto found=active.find(key);

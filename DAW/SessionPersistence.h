@@ -6,6 +6,7 @@
 #include <cstring>
 #include <optional>
 namespace idw::daw {
+inline constexpr juce::int64 maxSessionFileBytes=32*1024*1024;
 inline juce::var sessionToJson(const Session& s) {
     auto root=std::make_unique<juce::DynamicObject>();
     root->setProperty("format","idw-daw-session");
@@ -216,9 +217,14 @@ namespace persistence_detail {
 // Internal staging seam permits deterministic short-write tests without changing
 // disk permissions or filling a volume. Never write the destination through it.
 template<class WriteCandidate>
-inline bool saveValidated(const Session& session,const juce::File& file,WriteCandidate&& writeCandidate){
+inline bool saveValidated(const Session& session,const juce::File& file,WriteCandidate&& writeCandidate,juce::String* error=nullptr){
+    if(error)error->clear();
     if(file==juce::File{} || file.isDirectory())return false;
     const auto text=juce::JSON::toString(sessionToJson(session),true);
+    if(static_cast<juce::int64>(text.getNumBytesAsUTF8())>maxSessionFileBytes){
+        if(error)*error="Project exceeds the 32 MiB save limit. Reduce the project size before saving. The existing file has not been changed.";
+        return false;
+    }
     Session checked;
     if(!sessionFromJson(juce::JSON::parse(text),checked) ||
        juce::JSON::toString(sessionToJson(checked),true)!=text)return false;
@@ -243,23 +249,24 @@ inline bool saveValidated(const Session& session,const juce::File& file,WriteCan
     return staged.overwriteTargetFileWithTemporary();
 }
 }
-inline bool saveSession(const Session& s,const juce::File& file){
+inline bool saveSession(const Session& s,const juce::File& file,juce::String* error=nullptr){
     return persistence_detail::saveValidated(s,file,[](const juce::File& candidate,const juce::String& text){
         auto output=candidate.createOutputStream();
         if(!output)return false;
         const bool written=output->write(text.toRawUTF8(),static_cast<std::size_t>(text.getNumBytesAsUTF8()));
         output->flush();
         return written && output->getStatus().wasOk();
-    });
+    },error);
 }
 inline bool loadSession(const juce::File& file,Session& result){
-    if(!file.existsAsFile() || file.getSize()>32*1024*1024)return false;
+    if(!file.existsAsFile() || file.getSize()>maxSessionFileBytes)return false;
     auto data=juce::JSON::parse(file);
     return sessionFromJson(data,result);
 }
 // Workstation saves receive resolved live paths. Keep assets within the project
 // folder portable without changing live player paths; preserve external links.
-inline bool saveProjectSession(const Session& live,const juce::File& project){
+inline bool saveProjectSession(const Session& live,const juce::File& project,juce::String* error=nullptr){
+    if(error)error->clear();
     if(project==juce::File{})return false;
     Session stored=live;
     const auto base=project.getParentDirectory();
@@ -270,6 +277,6 @@ inline bool saveProjectSession(const Session& live,const juce::File& project){
         if(media.isAChildOf(base))
             clip.sourcePath=media.getRelativePathFrom(base).replaceCharacter('\\','/').toStdString();
     }
-    return saveSession(stored,project);
+    return saveSession(stored,project,error);
 }
 }

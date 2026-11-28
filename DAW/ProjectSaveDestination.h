@@ -47,8 +47,9 @@ public:
             error="Choose a project filename, not a folder.";return false;
         }
         if(destination.exists() && !replaceApproved){error="Confirm replacement of the existing project first.";return false;}
-        if(!saveProjectSession(snapshot,destination)){
-            error="Could not write the project. Your current project and save status are unchanged.";return false;
+        if(!saveProjectSession(snapshot,destination,&error)){
+            if(error.isEmpty())error="Could not write the project. Your current project and save status are unchanged.";
+            return false;
         }
         used=true;return true;
     }

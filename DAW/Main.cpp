@@ -1671,9 +1671,12 @@ public:
                        getWidth()-177,top+5,154,19,juce::Justification::centredRight);
         }
         // Peak bars are updated from atomics, never directly from the audio thread.
+        // Stop halts the repaint timer; hide retained peaks even if a callback
+        // finishes after Stop. Keep the clipping history until RESET CLIP.
+        const bool showPlaybackPeaks=playing.load(std::memory_order_relaxed);
         const int meterLeft=getWidth()-220,meterTop=215,meterWidth=80;
         for(int ch=0;ch<2;++ch){
-            const auto peak=ch==0?peakLeft.load():peakRight.load();
+            const auto peak=showPlaybackPeaks ? (ch==0?peakLeft.load():peakRight.load()) : 0.0f;
             const auto clipped=ch==0?peakClipLeft.load():peakClipRight.load();
             const int y=meterTop+ch*17;
             g.setColour(juce::Colours::darkgrey);g.fillRect(meterLeft,y,meterWidth,11);
@@ -1701,7 +1704,7 @@ public:
                 }
                 const int x=30+i*stripWidth;
                 const int faderX=x+stripWidth-19;
-                const float channelPeak=channelPeaks[(size_t)i].load(std::memory_order_relaxed);
+                const float channelPeak=showPlaybackPeaks ? channelPeaks[(size_t)i].load(std::memory_order_relaxed) : 0.0f;
                 g.setColour(juce::Colour(0xff203647));
                 g.fillRect(faderX-13,mixTop+56,3,mixHeight-76);
                 g.setColour(neoTheme.accentColour());

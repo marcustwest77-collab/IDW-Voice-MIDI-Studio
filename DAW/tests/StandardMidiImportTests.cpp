@@ -141,6 +141,26 @@ int main(int argc,char** argv){try{
     Session source;source.addTrack(TrackType::midi);source.tracks[0].name="Roundtrip";source.tracks[0].notes=seed.tracks[0].notes;
     const auto exported=root.getChildFile("export.mid");require(exportSessionMidi(source,exported,error),"native MIDI export");
     require(readStandardMidi(exported,decoded,error) && decoded.noteCount()==2 && sameMidiNotes(decoded.tracks[0].notes,source.tracks[0].notes),"native MIDI export/import roundtrip");
+    // Regression: the native UI exported this 300,000-note arrangement but
+    // rejected its own output at the old 1 MiB / 50,000-note import limits.
+    Session stress;
+    for(int track=0;track<3;++track){
+        stress.addTrack(TrackType::midi);
+        auto& notes=stress.tracks.back().notes;
+        notes.reserve(100000);
+        for(int i=0;i<100000;++i)notes.push_back({48+i%24,i*0.125,0.1,80});
+    }
+    const auto stressFile=root.getChildFile("large-roundtrip.mid");
+    require(exportSessionMidi(stress,stressFile,error) && stressFile.getSize()>1024*1024,"large native export fixture");
+    ImportedMidiFile importedStress;
+    require(readStandardMidi(stressFile,importedStress,error) && importedStress.tracks.size()==3 &&
+        importedStress.noteCount()==300000,"large native export/import roundtrip");
+    for(size_t t=0;t<stress.tracks.size();++t)
+        require(sameMidiNotes(importedStress.tracks[t].notes,stress.tracks[t].notes),"large roundtrip changed notes");
+    Session destination;
+    auto stressPlan=MidiImportPlan::prepare(destination,importedStress,error);
+    require(stressPlan && stressPlan->commit(destination,error) && destination.tracks.size()==3,
+        "large import could not commit to native session");
     const auto project=root.getChildFile("Session.idwproj");Session recalled;
     require(saveSession(session,project) && loadSession(project,recalled) &&
         juce::JSON::toString(sessionToJson(recalled))==committed,"imported notes save/reopen");

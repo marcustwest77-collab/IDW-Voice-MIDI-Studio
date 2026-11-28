@@ -57,8 +57,8 @@ inline bool exportPortableProject(const Session& source,const juce::File& folder
             copied.emplace(key,clip.sourcePath);
         }
     }
-    if(!saveSession(portable,folder.getChildFile("Session.idwproj"))){
-        error="Could not write packaged project.";
+    if(!saveSession(portable,folder.getChildFile("Session.idwproj"),&error)){
+        if(error.isEmpty())error="Could not write packaged project.";
         folder.deleteRecursively();
         return false;
     }
