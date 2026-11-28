@@ -187,21 +187,23 @@ void testSettingsMigration(){
     const auto dev=current.getSiblingFile("IDW Voice MIDI Studio V9.settings");
     check(dev.replaceWithText("<PROPERTIES audioDevice=\"Dev build device\"/>"),"Cannot write dev settings");
     check(legacy.replaceWithText("<PROPERTIES audioDevice=\"IDW test device\"/>"),"Cannot rewrite legacy settings");
-    check(idw::copyFirstLegacySettings(current,{dev,legacy}),"Dev-build settings were not migrated");
+    const auto candidates=idw::previousSettingsFiles(current,legacy);
+    check(candidates.size()==2 && candidates[0]==dev && candidates[1]==legacy,"First run does not try the dev-build settings before the V4 file");
+    check(idw::copyFirstLegacySettings(current,candidates),"Dev-build settings were not migrated");
     check(current.loadFileAsString().contains("Dev build device"),"Dev-build settings lost their contents");
     check(dev.existsAsFile(),"Migration removed the dev-build settings file");
     check(legacy.existsAsFile(),"Migration removed the V4 settings file");
     // With the dev-build file gone, the released V4 file is still migrated.
     current.deleteFile();dev.deleteFile();
-    check(idw::copyFirstLegacySettings(current,{dev,legacy}),"V4 settings were not migrated");
+    check(idw::copyFirstLegacySettings(current,candidates),"V4 settings were not migrated");
     check(current.loadFileAsString().contains("IDW test device"),"V4 settings lost their contents");
-    check(!idw::copyFirstLegacySettings(current,{dev,legacy}),"Dev-build file was copied over an existing settings file");
+    check(!idw::copyFirstLegacySettings(current,candidates),"Dev-build file was copied over an existing settings file");
     check(current.loadFileAsString().contains("IDW test device"),"Existing settings changed");
     current.deleteFile();legacy.deleteFile();
-    check(!idw::copyFirstLegacySettings(current,{dev,legacy}),"Missing previous settings reported a copy");
+    check(!idw::copyFirstLegacySettings(current,candidates),"Missing previous settings reported a copy");
     check(!current.existsAsFile(),"Missing previous settings created a file");
     root.deleteRecursively();
-    std::cout<<"PASS standalone settings rename / first-run copy / previous file kept / existing file preserved / dev-build name\n";
+    std::cout<<"PASS standalone settings rename / first-run copy / previous file kept / existing file preserved / dev-build name tried first\n";
 }
 void testSettingsPaths(){
     const auto current=idw::defaultSettingsFile(idw::currentSettingsName);

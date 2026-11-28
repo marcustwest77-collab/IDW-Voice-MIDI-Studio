@@ -55,12 +55,18 @@ inline bool copyFirstLegacySettings(const juce::File& currentFile,
     return false;
 }
 
+// The previous files a first run tries, newest first: the unreleased dev
+// build's file beside the current one, then the released V4 file, which keeps
+// its own folder on Windows.
+inline std::vector<juce::File> previousSettingsFiles(const juce::File& currentFile,
+                                                     const juce::File& v4File)
+{
+    return {currentFile.getSiblingFile(devBuildSettingsFileName), v4File};
+}
+
 inline bool adoptLegacySettings()
 {
     const auto current = defaultSettingsFile(currentSettingsName);
-
-    // Newest first: the unreleased dev build's file is the more recent setup.
-    return copyFirstLegacySettings(current, {current.getSiblingFile(devBuildSettingsFileName),
-                                             defaultSettingsFile(legacySettingsName)});
+    return copyFirstLegacySettings(current, previousSettingsFiles(current, defaultSettingsFile(legacySettingsName)));
 }
 }
