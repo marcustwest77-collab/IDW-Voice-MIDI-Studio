@@ -17,10 +17,11 @@ channel is ignored, so running it again on an already keyed asset is a no-op:
 the RGB channels are untouched by keying, only alpha is written.
 
 CI runs it with --check, which writes nothing and exits non-zero unless the
-checked-in logo is exactly what the ramp produces, so an opaque asset replaced
-without keying fails the build instead of shipping the dark plate. --check also
-writes an opaque copy of the logo to a temporary file and fails if that copy is
-accepted, so a check that quietly passes everything cannot go green.
+checked-in logo is exactly what the ramp produces and its four corner alphas
+are 0, so an opaque asset replaced without keying fails the build instead of
+shipping the dark plate. --check also writes an opaque copy of the logo to a
+temporary file and fails if that copy is accepted, so a check that quietly
+passes everything cannot go green.
 
 Requires Pillow (python -m pip install pillow).
 """
@@ -54,6 +55,14 @@ def key_alpha(image, low=TRANSPARENT_AT_OR_BELOW, high=OPAQUE_AT_OR_ABOVE):
     return keyed
 
 
+def corner_alphas(keyed):
+    """Alpha at the four corners of the keyed tile, where its padding sits."""
+    alpha = keyed.getchannel('A')
+    last_x, last_y = keyed.width - 1, keyed.height - 1
+    return [alpha.getpixel(point)
+            for point in ((0, 0), (last_x, 0), (0, last_y), (last_x, last_y))]
+
+
 def keying_problem(source, low=TRANSPARENT_AT_OR_BELOW, high=OPAQUE_AT_OR_ABOVE):
     """Return why source is not keyed the way the ramp produces, or None if it is."""
     with Image.open(source) as artwork:
@@ -63,6 +72,10 @@ def keying_problem(source, low=TRANSPARENT_AT_OR_BELOW, high=OPAQUE_AT_OR_ABOVE)
     if current.size != keyed.size or current.tobytes() != keyed.tobytes():
         return (f'{source} is not keyed the way this ramp produces; '
                 f'run: python scripts/key-logo-alpha.py {source}')
+    corners = corner_alphas(keyed)
+    if any(corners):
+        return (f'{source} matches the ramp but its corner alpha is {corners}, not 0; '
+                f'the padding is not black, so the editor would still draw a plate')
     return None
 
 
@@ -129,8 +142,7 @@ def main():
         print('warning: no fully transparent pixels; check the artwork really sits on black')
     # The tile's corners sit in the padding: they must end up fully clear or the
     # editor draws a plate again.
-    corners = [alpha.getpixel((0, 0)), alpha.getpixel((keyed.width - 1, 0)),
-               alpha.getpixel((0, keyed.height - 1)), alpha.getpixel((keyed.width - 1, keyed.height - 1))]
+    corners = corner_alphas(keyed)
     if any(corners):
         print(f'warning: corner alpha is {corners}, expected 0; the padding is not black')
 
