@@ -16,6 +16,10 @@ Without a path it re-keys Resources/idw_logo.png in place. The input's alpha
 channel is ignored, so running it again on an already keyed asset is a no-op:
 the RGB channels are untouched by keying, only alpha is written.
 
+CI runs it with --check, which writes nothing and exits non-zero unless the
+checked-in logo is exactly what the ramp produces, so an opaque asset replaced
+without keying fails the build instead of shipping the dark plate.
+
 Requires Pillow (python -m pip install pillow).
 """
 from argparse import ArgumentParser
@@ -57,15 +61,26 @@ def main():
                         help=f'luminance at or below which alpha is 0 (default: {TRANSPARENT_AT_OR_BELOW})')
     parser.add_argument('--high', type=int, default=OPAQUE_AT_OR_ABOVE,
                         help=f'luminance at or above which alpha is 255 (default: {OPAQUE_AT_OR_ABOVE})')
+    parser.add_argument('--check', action='store_true',
+                        help='write nothing; fail unless the file already holds this keying')
     args = parser.parse_args()
 
     source = Path(args.source)
     output = Path(args.output) if args.output else source
     with Image.open(source) as artwork:
         artwork.load()
-        if artwork.width != artwork.height:
+        if not args.check and artwork.width != artwork.height:
             print(f'warning: {source.name} is {artwork.width}x{artwork.height}, not square')
         keyed = key_alpha(artwork, args.low, args.high)
+
+    if args.check:
+        with Image.open(source) as committed:
+            current = committed.convert('RGBA')
+        if current.size != keyed.size or current.tobytes() != keyed.tobytes():
+            raise SystemExit(f'{source} is not keyed the way this ramp produces; '
+                             f'run: python scripts/key-logo-alpha.py {source}')
+        print(f'{source} is keyed ({keyed.width}x{keyed.height}, alpha 0 at the tile corners)')
+        return
 
     alpha = keyed.getchannel('A')
     counts = alpha.histogram()
