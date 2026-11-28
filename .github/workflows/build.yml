@@ -27,7 +27,7 @@ jobs:
       - name: Test Audio Lab and FL routing contracts
         run: python -m unittest discover -s Tests -p 'test_*.py' -v
 
-      - name: Verify the embedded logo's padding is keyed
+      - name: Verify the embedded logo's padding is keyed and an opaque copy is rejected
         run: |
           python -m pip install --disable-pip-version-check --quiet pillow
           python scripts/key-logo-alpha.py --check

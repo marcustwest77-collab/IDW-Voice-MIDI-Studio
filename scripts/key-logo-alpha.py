@@ -18,10 +18,13 @@ the RGB channels are untouched by keying, only alpha is written.
 
 CI runs it with --check, which writes nothing and exits non-zero unless the
 checked-in logo is exactly what the ramp produces, so an opaque asset replaced
-without keying fails the build instead of shipping the dark plate.
+without keying fails the build instead of shipping the dark plate. --check also
+writes an opaque copy of the logo to a temporary file and fails if that copy is
+accepted, so a check that quietly passes everything cannot go green.
 
 Requires Pillow (python -m pip install pillow).
 """
+import tempfile
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -51,6 +54,35 @@ def key_alpha(image, low=TRANSPARENT_AT_OR_BELOW, high=OPAQUE_AT_OR_ABOVE):
     return keyed
 
 
+def keying_problem(source, low=TRANSPARENT_AT_OR_BELOW, high=OPAQUE_AT_OR_ABOVE):
+    """Return why source is not keyed the way the ramp produces, or None if it is."""
+    with Image.open(source) as artwork:
+        artwork.load()
+        current = artwork.convert('RGBA')
+    keyed = key_alpha(current, low, high)
+    if current.size != keyed.size or current.tobytes() != keyed.tobytes():
+        return (f'{source} is not keyed the way this ramp produces; '
+                f'run: python scripts/key-logo-alpha.py {source}')
+    return None
+
+
+def reject_unkeyed_copy(source, low=TRANSPARENT_AT_OR_BELOW, high=OPAQUE_AT_OR_ABOVE):
+    """Fail if --check would accept an opaque copy, so a blind check cannot pass.
+
+    The copy is the logo with its alpha dropped, which is exactly the dark plate
+    this script exists to remove. It is written to a temporary directory, so
+    nothing beside the repository is touched.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        unkeyed = Path(scratch) / 'un-keyed.png'
+        with Image.open(source) as artwork:
+            artwork.load()
+            artwork.convert('RGB').save(unkeyed)
+        if keying_problem(unkeyed, low, high) is None:
+            raise SystemExit(f'self-test failed: --check accepted {unkeyed.name}, '
+                             f'an un-keyed copy of {Path(source).name}')
+
+
 def main():
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('source', nargs='?', default=DEFAULT_LOGO,
@@ -67,20 +99,23 @@ def main():
 
     source = Path(args.source)
     output = Path(args.output) if args.output else source
-    with Image.open(source) as artwork:
-        artwork.load()
-        if not args.check and artwork.width != artwork.height:
-            print(f'warning: {source.name} is {artwork.width}x{artwork.height}, not square')
-        keyed = key_alpha(artwork, args.low, args.high)
 
     if args.check:
-        with Image.open(source) as committed:
-            current = committed.convert('RGBA')
-        if current.size != keyed.size or current.tobytes() != keyed.tobytes():
-            raise SystemExit(f'{source} is not keyed the way this ramp produces; '
-                             f'run: python scripts/key-logo-alpha.py {source}')
-        print(f'{source} is keyed ({keyed.width}x{keyed.height}, alpha 0 at the tile corners)')
+        problem = keying_problem(source, args.low, args.high)
+        if problem:
+            raise SystemExit(problem)
+        reject_unkeyed_copy(source, args.low, args.high)
+        with Image.open(source) as artwork:
+            size = f'{artwork.width}x{artwork.height}'
+        print(f'{source} is keyed ({size}, alpha 0 at the tile corners); '
+              f'an opaque copy of it is rejected')
         return
+
+    with Image.open(source) as artwork:
+        artwork.load()
+        if artwork.width != artwork.height:
+            print(f'warning: {source.name} is {artwork.width}x{artwork.height}, not square')
+        keyed = key_alpha(artwork, args.low, args.high)
 
     alpha = keyed.getchannel('A')
     counts = alpha.histogram()
